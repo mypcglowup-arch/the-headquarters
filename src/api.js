@@ -3085,6 +3085,173 @@ HARD RULES:
   }
 }
 
+// ─── Monday auto-session opening ────────────────────────────────────────────
+// Builds the agent message that "starts the meeting" when Samuel opens the app
+// Monday morning. The agent is picked by dominant signal in week data + memories.
+// Returns { agent, content, rationale, confidence } or null on failure.
+export async function generateMondayOpening({
+  weekSummary = null,
+  memories    = [],
+  pulse       = null,
+  pipeline    = [],
+  retainers   = [],
+  lang        = 'fr',
+} = {}) {
+  // Pre-classify memories so the opening draws on validated buckets.
+  const { wins: memWins, blockers: memBlockers, nextMoves: memNextMoves } = memories.length > 0
+    ? await classifyMemories(memories, lang)
+    : { wins: [], blockers: [], nextMoves: [] };
+
+  const winsBlock      = memWins.length      > 0 ? memWins.slice(0, 5).map((m, i) => `  ${i + 1}. ${m}`).join('\n')      : '  (none)';
+  const blockersBlock  = memBlockers.length  > 0 ? memBlockers.slice(0, 5).map((m, i) => `  ${i + 1}. ${m}`).join('\n')  : '  (none)';
+  const nextMovesBlock = memNextMoves.length > 0 ? memNextMoves.slice(0, 5).map((m, i) => `  ${i + 1}. ${m}`).join('\n') : '  (none)';
+
+  const weekBlock = weekSummary
+    ? [
+        `  sessions held: ${weekSummary.sessionsCount}`,
+        weekSummary.wins.length > 0
+          ? `  wins logged:\n${weekSummary.wins.slice(0, 5).map((w) => `    • ${w.text}`).join('\n')}`
+          : '  wins logged: (none)',
+        weekSummary.decisions.length > 0
+          ? `  decisions made:\n${weekSummary.decisions.slice(0, 5).map((d) => {
+              const o = d.outcome ? ` [result: ${d.outcome}${d.outcomeComment ? ' — ' + d.outcomeComment : ''}]` : '';
+              return `    • [${d.agent}] ${d.decision}${o}`;
+            }).join('\n')}`
+          : '  decisions made: (none)',
+        weekSummary.blockers.length > 0
+          ? `  open blockers:\n${weekSummary.blockers.slice(0, 5).map((b) => `    • ${b.text} [${b.status}]`).join('\n')}`
+          : '  open blockers: (none)',
+      ].join('\n')
+    : '  (no week data)';
+
+  const pulseBlock = pulse
+    ? `  pulse score: ${pulse.score}/100 — ${pulse.tier || '?'} · finances=${pulse.breakdown?.financial ?? '?'}, consistency=${pulse.breakdown?.consistency ?? '?'}, state=${pulse.breakdown?.checkIn ?? '?'}`
+    : '  pulse: (not computed)';
+
+  const pipelineBlock = Array.isArray(pipeline) && pipeline.length > 0
+    ? pipeline.slice(0, 6).map((p) => `  - ${p.name || p.businessName} [${p.stage || '?'}] ${p.value ? '$' + p.value : ''}`).join('\n')
+    : '  pipeline: (empty)';
+
+  const staleRetainers = (retainers || [])
+    .filter((r) => r && r.name)
+    .map((r) => {
+      const last = Number(r.lastTouchedAt || r.startedAt || 0);
+      const days = last ? Math.floor((Date.now() - last) / 86_400_000) : null;
+      return { name: r.name, amount: r.amount || 0, days };
+    })
+    .sort((a, b) => (b.days ?? 0) - (a.days ?? 0))
+    .slice(0, 5);
+  const retainerBlock = staleRetainers.length > 0
+    ? staleRetainers.map((r) => `  - ${r.name} ($${r.amount}/mo) — ${r.days ?? '?'}j sans activité`).join('\n')
+    : '  (none)';
+
+  const system = `You write the AGENT'S OPENING MESSAGE for Samuel's Monday morning auto-session. When Samuel opens the app, this is the first thing he sees — the meeting has ALREADY started, and an agent is talking first. Reply with STRICT JSON only.
+
+CONTEXT FRAME (unbreakable):
+- Samuel is the user. He's a solo consultant at NT Solutions (Quebec).
+- YOU are choosing which of the 6 agents opens the meeting based on the dominant signal in this week's data.
+- Tone: like a peer who's been watching the numbers all weekend and has something specific to say Monday 8am.
+- NEVER write pep talk. NEVER be generic. NEVER invent facts — only use what's in the sources below.
+
+AGENTS (pick exactly ONE as "agent"):
+- HORMOZI — offers, pricing, revenue, ROI. Pick if: revenue flat, pricing issue, offer weak, deals stalled on money.
+- CARDONE — sales, prospecting volume, follow-ups. Pick if: pipeline thin, follow-ups overdue, activity low.
+- ROBBINS — mindset, blocks, state. Pick if: emotional blockers dominate, Samuel seems stuck in his head.
+- GARYV — content, brand, long game. Pick if: no content shipped in past week, visibility low.
+- NAVAL — systems, leverage, scalability. Pick if: all signals green or Samuel is grinding linearly.
+- VOSS — negotiation, objections. Pick if: active deal needs scripting, negotiation point looming.
+
+SOURCES:
+
+Past 7 days (localStorage):
+${weekBlock}
+
+Memory-bucketed intel (pre-classified, DO NOT re-categorize):
+  wins:
+${winsBlock}
+  blockers:
+${blockersBlock}
+  next moves (in-progress work):
+${nextMovesBlock}
+
+Pulse:
+${pulseBlock}
+
+Pipeline:
+${pipelineBlock}
+
+Retainers (most stale first):
+${retainerBlock}
+
+TASK:
+1. Scan all sources. Identify the ONE dominant signal worth opening Monday on.
+2. Pick the agent whose domain matches that signal.
+3. Write that agent's opening message — reading to Samuel like the agent just walked in and started talking.
+
+Message shape (the "content" field):
+  - 3 short sections separated by blank lines:
+    (a) **One-line greeting + the thing.** Specific. Name names. No "bonjour".
+    (b) **Quick recap** (2-3 bullets) of what happened last week that matters.
+    (c) **One concrete first move** — a specific action owed RIGHT NOW. Include prospect/number/date if known.
+  - ≤ 180 words total.
+  - Write in the agent's voice (HORMOZI=math-dense, CARDONE=urgency, ROBBINS=pattern-naming, GARYV=long-game, NAVAL=leverage-focused, VOSS=tactical-empathy).
+  - ${lang === 'fr' ? 'FRANÇAIS' : 'ENGLISH'}.
+  - Markdown bold (**) allowed for emphasis.
+
+Schema:
+{
+  "agent":      "HORMOZI" | "CARDONE" | "ROBBINS" | "GARYV" | "NAVAL" | "VOSS",
+  "content":    string,    // full opening message, ≤ 180 words
+  "rationale":  string,    // ≤ 100 chars — why this agent + signal, for debug only
+  "confidence": number     // 0..1
+}
+
+HARD RULES:
+- If no strong signal exists (empty week, no blockers, no pipeline), return confidence < 0.5 and the caller drops.
+- Use REAL data only — no invented prospects, no fictional numbers.
+- Never say "cette semaine va être" or other predictive filler.
+- Output ONLY the JSON.`;
+
+  try {
+    console.log('[generateMondayOpening] sources — week:', weekSummary?.sessionsCount, 'mems:', memories.length, 'pipe:', pipeline.length, 'ret:', retainers.length);
+    const text = await callClaude(
+      system,
+      [{ role: 'user', content: 'Generate the Monday auto-session opening.' }],
+      700,
+      false,
+      null, false, false, 'COORDINATOR',
+      'claude-sonnet-4-5'
+    );
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+
+    const validAgents = ['HORMOZI', 'CARDONE', 'ROBBINS', 'GARYV', 'NAVAL', 'VOSS'];
+    if (!validAgents.includes(parsed.agent)) {
+      console.warn('[generateMondayOpening] dropped — invalid agent:', parsed.agent);
+      return null;
+    }
+    if (typeof parsed.confidence !== 'number' || parsed.confidence < 0.5) {
+      console.warn('[generateMondayOpening] dropped — confidence=', parsed.confidence);
+      return null;
+    }
+    const content = String(parsed.content || '').trim();
+    if (content.length < 60) {
+      console.warn('[generateMondayOpening] dropped — content too short:', content.length);
+      return null;
+    }
+    return {
+      agent:      parsed.agent,
+      content,
+      rationale:  String(parsed.rationale || '').slice(0, 200),
+      confidence: parsed.confidence,
+    };
+  } catch (err) {
+    console.warn('[generateMondayOpening] failed:', err.message);
+    return null;
+  }
+}
+
 // ─── Batch follow-up — intent extraction + per-prospect message gen ─────────
 // Returns null when the user didn't clearly ask for a batch follow-up.
 export async function extractBatchFollowupIntent(userInput, lang = 'fr') {

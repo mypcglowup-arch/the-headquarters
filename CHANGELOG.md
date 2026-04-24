@@ -2,6 +2,99 @@
 
 ## [Unreleased]
 
+### Added — Sessions planifiées automatiques (lundi matin 8h)
+Chaque lundi matin (ou lors du premier chargement après 8h, rattrapage jusqu'au mercredi 8h), l'app démarre automatiquement une session avec un message d'ouverture généré par l'agent ayant le signal le plus fort sur la semaine écoulée. **L'utilisateur arrive → la réunion a déjà commencé.**
+
+### Flow
+
+```
+App mount
+  → useEffect(screen === 'home' && !sessionStarted)
+     └─ shouldFireMondaySession(lastIso)
+        ├─ today Mon/Tue/Wed inside 8am window ?
+        ├─ mondayIso not already fired this week ?
+        └─ YES → startMondaySession(mondayIso)
+                 ├─ (cross-device) fetchMondaySessionForDate(mondayIso) → skip si déjà fired
+                 ├─ setMondaySessionFiredIso(mondayIso)         ← mark first
+                 ├─ summarizeWeek() ← wins + décisions + blockages 7j
+                 ├─ fetchMemoriesForRecap() [6s timeout]
+                 ├─ computePulseScore()
+                 ├─ generateMondayOpening({ weekSummary, memories, pulse, pipeline, retainers })
+                 │    └─ Sonnet JSON → { agent, content, rationale, confidence }
+                 ├─ startSession(null, 'strategic', { skipCascade: true })
+                 ├─ push monday-briefing-header card + agent opening message
+                 ├─ syncMondaySession(mondayIso, agent)
+                 └─ pendingInteractionRef.current = true  ← premier signal d'engagement = interaction
+```
+
+### Rules
+| Cas | Comportement |
+|---|---|
+| Lundi 7h45 | Skip — attend la prochaine ouverture après 8h |
+| Lundi 10h (déjà fired le matin) | Skip — dedup via mondayIso |
+| Mardi premier chargement | Fire (rattrapage) — tagué avec le lundi ISO précédent |
+| Mercredi avant 8h | Fire (rattrapage) |
+| Mercredi ≥ 8h | Window closed — skip |
+| Jeu/Ven/Sam/Dim | Hors fenêtre |
+| User déjà en session à 8h01 | Attend la prochaine home visit (useEffect gate) |
+| 2 devices ouverts même lundi | Premier fire gagne (Supabase dedup PK sur monday_date) |
+| LLM échoue (confidence < 0.5) | Dedup flag déjà set, pas de retry, home normal |
+
+### Agent routing (par signal dominant)
+Le LLM (Sonnet) choisit l'agent en scannant :
+- Revenus flat / pricing issue → **HORMOZI**
+- Pipeline maigre / follow-ups overdue → **CARDONE**
+- Blocages émotionnels dominants → **ROBBINS**
+- Pas de contenu shippé la semaine → **GARYV**
+- Tout vert / grinding linéairement → **NAVAL**
+- Deal actif needs scripting → **VOSS**
+
+### Message shape (≤ 180 mots)
+```
+(a) Greeting one-liner + THE thing. Noms spécifiques.
+(b) Recap 2-3 bullets (semaine passée).
+(c) One concrete first move — prospect/date/chiffre.
+```
+Ton de l'agent respecté (HORMOZI=math-dense, CARDONE=urgence, etc.). Markdown bold autorisé.
+
+### WeeklyReport modal
+**Gardé** — les deux peuvent fire le même jour. La session lundi se lance d'abord (au mount), le WeeklyReport peut suivre si ses conditions indépendantes sont remplies. Conséquence acceptée : Samuel peut voir les deux le même lundi.
+
+### Storage
+- `localStorage['qg_monday_session_date_v1']` — ISO date du dernier fire (ex: `"2026-04-27"`), source de vérité locale
+- Table Supabase `monday_sessions` pour dedup cross-device
+
+### SQL migration Supabase
+```sql
+create table if not exists public.monday_sessions (
+  monday_date date primary key,
+  agent       text,
+  fired_at    timestamptz default now()
+);
+
+alter table public.monday_sessions enable row level security;
+create policy "monday_sessions_all" on public.monday_sessions for all using (true) with check (true);
+```
+
+### Fichiers créés
+- `src/utils/mondayWindow.js` — `getMondayWindow()`, `shouldFireMondaySession()`
+- `src/utils/weekSummary.js` — `summarizeWeek()`, `formatWeekSummary()`, `getPastWeekWins/Decisions/Sessions`, `getOpenBlockers`
+
+### Fichiers modifiés
+- `src/api.js` — nouvelle fonction `generateMondayOpening({ weekSummary, memories, pulse, pipeline, retainers, lang })` avec CONTEXT FRAME + agent routing + validation (agent whitelisté, confidence ≥ 0.5, content ≥ 60 chars)
+- `src/App.jsx` — LS key, state, useAutoSave, useEffect détection, `startMondaySession()`, option `{ skipCascade: true }` dans `startSession()`
+- `src/components/ChatScreen.jsx` — case `monday-briefing-header` + composant `MondayBriefingHeader` (badge indigo centré avec Calendar icon + date localisée)
+- `src/lib/sync.js` — `syncMondaySession(mondayIso, agent)` + `fetchMondaySessionForDate(mondayIso)` (upsert on conflict monday_date, maybeSingle fetch)
+
+### Test rapide
+```js
+// DevTools console — forcer le trigger un non-lundi pour dev
+localStorage.removeItem('qg_monday_session_date_v1');
+// puis patch temporaire dans mondayWindow.js: `if (day === 1) daysBackToMonday = 0;` → n'importe quel `day` accepte
+```
+
+---
+
 ### Changed — Salle de réunion : compteur d'interactions (remplace sessionCount)
 La maturité des agents (phase fondationnelle → dialogue → partenariat → réactive) est maintenant calculée sur le nombre d'**interactions réelles** avec les agents, pas sur le nombre de sessions ouvertes. Une session ouverte et bouncée ne fait plus "mûrir" la relation.
 

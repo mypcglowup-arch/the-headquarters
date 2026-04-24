@@ -418,6 +418,18 @@ export default function ChatScreen({
             );
           }
 
+          // ── Monday auto-session briefing header ────────────────────────────
+          if (msg.type === 'monday-briefing-header') {
+            return (
+              <MondayBriefingHeader
+                key={msg.id}
+                mondayIso={msg.mondayIso}
+                darkMode={darkMode}
+                lang={lang}
+              />
+            );
+          }
+
           // ── Morning briefing card (new — replaces memory-recap at session 7+) ──
           if (msg.type === 'briefing-locked' || msg.type === 'briefing-loading' || msg.type === 'briefing-ready') {
             return (
@@ -2328,6 +2340,30 @@ function DecisionOutcomeRecordedCard({ message, darkMode, lang }) {
             — "{message.comment}"
           </span>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Monday auto-session header — marks the start of the weekly auto-briefing
+function MondayBriefingHeader({ mondayIso, darkMode, lang = 'fr' }) {
+  const d = new Date(mondayIso + 'T08:00:00');
+  const dateLabel = d.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  });
+  return (
+    <div className="flex justify-center mb-4 mt-1 px-1 animate-bubble-in">
+      <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-[13px]"
+        style={{
+          background: 'rgba(99,102,241,0.10)',
+          border:     '1px solid rgba(99,102,241,0.28)',
+          color:      darkMode ? 'rgba(196,181,253,0.95)' : 'rgba(79,70,229,0.95)',
+          boxShadow:  '0 0 24px rgba(99,102,241,0.12)',
+        }}>
+        <Calendar size={14} strokeWidth={2.25} />
+        <span className="font-display font-semibold tracking-tight">
+          {lang === 'fr' ? `${dateLabel} · Ta réunion hebdo` : `${dateLabel} · Your weekly meeting`}
+        </span>
       </div>
     </div>
   );

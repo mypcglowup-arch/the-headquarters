@@ -143,6 +143,38 @@ export async function syncMomentum(streak, sessionsWeek, totalSessions, interact
   }
 }
 
+// ─── Monday auto-session dedup ──────────────────────────────────────────────
+// Insert on first fire for a given Monday ISO date. PK on monday_date blocks
+// double-fire across devices (reload same day → existing row → insert skipped).
+export async function syncMondaySession(mondayIso, agent) {
+  if (!isSupabaseEnabled()) return;
+  try {
+    await supabase.from('monday_sessions').upsert({
+      monday_date: mondayIso,
+      agent:       agent || null,
+      fired_at:    new Date().toISOString(),
+    }, { onConflict: 'monday_date' });
+  } catch (e) {
+    console.warn('[Sync] syncMondaySession failed:', e.message);
+  }
+}
+
+export async function fetchMondaySessionForDate(mondayIso) {
+  if (!isSupabaseEnabled()) return null;
+  try {
+    const { data, error } = await supabase
+      .from('monday_sessions')
+      .select('monday_date, agent, fired_at')
+      .eq('monday_date', mondayIso)
+      .maybeSingle();
+    if (error) throw error;
+    return data || null;
+  } catch (e) {
+    console.warn('[Sync] fetchMondaySessionForDate failed:', e.message);
+    return null;
+  }
+}
+
 // ─── Daily check-in ──────────────────────────────────────────────────────────
 
 export async function syncCheckIn(data) {

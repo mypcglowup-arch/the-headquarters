@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { runSession, archiveSession, callConsensus, getDailyQuote, getMomentumMirror, generateMondayReport, callClaudeStream, draftEmailReply, analyzeEmail, extractCalendarEvent, extractPipelineAction, extractDashboardUpdate, generateMemoryRecap, generateMorningBriefing, extractBatchFollowupIntent, generateFollowupMessage, detectMeetingPatterns, generateAgentOpening, generateFilRouge, analyzeInterjection, generateAnomalyAlert, extractActionableDecision, formatTrackRecord } from './api.js';
+import { runSession, archiveSession, callConsensus, getDailyQuote, getMomentumMirror, generateMondayReport, callClaudeStream, draftEmailReply, analyzeEmail, extractCalendarEvent, extractPipelineAction, extractDashboardUpdate, generateMemoryRecap, generateMorningBriefing, extractBatchFollowupIntent, generateFollowupMessage, detectMeetingPatterns, generateAgentOpening, generateFilRouge, analyzeInterjection, generateAnomalyAlert, extractActionableDecision, formatTrackRecord, generateMondayOpening } from './api.js';
 import { getMaturityPhase, pickBestPattern, markPatternFired, pruneCooldowns } from './utils/meetingRoom.js';
+import { shouldFireMondaySession } from './utils/mondayWindow.js';
 import { updateTopicTracker, getStaleTopics } from './utils/topicTracker.js';
 import { pickTopAnomaly, markAxisFired, getWeekWindows } from './utils/anomalyDetector.js';
 import { t, detectDefaultLang } from './i18n.js';
@@ -100,6 +101,7 @@ const LS_PHOTOS    = 'qg_agent_photos_v1';
 const LS_NAMES     = 'qg_agent_names_v1';
 const LS_COUNT     = 'qg_session_count_v1';
 const LS_INTERACTIONS = 'qg_interaction_count_v1';
+const LS_MONDAY_SESSION = 'qg_monday_session_date_v1';
 const LS_SOUND     = 'qg_sound_enabled_v1';
 const LS_VOICE     = 'qg_voice_mode_v1';
 const LS_LAST_SPOKE = 'qg_agent_last_spoke_v1';
@@ -243,6 +245,7 @@ export default function App() {
   const [isThinkingDeep, setIsThinkingDeep] = useState(false);
   const [sessionCount, setSessionCount] = useState(() => loadLS(LS_COUNT, 0));
   const [interactionCount, setInteractionCount] = useState(() => loadLS(LS_INTERACTIONS, 0));
+  const [mondaySessionFiredIso, setMondaySessionFiredIso] = useState(() => loadLS(LS_MONDAY_SESSION, null));
   const [soundEnabled, setSoundEnabled] = useState(() => loadLS(LS_SOUND, true));
   const [voiceMode,    setVoiceMode]    = useState(() => loadLS(LS_VOICE, false) === true);
   const lastSpokenMsgIdRef = useRef(null);
@@ -503,6 +506,19 @@ export default function App() {
     return () => clearTimeout(t);
   }, [JSON.stringify(dashboard)]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Monday session auto-fire.
+  // Fires when: home + no active session + inside Mon 8am→Wed 8am window
+  // + this week's Monday not already fired. Once per week per device.
+  useEffect(() => {
+    if (sessionStarted) return;
+    if (screen !== 'home') return;
+    const { should, mondayIso } = shouldFireMondaySession(mondaySessionFiredIso);
+    if (!should) return;
+    console.log('[MondaySession] window active, firing for', mondayIso);
+    startMondaySession(mondayIso);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, sessionStarted, mondaySessionFiredIso]);
+
   // Flush the dashboard to Supabase synchronously before the page closes.
   // The 800ms debounce above can swallow the very last mutation on a fast
   // refresh — this closes that gap for cloud persistence too.
@@ -522,13 +538,15 @@ export default function App() {
   const s3 = useAutoSave(LS_JOURNAL,    improvementJournal,   300);
   const s4 = useAutoSave(LS_COUNT,      sessionCount,         300);
   useAutoSave(LS_INTERACTIONS,          interactionCount,     300);
+  useAutoSave(LS_MONDAY_SESSION,        mondaySessionFiredIso, 300);
   const s5 = useAutoSave(LS_SOUND,      soundEnabled,         300);
   const s6 = useAutoSave(LS_LAST_SPOKE, agentLastSpoke,       300);
   const s7 = useAutoSave(LS_DECISIONS,  decisions,            300);
   const s8 = useAutoSave(LS_DASHBOARD,  dashboard,            500); // slightly longer for rapid number edits
   const saveStatus = mergeSaveStatus([s1, s2, s3, s4, s5, s6, s7, s8]);
 
-  function startSession(scenarioKeyOverride = null, forceMode = null) {
+  function startSession(scenarioKeyOverride = null, forceMode = null, options = {}) {
+    const { skipCascade = false } = options || {};
     const effectiveMode = forceMode ?? sessionMode;
     // If caller forced a mode, sync it to state for subsequent sendMessage calls
     if (forceMode !== null && forceMode !== sessionMode) setSessionMode(forceMode);
@@ -588,6 +606,10 @@ export default function App() {
       lang === 'fr' ? `Session démarrée 🚀` : `Session started 🚀`,
       { type: 'info', duration: 2200 }
     ), 300);
+
+    // skipCascade: the Monday auto-session provides its own opening message,
+    // so we bypass the normal pattern/churn/briefing/filRouge cascade.
+    if (skipCascade) return;
 
     // Pattern alert — check after render
     setTimeout(() => {
@@ -860,6 +882,101 @@ export default function App() {
       }
     }
 
+  }
+
+  // Monday auto-session — opens the app straight into a conversation with
+  // the agent that has the most important thing to say about the past week.
+  async function startMondaySession(mondayIso) {
+    // Double-guard: never double-fire, never fire mid-session
+    if (sessionStarted) return;
+    if (mondaySessionFiredIso === mondayIso) return;
+
+    // Cross-device dedup: if Supabase already has a row for this Monday,
+    // another device already fired — skip + sync localStorage to match.
+    try {
+      const mod = await import('./lib/sync.js');
+      const existing = await mod.fetchMondaySessionForDate?.(mondayIso);
+      if (existing) {
+        console.log('[MondaySession] already fired on another device, skipping:', mondayIso);
+        setMondaySessionFiredIso(mondayIso);
+        return;
+      }
+    } catch { /* silent — continue if Supabase unavailable */ }
+
+    // Mark fired FIRST — if the LLM call fails we still don't want to retry-spam on reloads
+    setMondaySessionFiredIso(mondayIso);
+
+    // Gather local sources synchronously
+    let weekSummary = null;
+    try {
+      const mod = await import('./utils/weekSummary.js');
+      weekSummary = mod.summarizeWeek(Date.now());
+    } catch (err) {
+      console.warn('[MondaySession] weekSummary failed:', err.message);
+    }
+
+    // Fetch Mem0 memories (best-effort, fire-and-forget timeout of 6s)
+    let memories = [];
+    try {
+      const memP = isMem0Enabled() ? fetchMemoriesForRecap() : Promise.resolve([]);
+      memories = await Promise.race([
+        memP,
+        new Promise((resolve) => setTimeout(() => resolve([]), 6000)),
+      ]) || [];
+    } catch { /* silent */ }
+
+    const checkIn = checkInData || (() => { try { const d = localStorage.getItem('qg_checkin_today'); return d ? JSON.parse(d) : null; } catch { return null; } })();
+    const pulse = computePulseScore(dashboard, streak, checkIn);
+
+    // Generate the opening (agent choice + message)
+    const opening = await generateMondayOpening({
+      weekSummary,
+      memories,
+      pulse,
+      pipeline:  dashboard?.pipeline  || [],
+      retainers: dashboard?.retainers || [],
+      lang,
+    });
+
+    if (!opening) {
+      console.warn('[MondaySession] no opening generated — falling back to normal home');
+      return; // guard flag already set, won't retry today
+    }
+
+    // Start the session silently (no cascade) — we provide the opening ourselves
+    startSession(null, 'strategic', { skipCascade: true });
+
+    // Seed the chat: header card + agent opening message
+    setTimeout(() => {
+      setMessages((prev) => ([
+        ...prev,
+        {
+          id:        `monday-briefing-header-${mondayIso}`,
+          type:      'monday-briefing-header',
+          mondayIso,
+          timestamp: new Date(),
+        },
+        {
+          id:        `monday-opening-${Date.now()}-${opening.agent}`,
+          type:      'agent',
+          agent:     opening.agent,
+          content:   opening.content,
+          streaming: false,
+          timestamp: new Date(),
+          meta:      { source: 'mondaySession', rationale: opening.rationale },
+        },
+      ]));
+      // A "response landed" → wait for engagement to count as interaction
+      pendingInteractionRef.current = true;
+    }, 200);
+
+    // Fire-and-forget Supabase record
+    try {
+      const mod = await import('./lib/sync.js');
+      mod.syncMondaySession?.(mondayIso, opening.agent);
+    } catch { /* silent */ }
+
+    console.log('[MondaySession] fired:', mondayIso, '·', opening.agent);
   }
 
   async function sendMessage(text, attachment = null, forcedAgent = null) {
