@@ -1,0 +1,315 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    /* Remove blue tap flash on mobile */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    /* Smooth scroll for anchor links & programmatic scrollIntoView */
+    scroll-behavior: smooth;
+  }
+
+  /* ─── Focus ring — keyboard only, clean and visible ───────────────────────── */
+  *:focus-visible {
+    outline: 2px solid rgba(99, 102, 241, 0.75);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  *:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* ─── Text selection — subtle indigo tint ─────────────────────────────────── */
+  ::selection {
+    background: rgba(99, 102, 241, 0.28);
+    color: inherit;
+  }
+
+  /* ─── Press states — global micro-interaction on all buttons ──────────────── */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    transition-property: transform, opacity;
+    transition-duration: 0.12s;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active {
+    transform: scale(0.96);
+  }
+
+  body {
+    @apply antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    /* Gradient + subtle grain texture layered */
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E"),
+      linear-gradient(180deg, #090e1a 0%, #0c1220 60%, #0a0f1c 100%);
+    min-height: 100dvh;
+    color: #e2e8f0;
+  }
+
+  /* ─── 100dvh + safe-area for mobile notched devices ───────────────────────── */
+  #root {
+    min-height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Radial center glow — barely visible depth */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 900px;
+    height: 600px;
+    background: radial-gradient(ellipse at center, rgba(56, 100, 210, 0.06) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 9999px; }
+}
+
+@layer utilities {
+  .scrollbar-thin { scrollbar-width: thin; }
+  .font-display   { font-family: 'Space Grotesk', system-ui, sans-serif; }
+}
+
+/* ─── Agent avatar pulse ring ──────────────────────────────────────────────── */
+@keyframes agentRingPulse {
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(1.07); }
+}
+.animate-ring-pulse {
+  animation: agentRingPulse 3s ease-in-out infinite;
+}
+
+/* ─── Staggered card entrance ─────────────────────────────────────────────── */
+@keyframes cardReveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-card-in {
+  animation: cardReveal 0.45s ease-out forwards;
+  opacity: 0;
+}
+
+/* ─── Welcome message fade in ─────────────────────────────────────────────── */
+@keyframes welcomeFadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-welcome-in {
+  animation: welcomeFadeUp 0.6s ease-out forwards;
+}
+
+/* ─── Agent name pulse ────────────────────────────────────────────────────── */
+@keyframes namePulse {
+  0%   { opacity: 0; transform: translateX(-4px); }
+  60%  { opacity: 1; transform: translateX(1px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+.animate-name-pulse {
+  animation: namePulse 0.35s ease-out forwards;
+}
+
+/* ─── Message bubble fade-in ──────────────────────────────────────────────── */
+@keyframes bubbleFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-bubble-in {
+  animation: bubbleFadeIn 0.3s ease-out forwards;
+}
+
+/* ─── Confetti burst ──────────────────────────────────────────────────────── */
+@keyframes confetti-burst {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+  100% { opacity: 0; transform: translate(var(--tx), var(--ty)) rotate(var(--r)) scale(0.3); }
+}
+.confetti-particle {
+  animation: confetti-burst 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* ─── Panel slide-in ──────────────────────────────────────────────────────── */
+@keyframes panelSlideIn {
+  from { transform: translateX(100%); opacity: 0.6; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.animate-panel-in {
+  animation: panelSlideIn 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* ─── Agent modal ─────────────────────────────────────────────────────────── */
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes modalSlideUp {
+  from { transform: translateY(16px) scale(0.97); opacity: 0; }
+  to   { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+.animate-modal-fade  { animation: modalFadeIn  0.18s ease forwards; }
+.animate-modal-slide { animation: modalSlideUp 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+
+/* ─── Guided Tour ─────────────────────────────────────────────────────────── */
+@keyframes tourCardUp {
+  from { opacity: 0; transform: translateY(28px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.animate-tour-card { animation: tourCardUp 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+@keyframes tourSpotlightIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-spotlight { animation: tourSpotlightIn 0.25s ease forwards; }
+
+@keyframes confettiFall {
+  0%   { transform: translateY(-20px) rotate(0deg) scale(1); opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg) scale(0.5); opacity: 0; }
+}
+.animate-confetti { animation: confettiFall var(--dur, 2.5s) ease-in var(--delay, 0s) forwards; }
+
+@keyframes tourParticleDrift {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0.6; }
+  50%  { opacity: 0.3; }
+  100% { transform: translate(var(--dx, 20px), var(--dy, -40px)) scale(0.4); opacity: 0; }
+}
+.animate-particle { animation: tourParticleDrift var(--dur, 4s) ease-in-out var(--delay, 0s) infinite; }
+
+@keyframes tourFinalIn {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-final-in { animation: tourFinalIn 1s ease-out var(--delay, 0s) both; }
+
+/* ─── Progressive reveal expand ──────────────────────────────────────────── */
+@keyframes expandFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-expand-in {
+  animation: expandFadeIn 0.25s ease-out forwards;
+}
+
+/* ─── Name confirm pop ────────────────────────────────────────────────────── */
+@keyframes namePop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.12); }
+  70%  { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+.animate-name-pop {
+  animation: namePop 0.3s ease-out forwards;
+}
+
+/* ─── @ Mention popup slide-up ─────────────────────────────────────────────── */
+@keyframes mentionPopup {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Global Floating Input — coordinator dot pulse ───────────────────────── */
+@keyframes coordinatorPulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.25); }
+}
+
+/* ─── Screen enter — fade + rise on page/panel mount ──────────────────────── */
+@keyframes screenEnterFade {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-screen-in {
+  animation: screenEnterFade 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ─── Skeleton shimmer loader ─────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -300% 0; }
+  100% { background-position: 300% 0; }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.09) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 300% 100%;
+  animation: shimmer 1.8s infinite ease-in-out;
+  border-radius: 6px;
+}
+/* Convenience sizes */
+.skeleton-line  { height: 12px; border-radius: 4px; }
+.skeleton-title { height: 18px; border-radius: 5px; }
+.skeleton-avatar{ border-radius: 50%; }
+
+/* ─── Touch target expander — min 44×44 hit area, visual size unchanged ─────── */
+/* Usage: add class "tap-target" to any small button */
+.tap-target {
+  position: relative;
+}
+.tap-target::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: inherit;
+}
+
+/* ─── Scroll fade edges — mask top/bottom of any scroll container ──────────── */
+.scroll-fade {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 6%,
+    black 94%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 6%,
+    black 94%,
+    transparent 100%
+  );
+}
+
+/* ─── Agent message prose — 1.7 line-height for readability ───────────────── */
+.agent-prose {
+  line-height: 1.72;
+}
+
+/* ─── prefers-reduced-motion — disable all animations for sensitive users ──── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Toast enter — slide up from bottom ──────────────────────────────────── */
+@keyframes toastEnter {
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes toastLeave {
+  from { opacity: 1; transform: translateY(0)    scale(1); }
+  to   { opacity: 0; transform: translateY(-8px) scale(0.95); }
+}
+.animate-toast-in  { animation: toastEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-toast-out { animation: toastLeave 0.2s ease-in forwards; }

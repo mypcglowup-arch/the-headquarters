@@ -1,0 +1,15 @@
+.env
+node_modules/
+dist/
+
+.vercel
+
+# Claude Code local state (IDE / per-machine overrides)
+.claude/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

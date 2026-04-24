@@ -1,0 +1,1484 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>NEXUS — AI Engineered for Ambition</title>
+  <meta name="description" content="NEXUS designs and deploys bespoke AI systems for ambitious companies. Autonomous agents, enterprise RAG, voice and vision — shipped in weeks, not quarters." />
+  <meta name="theme-color" content="#080810" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: { 950: '#050509', 900: '#080810', 850: '#0b0b15', 800: '#0e0e1a', 700: '#151524' },
+          },
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            display: ['"Space Grotesk"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            serif: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
+          },
+          maxWidth: { content: '1240px' },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* =========================================================
+       BASE
+       ========================================================= */
+    :root {
+      color-scheme: dark;
+      --mx: 50%; --my: 50%;
+    }
+    html, body {
+      background: #080810;
+      height: 100%;
+      overflow: hidden;
+    }
+    body {
+      font-feature-settings: 'ss01','cv11';
+      -webkit-font-smoothing: antialiased;
+      cursor: none;
+    }
+    @media (hover: none) { body { cursor: auto; } }
+
+    ::selection { background: #7c3aed; color: #fff; }
+    .font-display { letter-spacing: -0.03em; }
+
+    /* =========================================================
+       CURSOR
+       ========================================================= */
+    .cursor-dot, .cursor-ring {
+      position: fixed; top: 0; left: 0; pointer-events: none; z-index: 999;
+      will-change: transform; mix-blend-mode: difference;
+    }
+    .cursor-dot { width: 6px; height: 6px; margin: -3px 0 0 -3px; background: #fff; border-radius: 50%; }
+    .cursor-ring {
+      width: 34px; height: 34px; margin: -17px 0 0 -17px;
+      border: 1.5px solid rgba(255,255,255,.5); border-radius: 50%;
+      transition: width .25s ease, height .25s ease, margin .25s ease, border-color .25s ease, background-color .25s ease;
+    }
+    .cursor-ring.is-active {
+      width: 60px; height: 60px; margin: -30px 0 0 -30px;
+      border-color: rgba(167,139,250,.9); background: rgba(124,58,237,.08);
+    }
+    .cursor-ring.is-drag { width: 72px; height: 72px; margin: -36px 0 0 -36px; border-color: rgba(34,211,238,.9); }
+    @media (hover: none) { .cursor-dot, .cursor-ring { display: none; } }
+
+    /* =========================================================
+       PARTICLE CANVAS (fixed, behind slider)
+       ========================================================= */
+    #particles {
+      position: fixed; inset: 0; z-index: 0;
+      pointer-events: none;
+      opacity: .55;
+    }
+
+    /* =========================================================
+       PROGRESS BAR + FRAME UI
+       ========================================================= */
+    .progress-bar {
+      position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 60;
+    }
+    .progress-bar::before {
+      content: ''; display: block; height: 100%; width: var(--progress, 0%);
+      background: linear-gradient(90deg, #7c3aed 0%, #4f46e5 35%, #2563eb 70%, #22d3ee 100%);
+      box-shadow: 0 0 22px rgba(124,58,237,.65);
+      transition: width .12s linear;
+    }
+
+    /* Top nav bar */
+    .top-nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      padding: 1.25rem 1.5rem;
+    }
+
+    /* Panel counter (top-right) */
+    .panel-counter {
+      position: fixed; top: 1.5rem; right: 1.5rem; z-index: 50;
+      font-family: 'Space Grotesk', sans-serif;
+      display: flex; align-items: baseline; gap: .25rem;
+      color: rgba(255,255,255,.4);
+      pointer-events: none;
+    }
+    .panel-counter .current {
+      font-size: 1.1rem; font-weight: 600; color: #fff;
+      background: linear-gradient(110deg, #a78bfa, #60a5fa);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      min-width: 1.6em; display: inline-block; text-align: right;
+      transition: color .3s ease;
+    }
+    .panel-counter .divider { margin: 0 .1rem; opacity: .4; }
+
+    /* Pagination dots (right side, vertical) */
+    .pagination {
+      position: fixed; right: 1.5rem; top: 50%; transform: translateY(-50%);
+      z-index: 50; display: flex; flex-direction: column; gap: .75rem;
+    }
+    .pagination button {
+      position: relative; width: 28px; height: 28px; border-radius: 999px;
+      background: transparent; border: 0; display: grid; place-items: center;
+    }
+    .pagination button::before {
+      content: ''; display: block; width: 8px; height: 8px; border-radius: 999px;
+      background: rgba(255,255,255,.2); transition: background .3s ease, transform .3s ease;
+    }
+    .pagination button:hover::before { background: rgba(255,255,255,.5); transform: scale(1.2); }
+    .pagination button.is-active::before {
+      background: linear-gradient(135deg, #a78bfa, #60a5fa);
+      transform: scale(1.5);
+      box-shadow: 0 0 16px rgba(167,139,250,.8);
+    }
+    .pagination button .pg-label {
+      position: absolute; right: 28px; top: 50%; transform: translate(8px, -50%);
+      font-size: .7rem; letter-spacing: .18em; text-transform: uppercase;
+      color: rgba(255,255,255,.6); white-space: nowrap;
+      opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease;
+      background: rgba(12,12,24,.85); padding: .25rem .6rem; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.06);
+      backdrop-filter: blur(8px);
+    }
+    .pagination button:hover .pg-label { opacity: 1; transform: translate(0, -50%); }
+
+    /* Side label (vertical text on left) */
+    .side-label {
+      position: fixed; left: 1.5rem; top: 50%; transform: translateY(-50%) rotate(-90deg);
+      transform-origin: left center; z-index: 50;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: .7rem; letter-spacing: .32em; text-transform: uppercase;
+      color: rgba(255,255,255,.35);
+      white-space: nowrap;
+      pointer-events: none;
+      display: flex; align-items: center; gap: .75rem;
+    }
+    .side-label::before {
+      content: ''; width: 40px; height: 1px; background: linear-gradient(90deg, transparent, rgba(167,139,250,.6));
+    }
+
+    /* Scroll hint (bottom) */
+    .scroll-hint {
+      position: fixed; bottom: 1.75rem; left: 50%; transform: translateX(-50%);
+      z-index: 40;
+      display: inline-flex; align-items: center; gap: .5rem;
+      color: rgba(255,255,255,.5); font-size: .7rem; letter-spacing: .2em; text-transform: uppercase;
+      pointer-events: none;
+    }
+    .scroll-hint svg { animation: hint-slide 1.8s ease-in-out infinite; }
+    @keyframes hint-slide {
+      0%, 100% { transform: translateX(0); opacity: .6; }
+      50% { transform: translateX(6px); opacity: 1; }
+    }
+
+    /* =========================================================
+       SLIDER + PANELS
+       ========================================================= */
+    .slider {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: row;
+      overflow-x: auto; overflow-y: hidden;
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+      -ms-overflow-style: none; scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .slider::-webkit-scrollbar { display: none; }
+    .slider.is-dragging { scroll-behavior: auto; }
+
+    .panel {
+      flex: 0 0 100vw; width: 100vw; height: 100vh; height: 100dvh;
+      scroll-snap-align: start; scroll-snap-stop: always;
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+
+    .panel-inner {
+      position: relative; z-index: 2;
+      width: 100%; max-width: 1240px;
+      padding: 0 2rem;
+      max-height: 100%;
+    }
+
+    /* Per-panel entrance: activated when panel becomes current */
+    .panel[data-active="true"] .slide-in {
+      opacity: 1; transform: none;
+    }
+    .slide-in {
+      opacity: 0; transform: translateY(28px);
+      transition: opacity 1s cubic-bezier(.22,1,.36,1), transform 1s cubic-bezier(.22,1,.36,1);
+    }
+    .slide-in-d1 { transition-delay: .12s; }
+    .slide-in-d2 { transition-delay: .24s; }
+    .slide-in-d3 { transition-delay: .36s; }
+    .slide-in-d4 { transition-delay: .48s; }
+    .slide-in-d5 { transition-delay: .6s; }
+
+    /* Split chars (headline) */
+    .panel[data-active="true"] .split span.char { opacity: 1; transform: none; }
+    .split span.char {
+      display: inline-block; opacity: 0; transform: translateY(40px) rotateX(-40deg);
+      transform-origin: bottom;
+      transition: opacity .9s cubic-bezier(.22,1,.36,1), transform .9s cubic-bezier(.22,1,.36,1);
+    }
+
+    /* Mobile: fallback to vertical scrolling */
+    @media (max-width: 900px) {
+      html, body { overflow: auto; height: auto; }
+      body { cursor: auto; }
+      .cursor-dot, .cursor-ring { display: none; }
+      .slider {
+        position: relative; inset: auto; height: auto;
+        flex-direction: column; overflow-x: hidden; overflow-y: visible;
+        scroll-snap-type: none;
+      }
+      .panel { flex: 0 0 auto; width: 100%; height: auto; min-height: 100vh; padding: 6rem 0; }
+      .pagination, .side-label, .scroll-hint { display: none; }
+    }
+
+    /* =========================================================
+       GRADIENTS & TEXT
+       ========================================================= */
+    .gradient-text {
+      background: linear-gradient(110deg, #f5f5fa 0%, #c4b5fd 25%, #60a5fa 50%, #93c5fd 75%, #f5f5fa 100%);
+      background-size: 250% 100%;
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      animation: gradient-sweep 8s ease-in-out infinite;
+    }
+    .gradient-text-cool {
+      background: linear-gradient(120deg, #a78bfa 0%, #60a5fa 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    @keyframes gradient-sweep {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    /* =========================================================
+       BUTTONS
+       ========================================================= */
+    .btn-primary {
+      position: relative;
+      background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 40%, #2563eb 100%);
+      background-size: 200% 200%;
+      transition: background-position .6s ease, box-shadow .3s ease, transform .15s ease;
+      box-shadow: 0 10px 30px -8px rgba(124,58,237,.4);
+    }
+    .btn-primary:hover {
+      background-position: 100% 0%;
+      box-shadow: 0 22px 56px -10px rgba(124,58,237,.65), 0 0 0 4px rgba(124,58,237,.12);
+    }
+    .btn-ghost {
+      position: relative;
+      background: rgba(255,255,255,0.02);
+      transition: background .25s ease, border-color .25s ease;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,.22); }
+
+    .magnetic { transition: transform .25s cubic-bezier(.22,1,.36,1); will-change: transform; }
+
+    /* =========================================================
+       GLASS + CARDS
+       ========================================================= */
+    .glass {
+      background: linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.015) 100%);
+      border: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(14px) saturate(120%);
+      -webkit-backdrop-filter: blur(14px) saturate(120%);
+    }
+    .glass-strong {
+      background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+      border: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(18px) saturate(130%);
+      -webkit-backdrop-filter: blur(18px) saturate(130%);
+    }
+
+    .tilt {
+      transform-style: preserve-3d;
+      transition: transform .5s cubic-bezier(.22,1,.36,1), border-color .4s ease, background .4s ease;
+      will-change: transform;
+    }
+    .tilt:hover { border-color: rgba(167,139,250,.3); }
+
+    .spotlight { position: relative; }
+    .spotlight::before {
+      content: ''; position: absolute; inset: 0; border-radius: inherit;
+      background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgba(167,139,250,.18), transparent 42%);
+      opacity: 0; transition: opacity .3s ease;
+      pointer-events: none;
+    }
+    .spotlight:hover::before { opacity: 1; }
+
+    .conic-border { position: relative; }
+    .conic-border::before {
+      content: ''; position: absolute; inset: -1px; border-radius: inherit;
+      padding: 1px;
+      background: conic-gradient(from var(--angle, 0deg),
+        rgba(167,139,250,0) 0deg,
+        rgba(167,139,250,.55) 60deg,
+        rgba(96,165,250,.6) 120deg,
+        rgba(34,211,238,.5) 180deg,
+        rgba(167,139,250,0) 240deg,
+        rgba(167,139,250,0) 360deg);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+              mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      animation: conic-spin 8s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes conic-spin { to { --angle: 360deg; } }
+    @property --angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+
+    /* =========================================================
+       HERO — parallax depth layers + mesh
+       ========================================================= */
+    .bg-grid {
+      background-image:
+        linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+      background-size: 72px 72px;
+      -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, #000 40%, transparent 90%);
+              mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, #000 40%, transparent 90%);
+    }
+
+    .mesh-blob {
+      position: absolute; border-radius: 9999px; filter: blur(100px);
+      will-change: transform;
+    }
+    @keyframes blob-a { 0%,100%{transform:translate3d(-4%,-2%,0) scale(1)} 50%{transform:translate3d(6%,4%,0) scale(1.15)} }
+    @keyframes blob-b { 0%,100%{transform:translate3d(4%,3%,0) scale(1.05)} 50%{transform:translate3d(-6%,-4%,0) scale(.88)} }
+    @keyframes blob-c { 0%,100%{transform:translate3d(0,0,0) scale(.95)} 33%{transform:translate3d(-7%,5%,0) scale(1.1)} 66%{transform:translate3d(5%,-3%,0) scale(1.03)} }
+    .animate-blob-a { animation: blob-a 14s ease-in-out infinite; }
+    .animate-blob-b { animation: blob-b 18s ease-in-out infinite; }
+    .animate-blob-c { animation: blob-c 22s ease-in-out infinite; }
+
+    .parallax-layer {
+      position: absolute; inset: 0; pointer-events: none;
+      transition: transform .6s cubic-bezier(.22,1,.36,1);
+      will-change: transform;
+    }
+
+    /* Gooey morph blob (contact panel) */
+    .goo-wrap { filter: url(#goo); }
+
+    /* Orbit system */
+    .orbit-stage {
+      position: absolute; top: 50%; left: 50%; width: 800px; height: 800px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .orbit { position: absolute; inset: 0; border: 1px dashed rgba(255,255,255,.04); border-radius: 50%; animation: orbit-spin 60s linear infinite; }
+    .orbit.o2 { inset: 80px; animation-duration: 90s; animation-direction: reverse; }
+    .orbit.o3 { inset: 180px; animation-duration: 120s; }
+    .orbit .dot { position: absolute; top: -5px; left: 50%; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: #a78bfa; box-shadow: 0 0 14px 3px rgba(167,139,250,.7); }
+    .orbit.o2 .dot { background: #60a5fa; box-shadow: 0 0 14px 3px rgba(96,165,250,.7); }
+    .orbit.o3 .dot { background: #22d3ee; box-shadow: 0 0 14px 3px rgba(34,211,238,.6); }
+    @keyframes orbit-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+
+    /* =========================================================
+       EYEBROW
+       ========================================================= */
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .4rem .75rem; border-radius: 999px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: .72rem; letter-spacing: .18em; text-transform: uppercase; color: #c4b5fd;
+    }
+    .eyebrow::before {
+      content: ''; width: 6px; height: 6px; border-radius: 999px;
+      background: #a78bfa; box-shadow: 0 0 12px #a78bfa;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.85)} }
+
+    /* =========================================================
+       SERVICES — animated SVG visuals
+       ========================================================= */
+    .edge { stroke: url(#edgeGrad); stroke-width: 1.4; stroke-dasharray: 5 4; animation: edge-dash 3s linear infinite; }
+    @keyframes edge-dash { to { stroke-dashoffset: -80; } }
+    .node-pulse { transform-origin: center; animation: node-pulse 2.6s ease-in-out infinite; }
+    .node-pulse.d1 { animation-delay: .3s; }
+    .node-pulse.d2 { animation-delay: .6s; }
+    .node-pulse.d3 { animation-delay: .9s; }
+    @keyframes node-pulse {
+      0%,100% { filter: drop-shadow(0 0 4px rgba(167,139,250,0)); }
+      50% { filter: drop-shadow(0 0 10px rgba(167,139,250,.9)); }
+    }
+    .stream-dot { animation: stream-move 4s linear infinite; }
+    .stream-dot.d2 { animation-delay: -1s; }
+    .stream-dot.d3 { animation-delay: -2s; }
+    .stream-dot.d4 { animation-delay: -3s; }
+    @keyframes stream-move { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+    .wave-bar { transform-origin: center; animation: wave 1.3s ease-in-out infinite; }
+    @keyframes wave { 0%,100% { transform: scaleY(.2); } 50% { transform: scaleY(1); } }
+
+    /* =========================================================
+       AVATAR RING
+       ========================================================= */
+    .avatar-ring { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 9999px; }
+    .avatar-ring::before {
+      content: ''; position: absolute; inset: -2px; border-radius: inherit;
+      background: conic-gradient(from var(--angle, 0deg), #7c3aed, #2563eb, #22d3ee, #7c3aed);
+      animation: conic-spin 6s linear infinite; z-index: 0;
+    }
+    .avatar-ring .avatar {
+      position: relative; z-index: 2; width: 40px; height: 40px; border-radius: 9999px;
+      display: grid; place-items: center; font-size: .9rem;
+      background: #0b0b15; border: 1px solid rgba(255,255,255,.1);
+    }
+
+    /* =========================================================
+       FORM
+       ========================================================= */
+    .field {
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.08);
+      transition: border-color .25s ease, background .25s ease, box-shadow .25s ease;
+    }
+    .field:hover { border-color: rgba(255,255,255,0.14); }
+    .field:focus {
+      outline: none;
+      border-color: rgba(167,139,250,.55);
+      background: rgba(255,255,255,0.035);
+      box-shadow: 0 0 0 4px rgba(124,58,237,.15);
+    }
+    :where(a,button,input,textarea,select):focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(124,58,237,.45);
+      border-radius: 10px;
+    }
+
+    /* =========================================================
+       MARQUEE (logos)
+       ========================================================= */
+    .marquee {
+      overflow: hidden;
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+              mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+    }
+    .marquee-track {
+      display: flex; gap: 3rem; width: max-content;
+      animation: marquee 32s linear infinite;
+    }
+    @keyframes marquee { to { transform: translateX(-50%); } }
+
+    /* =========================================================
+       NEXT-PANEL ARROW (bottom-right of each panel)
+       ========================================================= */
+    .next-panel {
+      position: absolute; bottom: 2rem; right: 2rem; z-index: 5;
+      display: inline-flex; align-items: center; gap: .75rem;
+      color: rgba(255,255,255,.6); font-size: .7rem; letter-spacing: .2em; text-transform: uppercase;
+      padding: .75rem 1rem; border-radius: 999px;
+      background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.08);
+      transition: background .25s ease, border-color .25s ease, color .25s ease;
+    }
+    .next-panel:hover { background: rgba(255,255,255,.06); border-color: rgba(167,139,250,.4); color: #fff; }
+    .next-panel .arrow { display: inline-block; transition: transform .25s ease; }
+    .next-panel:hover .arrow { transform: translateX(4px); }
+
+    /* =========================================================
+       REDUCED MOTION
+       ========================================================= */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+      }
+      .slide-in, .split span.char { opacity: 1 !important; transform: none !important; }
+      body { cursor: auto; }
+      .cursor-dot, .cursor-ring, #particles { display: none; }
+      .slider { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+
+<body class="font-sans text-zinc-200 antialiased selection:bg-violet-600 selection:text-white">
+
+  <!-- Custom cursor -->
+  <div class="cursor-dot" aria-hidden="true"></div>
+  <div class="cursor-ring" aria-hidden="true"></div>
+
+  <!-- Particle canvas (behind everything, fixed) -->
+  <canvas id="particles" aria-hidden="true"></canvas>
+
+  <!-- Scroll progress bar -->
+  <div class="progress-bar" aria-hidden="true"></div>
+
+  <!-- Shared SVG defs -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="edgeGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#a78bfa" stop-opacity=".9"/>
+        <stop offset="100%" stop-color="#22d3ee" stop-opacity=".5"/>
+      </linearGradient>
+      <linearGradient id="streamGrad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#60a5fa" stop-opacity="0"/>
+        <stop offset="50%" stop-color="#60a5fa" stop-opacity=".9"/>
+        <stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/>
+      </linearGradient>
+      <!-- Gooey filter -->
+      <filter id="goo">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="16" result="blur"/>
+        <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -8" result="goo"/>
+        <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
+      </filter>
+    </defs>
+  </svg>
+
+  <!-- =========================================== TOP NAV =========================================== -->
+  <header class="top-nav">
+    <div class="mx-auto max-w-content">
+      <nav aria-label="Primary" class="glass-strong rounded-2xl px-4 py-2.5 flex items-center justify-between">
+        <a href="#" data-goto="0" data-magnetic="0.2" class="magnetic flex items-center gap-2.5" aria-label="NEXUS home">
+          <span class="relative inline-flex h-7 w-7 items-center justify-center">
+            <span class="absolute inset-0 rounded-lg bg-gradient-to-br from-violet-500 to-blue-500 opacity-90"></span>
+            <span class="absolute inset-[2px] rounded-[7px] bg-ink-900"></span>
+            <svg viewBox="0 0 24 24" class="relative h-4 w-4 text-white" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19V5l14 14V5"/></svg>
+          </span>
+          <span class="font-display font-semibold tracking-tight text-white text-[15px]">NEXUS</span>
+        </a>
+
+        <ul class="hidden md:flex items-center gap-7 text-sm text-zinc-400">
+          <li><a data-hover data-goto="1" class="hover:text-white transition-colors cursor-pointer">Services</a></li>
+          <li><a data-hover data-goto="2" class="hover:text-white transition-colors cursor-pointer">Results</a></li>
+          <li><a data-hover data-goto="3" class="hover:text-white transition-colors cursor-pointer">Clients</a></li>
+          <li><a data-hover data-goto="4" class="hover:text-white transition-colors cursor-pointer">Contact</a></li>
+        </ul>
+
+        <a data-goto="4" data-magnetic="0.3" class="magnetic hidden sm:inline-flex items-center gap-2 text-sm font-medium text-white px-3.5 py-2 rounded-xl btn-primary cursor-pointer">
+          Book a call
+          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Panel counter -->
+  <div class="panel-counter" aria-hidden="true">
+    <span class="current" id="pcCurrent">01</span>
+    <span class="divider">/</span>
+    <span class="total">05</span>
+  </div>
+
+  <!-- Side label -->
+  <div class="side-label" id="sideLabel" aria-hidden="true">
+    <span id="sideLabelText">Introducing NEXUS</span>
+  </div>
+
+  <!-- Pagination dots -->
+  <nav class="pagination" aria-label="Page navigation">
+    <button data-goto="0" class="is-active" aria-label="Go to Hero"><span class="pg-label">Intro</span></button>
+    <button data-goto="1" aria-label="Go to Services"><span class="pg-label">Services</span></button>
+    <button data-goto="2" aria-label="Go to Results"><span class="pg-label">Results</span></button>
+    <button data-goto="3" aria-label="Go to Clients"><span class="pg-label">Clients</span></button>
+    <button data-goto="4" aria-label="Go to Contact"><span class="pg-label">Contact</span></button>
+  </nav>
+
+  <!-- Scroll hint -->
+  <div class="scroll-hint" aria-hidden="true">
+    <span>Drag · Scroll · →</span>
+    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+  </div>
+
+  <!-- =========================================== SLIDER =========================================== -->
+  <div class="slider" id="slider" role="region" aria-label="NEXUS sections">
+
+    <!-- ============== PANEL 1 — HERO ============== -->
+    <section class="panel" id="panel-0" data-panel="0" data-active="true" data-label="Introducing NEXUS">
+      <!-- Background layers -->
+      <div aria-hidden="true" class="absolute inset-0 z-0">
+        <div class="parallax-layer" data-depth="20">
+          <div class="mesh-blob animate-blob-a" style="width: 720px; height: 720px; background: radial-gradient(circle at 30% 30%, #7c3aed 0%, transparent 60%); top: -120px; left: -60px; opacity:.55;"></div>
+          <div class="mesh-blob animate-blob-b" style="width: 820px; height: 820px; background: radial-gradient(circle at 50% 50%, #2563eb 0%, transparent 60%); top: -80px; right: -120px; opacity:.55;"></div>
+        </div>
+        <div class="parallax-layer" data-depth="40">
+          <div class="mesh-blob animate-blob-c" style="width: 620px; height: 620px; background: radial-gradient(circle at 50% 50%, #22d3ee 0%, transparent 60%); opacity:.35; top: 55%; left: 30%;"></div>
+          <div class="mesh-blob animate-blob-a" style="width: 440px; height: 440px; background: radial-gradient(circle at 50% 50%, #a78bfa 0%, transparent 60%); opacity:.4; top: 60%; right: 6%;"></div>
+        </div>
+        <div class="absolute inset-0 bg-grid"></div>
+      </div>
+
+      <!-- Orbit system (parallax layer 3) -->
+      <div class="parallax-layer" data-depth="60" aria-hidden="true">
+        <div class="orbit-stage">
+          <div class="orbit"><span class="dot"></span></div>
+          <div class="orbit o2"><span class="dot"></span></div>
+          <div class="orbit o3"><span class="dot"></span></div>
+        </div>
+      </div>
+
+      <!-- Animated connection curves -->
+      <svg aria-hidden="true" class="parallax-layer opacity-40" data-depth="30" viewBox="0 0 1200 400" preserveAspectRatio="none" style="width:100%;height:100%;top:40%">
+        <path d="M 0 200 Q 300 60 600 200 T 1200 200" fill="none" stroke="url(#edgeGrad)" stroke-width="1" stroke-dasharray="6 6">
+          <animate attributeName="stroke-dashoffset" from="0" to="-120" dur="6s" repeatCount="indefinite"/>
+        </path>
+        <path d="M 0 260 Q 300 400 600 260 T 1200 260" fill="none" stroke="url(#edgeGrad)" stroke-width="1" stroke-dasharray="4 8" opacity=".6">
+          <animate attributeName="stroke-dashoffset" from="0" to="120" dur="8s" repeatCount="indefinite"/>
+        </path>
+      </svg>
+
+      <div class="panel-inner text-center">
+        <div class="slide-in">
+          <span class="eyebrow">A new class of AI partner</span>
+        </div>
+
+        <h1 class="mt-7 mx-auto max-w-5xl font-display font-semibold leading-[1.02] text-[clamp(2.6rem,7.2vw,5.75rem)]">
+          <span class="split block gradient-text">AI engineered</span>
+          <span class="split block text-white">for <span class="font-serif italic font-normal gradient-text-cool">ambition</span>.</span>
+        </h1>
+
+        <p class="slide-in slide-in-d2 mt-7 mx-auto max-w-2xl text-[17px] md:text-lg leading-relaxed text-zinc-400">
+          NEXUS designs and deploys bespoke AI systems for companies that refuse to wait.
+          Autonomous agents, enterprise RAG, voice and vision — shipped in weeks, not quarters.
+        </p>
+
+        <div class="slide-in slide-in-d3 mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <a data-goto="4" data-magnetic="0.35" class="magnetic btn-primary inline-flex items-center gap-2 rounded-xl px-5 py-3 text-[15px] font-medium text-white cursor-pointer">
+            Start your project
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </a>
+          <a data-goto="1" data-magnetic="0.25" class="magnetic btn-ghost inline-flex items-center gap-2 rounded-xl px-5 py-3 text-[15px] font-medium text-zinc-200 border border-white/10 cursor-pointer">
+            <svg viewBox="0 0 24 24" class="h-4 w-4 text-zinc-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+            See the work
+          </a>
+        </div>
+
+        <div class="slide-in slide-in-d4 mt-16">
+          <p class="text-xs uppercase tracking-[0.22em] text-zinc-500">Trusted by teams at</p>
+          <div class="marquee mt-5 max-w-3xl mx-auto">
+            <div class="marquee-track">
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Stratosphere</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Northwind</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Meridian</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Halcyon</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Orbital</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Lattice</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Quintessa</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <!-- duplicate -->
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Stratosphere</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Northwind</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Meridian</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Halcyon</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Orbital</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Lattice</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+              <span class="font-display text-base text-zinc-300/70 tracking-tight">Quintessa</span>
+              <span class="h-1 w-1 rounded-full bg-zinc-600 self-center"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button data-goto="1" class="next-panel">
+        Services <span class="arrow">→</span>
+      </button>
+    </section>
+
+    <!-- ============== PANEL 2 — SERVICES ============== -->
+    <section class="panel" id="panel-1" data-panel="1" data-label="What we ship">
+      <!-- Ambient -->
+      <div aria-hidden="true" class="absolute inset-0 z-0">
+        <div class="parallax-layer" data-depth="30">
+          <div class="mesh-blob animate-blob-a" style="width: 700px; height: 700px; background: radial-gradient(circle at 50% 50%, #7c3aed 0%, transparent 60%); top: 10%; left: -10%; opacity:.42;"></div>
+          <div class="mesh-blob animate-blob-b" style="width: 640px; height: 640px; background: radial-gradient(circle at 50% 50%, #2563eb 0%, transparent 60%); bottom: 10%; right: -8%; opacity:.38;"></div>
+        </div>
+        <div class="absolute inset-0 bg-grid" style="opacity:.6"></div>
+      </div>
+
+      <div class="panel-inner">
+        <div class="slide-in max-w-2xl mb-10">
+          <span class="eyebrow">Services</span>
+          <h2 class="mt-4 font-display font-semibold text-white text-[clamp(2rem,4.2vw,3.5rem)] leading-[1.05] tracking-tight">
+            Three systems. <span class="gradient-text-cool">Every edge</span> of your stack.
+          </h2>
+          <p class="mt-4 text-zinc-400 text-base md:text-lg leading-relaxed max-w-xl">
+            We don't sell dashboards. We ship production-grade intelligence — versioned, observed, and owned by you.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+
+          <!-- Card 1: Autonomous Agents -->
+          <article class="slide-in slide-in-d1 tilt spotlight conic-border glass rounded-3xl p-6 md:p-8 relative overflow-hidden" data-tilt data-card>
+            <div aria-hidden="true" class="absolute inset-0 pointer-events-none" style="background: radial-gradient(600px 240px at 0% 0%, rgba(139,92,246,.18), transparent 60%);"></div>
+
+            <svg class="absolute right-0 top-3 w-[70%] h-32 opacity-70 pointer-events-none" viewBox="0 0 400 200" aria-hidden="true">
+              <g>
+                <line x1="70" y1="40" x2="190" y2="100" class="edge"/>
+                <line x1="70" y1="40" x2="150" y2="170" class="edge"/>
+                <line x1="190" y1="100" x2="150" y2="170" class="edge"/>
+                <line x1="190" y1="100" x2="300" y2="60" class="edge"/>
+                <line x1="190" y1="100" x2="320" y2="170" class="edge"/>
+                <line x1="300" y1="60" x2="320" y2="170" class="edge"/>
+              </g>
+              <g>
+                <circle cx="70"  cy="40"  r="6" fill="#a78bfa" class="node-pulse"/>
+                <circle cx="190" cy="100" r="9" fill="#c4b5fd" class="node-pulse d1"/>
+                <circle cx="150" cy="170" r="6" fill="#a78bfa" class="node-pulse d2"/>
+                <circle cx="300" cy="60"  r="7" fill="#60a5fa" class="node-pulse d1"/>
+                <circle cx="320" cy="170" r="8" fill="#22d3ee" class="node-pulse d3"/>
+              </g>
+            </svg>
+
+            <div class="relative pt-28">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-violet-500/30 to-blue-500/30 border border-white/10 flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" class="h-5 w-5 text-violet-300" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M12 2v4M12 18v4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M2 12h4M18 12h4M4.2 19.8 7 17M17 7l2.8-2.8"/>
+                  </svg>
+                </div>
+                <span class="text-xs uppercase tracking-[0.22em] text-violet-300/80">Autonomous Agents</span>
+              </div>
+              <h3 class="mt-6 font-display text-2xl md:text-[28px] font-semibold text-white leading-tight tracking-tight">
+                Agents that close the loop.
+              </h3>
+              <p class="mt-3 text-zinc-400 leading-relaxed text-[15px]">
+                Multi-step, tool-using agents with scoped permissions, observability, and a kill switch — the parts nobody shows in the demo.
+              </p>
+              <ul class="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-zinc-400">
+                <li class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-violet-400"></span>Tool orchestration</li>
+                <li class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-violet-400"></span>Eval harness</li>
+                <li class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-violet-400"></span>Human-in-loop</li>
+                <li class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-violet-400"></span>Cost SLOs</li>
+              </ul>
+            </div>
+          </article>
+
+          <!-- Card 2: RAG -->
+          <article class="slide-in slide-in-d2 tilt spotlight glass rounded-3xl p-6 md:p-8 relative overflow-hidden" data-tilt data-card>
+            <div aria-hidden="true" class="absolute inset-0 pointer-events-none" style="background: radial-gradient(600px 240px at 100% 0%, rgba(59,130,246,.18), transparent 60%);"></div>
+
+            <svg class="absolute inset-x-0 top-4 w-full h-32 opacity-80 pointer-events-none" viewBox="0 0 300 120" aria-hidden="true">
+              <path id="stream-path" d="M -10 80 Q 75 20 150 80 T 310 80" fill="none" stroke="url(#streamGrad)" stroke-width="1.2"/>
+              <circle r="3" fill="#60a5fa" class="stream-dot" style="offset-path: path('M -10 80 Q 75 20 150 80 T 310 80');"/>
+              <circle r="2.5" fill="#a78bfa" class="stream-dot d2" style="offset-path: path('M -10 80 Q 75 20 150 80 T 310 80');"/>
+              <circle r="2" fill="#22d3ee" class="stream-dot d3" style="offset-path: path('M -10 80 Q 75 20 150 80 T 310 80');"/>
+              <circle r="2.5" fill="#60a5fa" class="stream-dot d4" style="offset-path: path('M -10 80 Q 75 20 150 80 T 310 80');"/>
+            </svg>
+
+            <div class="relative pt-28 flex flex-col h-full">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500/30 to-cyan-500/30 border border-white/10 flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" class="h-5 w-5 text-blue-300" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                    <path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
+                    <path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/>
+                  </svg>
+                </div>
+                <span class="text-xs uppercase tracking-[0.22em] text-blue-300/80">Enterprise RAG</span>
+              </div>
+              <h3 class="mt-6 font-display text-2xl md:text-[28px] font-semibold text-white leading-tight tracking-tight">
+                Your private intelligence layer.
+              </h3>
+              <p class="mt-3 text-zinc-400 leading-relaxed text-[15px]">
+                Retrieval over your docs, tickets, and code — with citations, permissions, and audit logs your security team will actually approve.
+              </p>
+              <div class="mt-auto pt-5 flex items-center gap-2 text-xs text-zinc-500">
+                <span class="relative inline-flex">
+                  <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                  <span class="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75"></span>
+                </span>
+                SOC 2 friendly
+              </div>
+            </div>
+          </article>
+
+          <!-- Card 3: Voice & Vision -->
+          <article class="slide-in slide-in-d3 tilt spotlight glass rounded-3xl p-6 md:p-8 relative overflow-hidden" data-tilt data-card>
+            <div aria-hidden="true" class="absolute inset-0 pointer-events-none" style="background: radial-gradient(600px 240px at 50% 0%, rgba(34,211,238,.16), transparent 60%);"></div>
+
+            <div class="relative flex flex-col h-full">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-cyan-500/30 to-violet-500/30 border border-white/10 flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" class="h-5 w-5 text-cyan-300" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M2 12h2M6 8v8M10 4v16M14 8v8M18 6v12M22 12h-2"/>
+                  </svg>
+                </div>
+                <span class="text-xs uppercase tracking-[0.22em] text-cyan-300/80">Voice &amp; Vision</span>
+              </div>
+              <h3 class="mt-6 font-display text-2xl md:text-[28px] font-semibold text-white leading-tight tracking-tight">
+                Real-time perception.
+              </h3>
+              <p class="mt-3 text-zinc-400 leading-relaxed text-[15px]">
+                Low-latency voice agents, vision pipelines, and multimodal search — engineered against real conditions, not demo lighting.
+              </p>
+
+              <!-- Live waveform -->
+              <div class="mt-6 flex items-end gap-1.5 h-14">
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:60%;animation-delay:-.0s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:90%;animation-delay:-.15s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:40%;animation-delay:-.3s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:80%;animation-delay:-.45s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:55%;animation-delay:-.6s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:95%;animation-delay:-.75s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:30%;animation-delay:-.9s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:70%;animation-delay:-1.05s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:50%;animation-delay:-1.2s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:85%;animation-delay:-.35s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:45%;animation-delay:-.55s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:75%;animation-delay:-.75s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:35%;animation-delay:-.95s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:90%;animation-delay:-1.15s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:60%;animation-delay:-1.35s"></span>
+                <span class="wave-bar block w-1.5 rounded-full bg-gradient-to-t from-violet-500 to-cyan-400" style="height:80%;animation-delay:-1.55s"></span>
+              </div>
+
+              <div class="mt-5 grid grid-cols-3 gap-2">
+                <div class="rounded-xl border border-white/10 bg-white/[.02] p-3">
+                  <div class="text-[10px] uppercase tracking-widest text-zinc-500">Latency</div>
+                  <div class="mt-1 font-display text-xl font-semibold text-white"><span class="counter" data-target="380" data-suffix="ms">0</span></div>
+                </div>
+                <div class="rounded-xl border border-white/10 bg-white/[.02] p-3">
+                  <div class="text-[10px] uppercase tracking-widest text-zinc-500">WER</div>
+                  <div class="mt-1 font-display text-xl font-semibold text-white"><span class="counter" data-target="2.9" data-decimals="1" data-suffix="%">0</span></div>
+                </div>
+                <div class="rounded-xl border border-white/10 bg-white/[.02] p-3">
+                  <div class="text-[10px] uppercase tracking-widest text-zinc-500">Uptime</div>
+                  <div class="mt-1 font-display text-xl font-semibold text-white"><span class="counter" data-target="99.98" data-decimals="2" data-suffix="%">0</span></div>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <button data-goto="2" class="next-panel">Results <span class="arrow">→</span></button>
+    </section>
+
+    <!-- ============== PANEL 3 — STATS ============== -->
+    <section class="panel" id="panel-2" data-panel="2" data-label="By the numbers">
+      <div aria-hidden="true" class="absolute inset-0 z-0">
+        <div class="parallax-layer" data-depth="25">
+          <div class="mesh-blob animate-blob-c" style="width: 900px; height: 500px; background: radial-gradient(ellipse at 50% 50%, #7c3aed 0%, transparent 60%); top: 5%; left: 50%; transform: translateX(-50%); opacity:.3;"></div>
+          <div class="mesh-blob animate-blob-b" style="width: 600px; height: 600px; background: radial-gradient(circle at 50% 50%, #2563eb 0%, transparent 60%); bottom: -5%; right: 10%; opacity:.32;"></div>
+        </div>
+        <div class="absolute inset-0 bg-grid" style="opacity:.5"></div>
+        <!-- Horizontal scan lines -->
+        <svg aria-hidden="true" class="absolute inset-0 w-full h-full opacity-30 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 1200 800">
+          <line x1="0" y1="160" x2="1200" y2="160" stroke="url(#streamGrad)" stroke-width="1"/>
+          <circle r="3" fill="#60a5fa" class="stream-dot" style="offset-path: path('M 0 160 L 1200 160');">
+            <animate attributeName="r" values="3;5;3" dur="2s" repeatCount="indefinite"/>
+          </circle>
+          <line x1="0" y1="640" x2="1200" y2="640" stroke="url(#streamGrad)" stroke-width="1"/>
+          <circle r="3" fill="#a78bfa" class="stream-dot d3" style="offset-path: path('M 0 640 L 1200 640');">
+            <animate attributeName="r" values="3;5;3" dur="2s" repeatCount="indefinite"/>
+          </circle>
+        </svg>
+      </div>
+
+      <div class="panel-inner">
+        <div class="slide-in flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-14">
+          <div>
+            <span class="eyebrow">By the numbers</span>
+            <h2 class="mt-4 font-display font-semibold text-white text-[clamp(1.8rem,4vw,3.25rem)] tracking-tight leading-[1.1] max-w-xl">
+              Quiet work. <span class="gradient-text-cool">Loud outcomes.</span>
+            </h2>
+          </div>
+          <p class="text-zinc-400 max-w-sm text-[15px]">Four years. Three continents. Measured in what was shipped, not slides delivered.</p>
+        </div>
+
+        <dl class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
+          <div class="slide-in slide-in-d1 tilt spotlight glass rounded-2xl p-6 md:p-7" data-tilt data-card>
+            <dt class="text-xs uppercase tracking-[0.2em] text-zinc-500">Clients shipped</dt>
+            <dd class="mt-3 font-display text-4xl md:text-5xl font-semibold tracking-tight">
+              <span class="counter gradient-text" data-target="127" data-suffix="+">0</span>
+            </dd>
+            <dd class="mt-2 text-sm text-zinc-400">Fortune 500 to Series A</dd>
+          </div>
+          <div class="slide-in slide-in-d2 tilt spotlight glass rounded-2xl p-6 md:p-7" data-tilt data-card>
+            <dt class="text-xs uppercase tracking-[0.2em] text-zinc-500">Projects delivered</dt>
+            <dd class="mt-3 font-display text-4xl md:text-5xl font-semibold tracking-tight">
+              <span class="counter gradient-text" data-target="340" data-suffix="">0</span>
+            </dd>
+            <dd class="mt-2 text-sm text-zinc-400">From prototype to prod</dd>
+          </div>
+          <div class="slide-in slide-in-d3 tilt spotlight glass rounded-2xl p-6 md:p-7" data-tilt data-card>
+            <dt class="text-xs uppercase tracking-[0.2em] text-zinc-500">Models in production</dt>
+            <dd class="mt-3 font-display text-4xl md:text-5xl font-semibold tracking-tight">
+              <span class="counter gradient-text" data-target="52" data-suffix="">0</span>
+            </dd>
+            <dd class="mt-2 text-sm text-zinc-400">Versioned and observed</dd>
+          </div>
+          <div class="slide-in slide-in-d4 tilt spotlight glass rounded-2xl p-6 md:p-7" data-tilt data-card>
+            <dt class="text-xs uppercase tracking-[0.2em] text-zinc-500">Client retention</dt>
+            <dd class="mt-3 font-display text-4xl md:text-5xl font-semibold tracking-tight">
+              <span class="counter gradient-text" data-target="98" data-suffix="%">0</span>
+            </dd>
+            <dd class="mt-2 text-sm text-zinc-400">Year over year</dd>
+          </div>
+        </dl>
+      </div>
+
+      <button data-goto="3" class="next-panel">Clients <span class="arrow">→</span></button>
+    </section>
+
+    <!-- ============== PANEL 4 — TESTIMONIALS ============== -->
+    <section class="panel" id="panel-3" data-panel="3" data-label="What clients say">
+      <div aria-hidden="true" class="absolute inset-0 z-0">
+        <div class="parallax-layer" data-depth="35">
+          <div class="mesh-blob animate-blob-a" style="width: 700px; height: 700px; background: radial-gradient(circle at 50% 50%, #22d3ee 0%, transparent 60%); top: -10%; right: -10%; opacity:.28;"></div>
+          <div class="mesh-blob animate-blob-b" style="width: 600px; height: 600px; background: radial-gradient(circle at 50% 50%, #7c3aed 0%, transparent 60%); bottom: -10%; left: -5%; opacity:.38;"></div>
+        </div>
+        <div class="absolute inset-0 bg-grid" style="opacity:.45"></div>
+      </div>
+
+      <div class="panel-inner">
+        <div class="slide-in max-w-2xl mb-12">
+          <span class="eyebrow">What clients say</span>
+          <h2 class="mt-4 font-display font-semibold text-white text-[clamp(2rem,4.2vw,3.5rem)] leading-[1.05] tracking-tight">
+            The reviews we'd want <span class="gradient-text-cool">to read</span>.
+          </h2>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+
+          <figure class="slide-in slide-in-d1 tilt spotlight glass rounded-3xl p-7 flex flex-col" data-tilt data-card>
+            <svg viewBox="0 0 48 48" class="h-7 w-7 text-violet-400/70" fill="currentColor" aria-hidden="true">
+              <path d="M14 12c-5 0-9 4-9 9v15h15V21h-9c0-3 2-5 5-5V12h-2zm20 0c-5 0-9 4-9 9v15h15V21h-9c0-3 2-5 5-5V12h-2z"/>
+            </svg>
+            <blockquote class="mt-4 text-[15px] md:text-[16px] leading-relaxed text-zinc-200">
+              "NEXUS shipped our agent platform in six weeks. Our internal estimate was two quarters. They built the parts we kept deferring — evals, traces, rollback — without being asked."
+            </blockquote>
+            <figcaption class="mt-6 flex items-center gap-3 pt-5 border-t border-white/5">
+              <span class="avatar-ring" aria-hidden="true"><span class="avatar font-display font-semibold text-white" style="background: linear-gradient(135deg,#7c3aed,#2563eb);">LP</span></span>
+              <span>
+                <span class="block text-sm font-medium text-white">Lena Park</span>
+                <span class="block text-xs text-zinc-500">CTO, Stratosphere</span>
+              </span>
+            </figcaption>
+          </figure>
+
+          <figure class="slide-in slide-in-d2 tilt spotlight glass rounded-3xl p-7 flex flex-col" data-tilt data-card>
+            <svg viewBox="0 0 48 48" class="h-7 w-7 text-blue-400/70" fill="currentColor" aria-hidden="true">
+              <path d="M14 12c-5 0-9 4-9 9v15h15V21h-9c0-3 2-5 5-5V12h-2zm20 0c-5 0-9 4-9 9v15h15V21h-9c0-3 2-5 5-5V12h-2z"/>
+            </svg>
+            <blockquote class="mt-4 text-[15px] md:text-[16px] leading-relaxed text-zinc-200">
+              "They wrote the integration tests our own team didn't have time for and handed us a runbook. We didn't lose a page of sleep over the launch."
+            </blockquote>
+            <figcaption class="mt-6 flex items-center gap-3 pt-5 border-t border-white/5">
+              <span class="avatar-ring" aria-hidden="true"><span class="avatar font-display font-semibold text-white" style="background: linear-gradient(135deg,#2563eb,#22d3ee);">MI</span></span>
+              <span>
+                <span class="block text-sm font-medium text-white">Marcus Ibarra</span>
+                <span class="block text-xs text-zinc-500">VP Engineering, Northwind Labs</span>
+              </span>
+            </figcaption>
+          </figure>
+
+          <figure class="slide-in slide-in-d3 tilt spotlight glass rounded-3xl p-7 flex flex-col" data-tilt data-card>
+            <svg viewBox="0 0 48 48" class="h-7 w-7 text-cyan-400/70" fill="currentColor" aria-hidden="true">
+              <path d="M14 12c-5 0-9 4-9 9v15h15V21h-9c0-3 2-5 5-5V12h-2zm20 0c-5 0-9 4-9 9v15h15V21h-9c0-3 2-5 5-5V12h-2z"/>
+            </svg>
+            <blockquote class="mt-4 text-[15px] md:text-[16px] leading-relaxed text-zinc-200">
+              "Most AI vendors hand you a demo. NEXUS handed us a system — documented, observable, and boring in the best way. Our analysts use it every morning."
+            </blockquote>
+            <figcaption class="mt-6 flex items-center gap-3 pt-5 border-t border-white/5">
+              <span class="avatar-ring" aria-hidden="true"><span class="avatar font-display font-semibold text-white" style="background: linear-gradient(135deg,#a78bfa,#22d3ee);">AO</span></span>
+              <span>
+                <span class="block text-sm font-medium text-white">Aisha Okonkwo</span>
+                <span class="block text-xs text-zinc-500">Head of AI, Meridian Capital</span>
+              </span>
+            </figcaption>
+          </figure>
+
+        </div>
+      </div>
+
+      <button data-goto="4" class="next-panel">Contact <span class="arrow">→</span></button>
+    </section>
+
+    <!-- ============== PANEL 5 — CONTACT (goo + form) ============== -->
+    <section class="panel" id="panel-4" data-panel="4" data-label="Start a project">
+      <!-- Gooey morph blob background -->
+      <svg aria-hidden="true" class="absolute inset-0 w-full h-full z-0 pointer-events-none" preserveAspectRatio="xMidYMid slice" viewBox="0 0 1200 800">
+        <g class="goo-wrap">
+          <circle cx="260" cy="240" r="120" fill="#7c3aed" opacity=".55">
+            <animate attributeName="cx" values="260;500;300;260" dur="14s" repeatCount="indefinite"/>
+            <animate attributeName="cy" values="240;360;220;240" dur="12s" repeatCount="indefinite"/>
+          </circle>
+          <circle cx="900" cy="200" r="140" fill="#2563eb" opacity=".55">
+            <animate attributeName="cx" values="900;760;920;900" dur="16s" repeatCount="indefinite"/>
+            <animate attributeName="cy" values="200;320;260;200" dur="13s" repeatCount="indefinite"/>
+          </circle>
+          <circle cx="500" cy="620" r="110" fill="#22d3ee" opacity=".45">
+            <animate attributeName="cx" values="500;640;420;500" dur="18s" repeatCount="indefinite"/>
+            <animate attributeName="cy" values="620;520;640;620" dur="15s" repeatCount="indefinite"/>
+          </circle>
+          <circle cx="1000" cy="620" r="90" fill="#a78bfa" opacity=".55">
+            <animate attributeName="cx" values="1000;880;1020;1000" dur="17s" repeatCount="indefinite"/>
+            <animate attributeName="cy" values="620;540;640;620" dur="14s" repeatCount="indefinite"/>
+          </circle>
+        </g>
+      </svg>
+      <div class="absolute inset-0 z-0" style="background: radial-gradient(ellipse at center, transparent 0%, rgba(8,8,16,.6) 70%, #080810 100%);" aria-hidden="true"></div>
+
+      <div class="panel-inner">
+        <div class="glass-strong rounded-[28px] p-6 md:p-10 overflow-hidden relative">
+          <div class="grid md:grid-cols-5 gap-8 md:gap-12">
+            <div class="slide-in md:col-span-2">
+              <span class="eyebrow">Start a project</span>
+              <h2 class="mt-4 font-display font-semibold text-white text-[clamp(2rem,4vw,3.25rem)] leading-[1.05] tracking-tight">
+                Tell us what you're <span class="gradient-text-cool">building</span>.
+              </h2>
+              <p class="mt-4 text-zinc-400 leading-relaxed">
+                We read everything ourselves. You'll hear back within one business day — from a partner, not a form.
+              </p>
+              <ul class="mt-6 space-y-3 text-sm text-zinc-400">
+                <li class="flex items-center gap-3">
+                  <span class="h-8 w-8 rounded-lg border border-white/10 grid place-items-center">
+                    <svg viewBox="0 0 24 24" class="h-4 w-4 text-violet-300" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="m4 7 8 6 8-6"/></svg>
+                  </span>
+                  hello@nexus.ai
+                </li>
+                <li class="flex items-center gap-3">
+                  <span class="h-8 w-8 rounded-lg border border-white/10 grid place-items-center">
+                    <svg viewBox="0 0 24 24" class="h-4 w-4 text-blue-300" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 2"/></svg>
+                  </span>
+                  Typical response: under 24h
+                </li>
+                <li class="flex items-center gap-3">
+                  <span class="h-8 w-8 rounded-lg border border-white/10 grid place-items-center">
+                    <svg viewBox="0 0 24 24" class="h-4 w-4 text-cyan-300" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  </span>
+                  New York · London · Singapore
+                </li>
+              </ul>
+            </div>
+
+            <form id="contact-form" class="slide-in slide-in-d1 md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-3.5" novalidate>
+              <div class="sm:col-span-1">
+                <label for="f-name" class="block text-xs uppercase tracking-[0.2em] text-zinc-500 mb-2">Name</label>
+                <input id="f-name" name="name" type="text" autocomplete="name" required
+                  class="field w-full rounded-xl px-4 py-3 text-[15px] text-white placeholder-zinc-600" placeholder="Your name" />
+              </div>
+              <div class="sm:col-span-1">
+                <label for="f-email" class="block text-xs uppercase tracking-[0.2em] text-zinc-500 mb-2">Work email</label>
+                <input id="f-email" name="email" type="email" autocomplete="email" required
+                  class="field w-full rounded-xl px-4 py-3 text-[15px] text-white placeholder-zinc-600" placeholder="you@company.com" />
+              </div>
+              <div class="sm:col-span-2">
+                <label for="f-company" class="block text-xs uppercase tracking-[0.2em] text-zinc-500 mb-2">Company</label>
+                <input id="f-company" name="company" type="text" autocomplete="organization"
+                  class="field w-full rounded-xl px-4 py-3 text-[15px] text-white placeholder-zinc-600" placeholder="Company name" />
+              </div>
+              <div class="sm:col-span-2">
+                <label for="f-message" class="block text-xs uppercase tracking-[0.2em] text-zinc-500 mb-2">What are you building?</label>
+                <textarea id="f-message" name="message" rows="3" required
+                  class="field w-full rounded-xl px-4 py-3 text-[15px] text-white placeholder-zinc-600 resize-none" placeholder="A few sentences is plenty."></textarea>
+              </div>
+              <div class="sm:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-1">
+                <p class="text-xs text-zinc-500">By sending, you agree to our privacy policy. We never share your email.</p>
+                <button type="submit" data-magnetic="0.3" class="magnetic btn-primary inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-[15px] font-medium text-white">
+                  Send message
+                  <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+                </button>
+              </div>
+              <p id="form-status" role="status" aria-live="polite" class="sm:col-span-2 text-sm text-emerald-400 hidden"></p>
+            </form>
+          </div>
+        </div>
+
+        <div class="slide-in slide-in-d2 mt-6 flex items-center justify-between text-xs text-zinc-600">
+          <span>© <span id="year"></span> NEXUS Labs</span>
+          <span>AI engineered for ambition.</span>
+        </div>
+      </div>
+
+      <button data-goto="0" class="next-panel">Back to start <span class="arrow">↺</span></button>
+    </section>
+
+  </div>
+
+  <!-- =========================================== SCRIPTS =========================================== -->
+  <script>
+    (function () {
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const isTouch = window.matchMedia('(hover: none)').matches;
+      const isMobile = window.matchMedia('(max-width: 900px)').matches;
+
+      const slider = document.getElementById('slider');
+      const panels = [...slider.querySelectorAll('.panel')];
+      const PANEL_COUNT = panels.length;
+
+      /* ----- Year ----- */
+      const y = document.getElementById('year');
+      if (y) y.textContent = new Date().getFullYear();
+
+      /* ----- Split characters in headlines ----- */
+      document.querySelectorAll('.split').forEach(el => {
+        const walk = (node) => {
+          if (node.nodeType === 3) {
+            const frag = document.createDocumentFragment();
+            [...node.nodeValue].forEach((ch, i) => {
+              const s = document.createElement('span');
+              s.className = 'char';
+              s.textContent = ch === ' ' ? ' ' : ch;
+              s.style.transitionDelay = (i * 0.022) + 's';
+              frag.appendChild(s);
+            });
+            node.parentNode.replaceChild(frag, node);
+          } else if (node.nodeType === 1 && !node.classList.contains('char')) {
+            [...node.childNodes].forEach(walk);
+          }
+        };
+        [...el.childNodes].forEach(walk);
+      });
+
+      /* ----- Custom cursor ----- */
+      const dot = document.querySelector('.cursor-dot');
+      const ring = document.querySelector('.cursor-ring');
+      if (dot && ring && !isTouch && !reduced) {
+        let mx = 0, my = 0, rx = 0, ry = 0;
+        window.addEventListener('mousemove', (e) => {
+          mx = e.clientX; my = e.clientY;
+          dot.style.transform = `translate3d(${mx}px, ${my}px, 0)`;
+        }, { passive: true });
+        const raf = () => {
+          rx += (mx - rx) * 0.18;
+          ry += (my - ry) * 0.18;
+          ring.style.transform = `translate3d(${rx}px, ${ry}px, 0)`;
+          requestAnimationFrame(raf);
+        };
+        raf();
+        const hoverables = document.querySelectorAll('a, button, [data-hover], [data-tilt], input, textarea, label, [data-goto]');
+        hoverables.forEach(el => {
+          el.addEventListener('mouseenter', () => ring.classList.add('is-active'));
+          el.addEventListener('mouseleave', () => ring.classList.remove('is-active'));
+        });
+      } else if (dot && ring) {
+        dot.style.display = 'none'; ring.style.display = 'none';
+        document.body.style.cursor = 'auto';
+      }
+
+      /* ----- Particle canvas ----- */
+      const canvas = document.getElementById('particles');
+      if (canvas && !reduced) {
+        const ctx = canvas.getContext('2d');
+        let w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const PARTICLE_COUNT = isMobile ? 28 : 60;
+        const LINK_DIST = isMobile ? 90 : 130;
+        const particles = [];
+
+        function resize() {
+          w = window.innerWidth; h = window.innerHeight;
+          canvas.width = w * dpr; canvas.height = h * dpr;
+          canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+          ctx.scale(dpr, dpr);
+        }
+        function init() {
+          particles.length = 0;
+          for (let i = 0; i < PARTICLE_COUNT; i++) {
+            particles.push({
+              x: Math.random() * w,
+              y: Math.random() * h,
+              vx: (Math.random() - .5) * .25,
+              vy: (Math.random() - .5) * .25,
+              r: Math.random() * 1.6 + .4,
+              hue: Math.random() > .5 ? '139,92,246' : '96,165,250',
+            });
+          }
+        }
+        function tick() {
+          ctx.clearRect(0, 0, w, h);
+          for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
+            p.x += p.vx; p.y += p.vy;
+            if (p.x < 0) p.x = w; else if (p.x > w) p.x = 0;
+            if (p.y < 0) p.y = h; else if (p.y > h) p.y = 0;
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(${p.hue},.65)`;
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+              const a = particles[i], b = particles[j];
+              const dx = a.x - b.x, dy = a.y - b.y;
+              const d = Math.hypot(dx, dy);
+              if (d < LINK_DIST) {
+                const alpha = (1 - d / LINK_DIST) * 0.18;
+                ctx.strokeStyle = `rgba(167,139,250,${alpha})`;
+                ctx.lineWidth = .6;
+                ctx.beginPath();
+                ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+                ctx.stroke();
+              }
+            }
+          }
+          requestAnimationFrame(tick);
+        }
+        window.addEventListener('resize', () => { resize(); init(); });
+        resize(); init(); tick();
+      } else if (canvas) {
+        canvas.style.display = 'none';
+      }
+
+      /* ----- Panel navigation helpers ----- */
+      function currentIndex() {
+        if (isMobileNow()) {
+          let best = 0, bestDist = Infinity;
+          panels.forEach((p, i) => {
+            const rect = p.getBoundingClientRect();
+            const d = Math.abs(rect.top);
+            if (d < bestDist) { bestDist = d; best = i; }
+          });
+          return best;
+        }
+        return Math.round(slider.scrollLeft / window.innerWidth);
+      }
+      function isMobileNow() { return window.matchMedia('(max-width: 900px)').matches; }
+      function goto(i) {
+        const idx = Math.max(0, Math.min(PANEL_COUNT - 1, i));
+        if (isMobileNow()) {
+          panels[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          slider.scrollTo({ left: idx * window.innerWidth, behavior: 'smooth' });
+        }
+      }
+      document.querySelectorAll('[data-goto]').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          goto(parseInt(el.dataset.goto, 10));
+        });
+        if (el.tagName === 'A' && !el.getAttribute('href')) el.setAttribute('href', '#');
+      });
+
+      /* ----- Wheel hijack: snap per panel ----- */
+      let wheelLock = false;
+      slider.addEventListener('wheel', (e) => {
+        if (isMobileNow()) return;
+        // Only hijack if gesture is dominantly vertical (mouse wheel).
+        // Trackpad horizontal gestures (|deltaX| >> |deltaY|) pass through.
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+        e.preventDefault();
+        if (wheelLock) return;
+        const dir = Math.sign(e.deltaY);
+        if (dir === 0) return;
+        const cur = currentIndex();
+        goto(cur + dir);
+        wheelLock = true;
+        setTimeout(() => { wheelLock = false; }, 750);
+      }, { passive: false });
+
+      /* ----- Keyboard nav ----- */
+      window.addEventListener('keydown', (e) => {
+        if (e.target.matches('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
+        const cur = currentIndex();
+        let target = null;
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') target = cur + 1;
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') target = cur - 1;
+        else if (e.key === 'Home') target = 0;
+        else if (e.key === 'End') target = PANEL_COUNT - 1;
+        else if (/^[1-5]$/.test(e.key)) target = parseInt(e.key, 10) - 1;
+        if (target !== null) { e.preventDefault(); goto(target); }
+      });
+
+      /* ----- Drag to scroll ----- */
+      if (!isTouch) {
+        let down = false, startX = 0, startLeft = 0, moved = 0;
+        slider.addEventListener('mousedown', (e) => {
+          if (e.target.closest('input, textarea, button, a, [data-tilt], label, [data-goto]')) return;
+          down = true; moved = 0;
+          startX = e.pageX; startLeft = slider.scrollLeft;
+          slider.classList.add('is-dragging');
+          if (ring) ring.classList.add('is-drag');
+          e.preventDefault();
+        });
+        window.addEventListener('mousemove', (e) => {
+          if (!down) return;
+          const dx = e.pageX - startX;
+          moved = Math.abs(dx);
+          slider.scrollLeft = startLeft - dx;
+        });
+        window.addEventListener('mouseup', (e) => {
+          if (!down) return;
+          down = false;
+          slider.classList.remove('is-dragging');
+          if (ring) ring.classList.remove('is-drag');
+          if (moved > 10) {
+            // snap to nearest
+            const idx = Math.round(slider.scrollLeft / window.innerWidth);
+            goto(idx);
+          }
+        });
+      }
+
+      /* ----- Active panel tracking ----- */
+      const pcCurrent = document.getElementById('pcCurrent');
+      const sideLabelText = document.getElementById('sideLabelText');
+      const progressBar = document.querySelector('.progress-bar');
+      const dots = [...document.querySelectorAll('.pagination button')];
+
+      function updateActive() {
+        const cur = currentIndex();
+        panels.forEach((p, i) => p.setAttribute('data-active', String(i === cur)));
+        dots.forEach((d, i) => d.classList.toggle('is-active', i === cur));
+        if (pcCurrent) pcCurrent.textContent = String(cur + 1).padStart(2, '0');
+        if (sideLabelText && panels[cur].dataset.label) sideLabelText.textContent = panels[cur].dataset.label;
+
+        // progress
+        if (progressBar) {
+          let p = 0;
+          if (isMobileNow()) {
+            const max = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+            p = max > 0 ? (window.scrollY / max) * 100 : 0;
+          } else {
+            const max = slider.scrollWidth - slider.clientWidth;
+            p = max > 0 ? (slider.scrollLeft / max) * 100 : 0;
+          }
+          progressBar.style.setProperty('--progress', p + '%');
+        }
+      }
+
+      slider.addEventListener('scroll', updateActive, { passive: true });
+      window.addEventListener('scroll', updateActive, { passive: true });
+      window.addEventListener('resize', () => {
+        // re-snap current panel position on resize
+        if (!isMobileNow()) {
+          const cur = currentIndex();
+          slider.scrollLeft = cur * window.innerWidth;
+        }
+        updateActive();
+      });
+      updateActive();
+
+      /* ----- Counters (trigger when panel activates) ----- */
+      const fmt = (n, decimals) => decimals > 0 ? n.toFixed(decimals) : Math.round(n).toLocaleString('en-US');
+      function animateCounter(el) {
+        if (el.dataset.done) return;
+        el.dataset.done = '1';
+        const target = parseFloat(el.dataset.target || '0');
+        const suffix = el.dataset.suffix || '';
+        const decimals = parseInt(el.dataset.decimals || '0', 10);
+        if (reduced) { el.textContent = fmt(target, decimals) + suffix; return; }
+        const duration = 1800;
+        const start = performance.now();
+        const ease = (t) => 1 - Math.pow(1 - t, 3);
+        const tick = (now) => {
+          const t = Math.min(1, (now - start) / duration);
+          el.textContent = fmt(target * ease(t), decimals) + suffix;
+          if (t < 1) requestAnimationFrame(tick);
+          else el.textContent = fmt(target, decimals) + suffix;
+        };
+        requestAnimationFrame(tick);
+      }
+      // Observe active-state change for counters
+      const observeCounters = () => {
+        panels.forEach(p => {
+          if (p.getAttribute('data-active') === 'true') {
+            p.querySelectorAll('.counter').forEach(animateCounter);
+          }
+        });
+      };
+      observeCounters();
+      // Re-run after panel changes
+      new MutationObserver(observeCounters).observe(panels[0].parentElement, {
+        subtree: true, attributes: true, attributeFilter: ['data-active']
+      });
+
+      /* ----- Magnetic ----- */
+      if (!reduced && !isTouch) {
+        document.querySelectorAll('[data-magnetic]').forEach(el => {
+          const strength = parseFloat(el.dataset.magnetic) || 0.25;
+          let rect = null;
+          el.addEventListener('mouseenter', () => { rect = el.getBoundingClientRect(); });
+          el.addEventListener('mousemove', (e) => {
+            if (!rect) rect = el.getBoundingClientRect();
+            const x = (e.clientX - rect.left - rect.width / 2) * strength;
+            const y = (e.clientY - rect.top - rect.height / 2) * strength;
+            el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+          });
+          el.addEventListener('mouseleave', () => { el.style.transform = ''; rect = null; });
+        });
+      }
+
+      /* ----- 3D tilt + spotlight ----- */
+      if (!reduced && !isTouch) {
+        document.querySelectorAll('[data-tilt]').forEach(card => {
+          let rect = null, raf = null, trx = 0, try_ = 0;
+          const update = () => {
+            card.style.transform = `perspective(1200px) rotateX(${try_}deg) rotateY(${trx}deg) translate3d(0,-3px,0)`;
+            raf = null;
+          };
+          card.addEventListener('mouseenter', () => { rect = card.getBoundingClientRect(); });
+          card.addEventListener('mousemove', (e) => {
+            if (!rect) rect = card.getBoundingClientRect();
+            const tx = (e.clientX - rect.left) / rect.width;
+            const ty = (e.clientY - rect.top) / rect.height;
+            trx = (tx - .5) * 8;
+            try_ = (ty - .5) * -8;
+            card.style.setProperty('--mx', (tx * 100) + '%');
+            card.style.setProperty('--my', (ty * 100) + '%');
+            if (!raf) raf = requestAnimationFrame(update);
+          });
+          card.addEventListener('mouseleave', () => { card.style.transform = ''; rect = null; });
+        });
+      }
+
+      /* ----- Mouse parallax in hero ----- */
+      if (!reduced && !isTouch) {
+        const hero = document.getElementById('panel-0');
+        if (hero) {
+          const layers = hero.querySelectorAll('.parallax-layer');
+          hero.addEventListener('mousemove', (e) => {
+            const r = hero.getBoundingClientRect();
+            const x = (e.clientX - r.left) / r.width - .5;
+            const y = (e.clientY - r.top) / r.height - .5;
+            layers.forEach(el => {
+              const d = parseFloat(el.dataset.depth) || 20;
+              el.style.transform = `translate3d(${x * d}px, ${y * d}px, 0)`;
+            });
+          });
+          hero.addEventListener('mouseleave', () => {
+            layers.forEach(el => el.style.transform = '');
+          });
+        }
+      }
+
+      /* ----- Form ----- */
+      const form = document.getElementById('contact-form');
+      const status = document.getElementById('form-status');
+      if (form) {
+        form.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const name = form.querySelector('#f-name').value.trim();
+          const email = form.querySelector('#f-email').value.trim();
+          const message = form.querySelector('#f-message').value.trim();
+          if (!name || !email || !message) {
+            status.textContent = 'Please fill in name, email, and a short message.';
+            status.classList.remove('hidden', 'text-emerald-400');
+            status.classList.add('text-rose-400');
+            return;
+          }
+          status.textContent = 'Thanks — message received. A partner will reply within one business day.';
+          status.classList.remove('hidden', 'text-rose-400');
+          status.classList.add('text-emerald-400');
+          form.reset();
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

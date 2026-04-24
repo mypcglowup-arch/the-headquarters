@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Headquarters — Plan Stratégique 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:    #080d18;
+      --navy2:   #0c1220;
+      --navy3:   #111827;
+      --indigo:  #6366f1;
+      --indigo2: #4f46e5;
+      --gold:    #d4af37;
+      --gold2:   #f59e0b;
+      --emerald: #10b981;
+      --red:     #ef4444;
+      --text1:   #f1f5f9;
+      --text2:   #cbd5e1;
+      --text3:   #64748b;
+      --text4:   #334155;
+      --border:  rgba(255,255,255,0.07);
+    }
+
+    html { font-size: 15px; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--navy);
+      color: var(--text2);
+      line-height: 1.65;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* ── Print layout ─────────────────────────────────────── */
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    @media print {
+      body { background: #fff; color: #1e293b; }
+      .no-print { display: none !important; }
+      .page { page-break-after: always; background: #fff !important; }
+      .page:last-child { page-break-after: avoid; }
+      .cover { background: #080d18 !important; }
+      .section-header { background: #080d18 !important; }
+      .item-card { background: #f8fafc !important; border-color: #e2e8f0 !important; }
+      .item-card p { color: #475569 !important; }
+      .layer-number { color: #6366f1 !important; }
+      .tag { border-color: currentColor !important; }
+    }
+
+    /* ── Print button ─────────────────────────────────────── */
+    .print-bar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 999;
+      background: rgba(8,13,24,0.96);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .print-bar span {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px; font-weight: 500;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    .print-btn {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      background: var(--indigo);
+      color: #fff; border: none; cursor: pointer;
+      padding: 8px 20px; border-radius: 8px;
+      transition: background 150ms;
+    }
+    .print-btn:hover { background: var(--indigo2); }
+
+    /* ── Pages ────────────────────────────────────────────── */
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ── COVER ────────────────────────────────────────────── */
+    .cover {
+      background: linear-gradient(155deg, #080d18 0%, #0c1530 50%, #080d18 100%);
+      display: flex; flex-direction: column;
+      padding: 0;
+    }
+    .cover-noise {
+      position: absolute; inset: 0; opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    }
+    .cover-glow {
+      position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
+      width: 600px; height: 600px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cover-content {
+      position: relative; z-index: 1;
+      flex: 1; display: flex; flex-direction: column;
+      padding: 60px 56px 48px;
+    }
+    .cover-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.25);
+      border-radius: 20px; padding: 5px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: rgba(99,102,241,0.9);
+      letter-spacing: 0.08em;
+      margin-bottom: 48px; width: fit-content;
+    }
+    .cover-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px rgba(16,185,129,0.8);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .cover-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 52px; font-weight: 300;
+      color: var(--text1); letter-spacing: 0.06em;
+      line-height: 1.1; margin-bottom: 8px;
+    }
+    .cover-title span { font-weight: 700; }
+    .cover-subtitle {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px; font-weight: 400;
+      color: rgba(148,163,184,0.5);
+      letter-spacing: 0.18em; text-transform: uppercase;
+      margin-bottom: 64px;
+    }
+    .cover-divider {
+      width: 48px; height: 2px;
+      background: linear-gradient(90deg, var(--indigo), transparent);
+      margin-bottom: 32px;
+    }
+    .cover-description {
+      font-size: 15px; font-weight: 300; line-height: 1.8;
+      color: rgba(203,213,225,0.65); max-width: 480px;
+      margin-bottom: 48px;
+    }
+    .cover-layers {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+      margin-bottom: 64px;
+    }
+    .cover-layer-chip {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 12px;
+    }
+    .cover-layer-chip .num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; color: var(--indigo);
+      letter-spacing: 0.1em; margin-bottom: 4px;
+    }
+    .cover-layer-chip .name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px; font-weight: 600;
+      color: rgba(241,245,249,0.7);
+    }
+    .cover-meta {
+      margin-top: auto;
+      display: flex; align-items: flex-end; justify-content: space-between;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+    }
+    .cover-meta-left .label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; color: var(--text3);
+      letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    .cover-meta-left .value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px; font-weight: 500; color: var(--text2);
+      margin-top: 2px;
+    }
+    .cover-hq-logo {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.25em; text-transform: uppercase;
+      color: rgba(212,175,55,0.5);
+    }
+
+    /* ── TOC ──────────────────────────────────────────────── */
+    .toc-page {
+      background: var(--navy2);
+      padding: 56px;
+    }
+    .toc-header {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px; font-weight: 600;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--indigo); margin-bottom: 40px;
+    }
+    .toc-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 28px; font-weight: 300;
+      color: var(--text1); letter-spacing: 0.04em;
+      margin-bottom: 48px;
+    }
+    .toc-item {
+      display: flex; align-items: baseline;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .toc-item:last-child { border-bottom: none; }
+    .toc-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; color: var(--indigo);
+      width: 40px; flex-shrink: 0;
+    }
+    .toc-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px; font-weight: 500;
+      color: var(--text2); flex: 1;
+    }
+    .toc-sub {
+      font-size: 11px; font-weight: 400;
+      color: var(--text3); margin-top: 2px;
+    }
+    .toc-count {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; color: var(--text3);
+    }
+    .toc-section-gap { margin-top: 24px; }
+
+    /* ── SECTION PAGES ────────────────────────────────────── */
+    .section-page { background: var(--navy2); }
+    .section-header {
+      background: var(--navy);
+      padding: 40px 56px 32px;
+      border-bottom: 1px solid var(--border);
+      position: relative; overflow: hidden;
+    }
+    .section-header-glow {
+      position: absolute; top: -60px; right: -60px;
+      width: 240px; height: 240px; border-radius: 50%;
+      pointer-events: none; opacity: 0.4;
+    }
+    .section-eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--indigo);
+      margin-bottom: 10px;
+    }
+    .layer-number {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.15em; text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .section-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 30px; font-weight: 700;
+      color: var(--text1); letter-spacing: 0.02em;
+      line-height: 1.2; margin-bottom: 12px;
+    }
+    .section-desc {
+      font-size: 13px; font-weight: 300; line-height: 1.7;
+      color: rgba(148,163,184,0.65); max-width: 520px;
+    }
+    .section-body { padding: 32px 56px 40px; }
+
+    /* ── Item cards ───────────────────────────────────────── */
+    .items-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .items-grid-3 { grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .items-single { display: flex; flex-direction: column; gap: 10px; }
+
+    .item-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 18px;
+      position: relative;
+    }
+    .item-card.highlight {
+      border-color: rgba(99,102,241,0.2);
+      background: rgba(99,102,241,0.04);
+    }
+    .item-card.gold-accent {
+      border-color: rgba(212,175,55,0.2);
+      background: rgba(212,175,55,0.03);
+    }
+    .item-left-bar {
+      position: absolute; left: 0; top: 12px; bottom: 12px;
+      width: 2px; border-radius: 0 2px 2px 0;
+    }
+    .item-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px; font-weight: 600;
+      color: var(--text1); margin-bottom: 5px;
+      padding-left: 10px;
+    }
+    .item-desc {
+      font-size: 11px; font-weight: 400; line-height: 1.6;
+      color: rgba(148,163,184,0.55);
+      padding-left: 10px;
+    }
+    .item-tags {
+      display: flex; flex-wrap: wrap; gap: 5px;
+      margin-top: 10px; padding-left: 10px;
+    }
+    .tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; font-weight: 500;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      border: 1px solid; border-radius: 4px;
+      padding: 2px 7px;
+    }
+    .tag-low    { color: rgba(16,185,129,0.8);  border-color: rgba(16,185,129,0.25); }
+    .tag-med    { color: rgba(245,158,11,0.8);  border-color: rgba(245,158,11,0.25); }
+    .tag-high   { color: rgba(239,68,68,0.8);   border-color: rgba(239,68,68,0.25); }
+    .tag-impact { color: rgba(99,102,241,0.8);  border-color: rgba(99,102,241,0.25); }
+    .tag-code   { color: rgba(148,163,184,0.7); border-color: rgba(148,163,184,0.2); }
+
+    /* ── Sprint page ──────────────────────────────────────── */
+    .sprint-block {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px 28px;
+      margin-bottom: 16px;
+    }
+    .sprint-block.s1 { border-left: 3px solid var(--emerald); }
+    .sprint-block.s2 { border-left: 3px solid var(--indigo); }
+    .sprint-block.s3 { border-left: 3px solid var(--gold); }
+    .sprint-block.s4 { border-left: 3px solid var(--red); }
+    .sprint-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .sprint-num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px; font-weight: 700; color: var(--text1);
+    }
+    .sprint-timing {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; color: var(--text3);
+      letter-spacing: 0.08em;
+    }
+    .sprint-goal {
+      font-size: 12px; font-weight: 300;
+      color: rgba(148,163,184,0.6); margin-bottom: 14px;
+    }
+    .sprint-items {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    }
+    .sprint-item {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 10px;
+      font-size: 11px; color: rgba(203,213,225,0.7);
+    }
+    .sprint-item strong {
+      display: block; font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px; font-weight: 600; color: var(--text2);
+      margin-bottom: 2px;
+    }
+
+    /* ── Competitive page ─────────────────────────────────── */
+    .vs-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 32px; }
+    .vs-card {
+      border-radius: 12px; padding: 20px;
+      border: 1px solid;
+    }
+    .vs-card.qg {
+      background: rgba(99,102,241,0.06);
+      border-color: rgba(99,102,241,0.2);
+    }
+    .vs-card.manus {
+      background: rgba(255,255,255,0.02);
+      border-color: var(--border);
+    }
+    .vs-card.sintra {
+      background: rgba(255,255,255,0.02);
+      border-color: var(--border);
+    }
+    .vs-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px; font-weight: 700; color: var(--text1);
+      margin-bottom: 8px;
+    }
+    .vs-tag {
+      font-size: 10px; color: var(--text3);
+      margin-bottom: 14px;
+    }
+    .vs-point {
+      font-size: 11px; color: rgba(148,163,184,0.6);
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .vs-point:last-child { border-bottom: none; }
+    .vs-win { color: rgba(16,185,129,0.8) !important; }
+    .vs-loss { color: rgba(239,68,68,0.6) !important; }
+
+    /* ── Section colors ───────────────────────────────────── */
+    .c1 { color: #6366f1; } .b1 { border-color: rgba(99,102,241,0.5) !important; }  .bg1 { background: radial-gradient(circle, rgba(99,102,241,0.08), transparent 70%); }
+    .c2 { color: #06b6d4; } .b2 { border-color: rgba(6,182,212,0.5) !important; }   .bg2 { background: radial-gradient(circle, rgba(6,182,212,0.08), transparent 70%); }
+    .c3 { color: #10b981; } .b3 { border-color: rgba(16,185,129,0.5) !important; }  .bg3 { background: radial-gradient(circle, rgba(16,185,129,0.08), transparent 70%); }
+    .c4 { color: #a78bfa; } .b4 { border-color: rgba(167,139,250,0.5) !important; } .bg4 { background: radial-gradient(circle, rgba(167,139,250,0.08), transparent 70%); }
+    .c5 { color: #d4af37; } .b5 { border-color: rgba(212,175,55,0.5) !important; }  .bg5 { background: radial-gradient(circle, rgba(212,175,55,0.08), transparent 70%); }
+    .c6 { color: #f97316; } .b6 { border-color: rgba(249,115,22,0.5) !important; }  .bg6 { background: radial-gradient(circle, rgba(249,115,22,0.08), transparent 70%); }
+    .c7 { color: #ec4899; } .b7 { border-color: rgba(236,72,153,0.5) !important; }  .bg7 { background: radial-gradient(circle, rgba(236,72,153,0.08), transparent 70%); }
+    .c8 { color: #94a3b8; } .b8 { border-color: rgba(148,163,184,0.5) !important; } .bg8 { background: radial-gradient(circle, rgba(148,163,184,0.06), transparent 70%); }
+
+    /* ── UI section special ───────────────────────────────── */
+    .ui-category {
+      margin-bottom: 24px;
+    }
+    .ui-cat-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(148,163,184,0.45);
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ui-items { display: flex; flex-direction: column; gap: 7px; }
+    .ui-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: rgba(255,255,255,0.025);
+      border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px;
+    }
+    .ui-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      flex-shrink: 0; margin-top: 5px;
+    }
+    .ui-item-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px; font-weight: 600; color: var(--text1);
+    }
+    .ui-item-desc {
+      font-size: 10px; color: rgba(148,163,184,0.5);
+      margin-top: 2px;
+    }
+
+    /* ── Conclusion ───────────────────────────────────────── */
+    .conclusion-page {
+      background: linear-gradient(155deg, #080d18 0%, #0c1530 100%);
+      padding: 56px;
+      display: flex; flex-direction: column; justify-content: center;
+      min-height: 297mm;
+    }
+    .conclusion-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--indigo);
+      margin-bottom: 32px;
+    }
+    .conclusion-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 40px; font-weight: 300;
+      color: var(--text1); line-height: 1.2;
+      margin-bottom: 32px;
+    }
+    .conclusion-title strong { font-weight: 700; }
+    .conclusion-equation {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px 32px;
+      margin-bottom: 40px;
+    }
+    .eq-line {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px; color: rgba(148,163,184,0.6);
+      line-height: 2;
+    }
+    .eq-line .eq-key   { color: var(--indigo); }
+    .eq-line .eq-plus  { color: var(--text3); }
+    .eq-line .eq-final { color: var(--gold); font-weight: 700; font-size: 13px; }
+    .conclusion-stats {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+      margin-bottom: 40px;
+    }
+    .stat-box {
+      text-align: center; padding: 20px 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border); border-radius: 10px;
+    }
+    .stat-num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 28px; font-weight: 700; color: var(--text1);
+      margin-bottom: 4px;
+    }
+    .stat-label { font-size: 10px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; }
+    .conclusion-footer {
+      margin-top: auto;
+      display: flex; align-items: center; justify-content: space-between;
+      padding-top: 32px; border-top: 1px solid var(--border);
+    }
+    .conclusion-footer .date {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: var(--text3);
+    }
+    .conclusion-footer .hq {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px; font-weight: 700;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      color: rgba(212,175,55,0.5);
+    }
+
+    /* ── Screen-only spacing for print bar ───────────────── */
+    @media screen { body { padding-top: 50px; } .page { margin-bottom: 40px; box-shadow: 0 8px 48px rgba(0,0,0,0.6); } }
+  </style>
+</head>
+<body>
+
+<!-- ── Print bar ──────────────────────────────────────────── -->
+<div class="print-bar no-print">
+  <span>The Headquarters — Plan Stratégique 2026</span>
+  <button class="print-btn" onclick="window.print()">⬇ Télécharger PDF</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 1 — COVER
+═══════════════════════════════════════════════════════════ -->
+<div class="page cover">
+  <div class="cover-noise"></div>
+  <div class="cover-glow"></div>
+  <div class="cover-content">
+
+    <div class="cover-badge">
+      <div class="cover-dot"></div>
+      Document confidentiel · Version 1.0
+    </div>
+
+    <div>
+      <div class="cover-title">The<br/><span>Head&shy;quarters</span></div>
+      <div class="cover-subtitle">Plan Stratégique — 7 Couches d'Évolution</div>
+    </div>
+
+    <div class="cover-divider"></div>
+
+    <p class="cover-description">
+      Ce document détaille les 7 couches d'expansion stratégique de The Headquarters —
+      de l'autonomie des agents à la distribution white-label —
+      pour construire le Chief of Staff IA le plus avancé du marché francophone.
+    </p>
+
+    <div class="cover-layers">
+      <div class="cover-layer-chip">
+        <div class="num">C · 01</div>
+        <div class="name">Autonomie</div>
+      </div>
+      <div class="cover-layer-chip">
+        <div class="num">C · 02</div>
+        <div class="name">Intelligence</div>
+      </div>
+      <div class="cover-layer-chip">
+        <div class="num">C · 03</div>
+        <div class="name">Intégrations</div>
+      </div>
+      <div class="cover-layer-chip">
+        <div class="num">C · 04</div>
+        <div class="name">Interface</div>
+      </div>
+      <div class="cover-layer-chip">
+        <div class="num">C · 05</div>
+        <div class="name">Profondeur</div>
+      </div>
+      <div class="cover-layer-chip">
+        <div class="num">C · 06</div>
+        <div class="name">Distribution</div>
+      </div>
+      <div class="cover-layer-chip">
+        <div class="num">C · 07</div>
+        <div class="name">Trust & Proof</div>
+      </div>
+      <div class="cover-layer-chip">
+        <div class="num">C · 08</div>
+        <div class="name">UI & Code</div>
+      </div>
+    </div>
+
+    <div class="cover-meta">
+      <div class="cover-meta-left">
+        <div class="label">Préparé pour</div>
+        <div class="value">Samuel Nicolas · NT Solutions</div>
+      </div>
+      <div class="cover-meta-left" style="text-align:center">
+        <div class="label">Date</div>
+        <div class="value">Avril 2026</div>
+      </div>
+      <div class="cover-hq-logo">QG · HQ</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 2 — TABLE OF CONTENTS
+═══════════════════════════════════════════════════════════ -->
+<div class="page toc-page">
+  <div class="toc-header">Table des matières</div>
+  <div class="toc-title">Vue d'ensemble du plan</div>
+
+  <div class="toc-item">
+    <div class="toc-num">01</div>
+    <div>
+      <div class="toc-name">Positionnement concurrentiel</div>
+      <div class="toc-sub">QG vs Manus · QG vs Sintra AI · L'avantage injuste</div>
+    </div>
+    <div class="toc-count">2 concurrents</div>
+  </div>
+  <div class="toc-item">
+    <div class="toc-num">C·01</div>
+    <div>
+      <div class="toc-name">Autonomie — Agents qui agissent</div>
+      <div class="toc-sub">Actions réelles sans intervention manuelle</div>
+    </div>
+    <div class="toc-count">10 items</div>
+  </div>
+  <div class="toc-item">
+    <div class="toc-num">C·02</div>
+    <div>
+      <div class="toc-name">Intelligence Prédictive</div>
+      <div class="toc-sub">Patterns, anomalies, forecasting, agent scoring</div>
+    </div>
+    <div class="toc-count">7 items</div>
+  </div>
+  <div class="toc-item">
+    <div class="toc-num">C·03</div>
+    <div>
+      <div class="toc-name">Intégrations Réelles</div>
+      <div class="toc-sub">Stripe, Notion, Slack, Chrome extension, Zapier</div>
+    </div>
+    <div class="toc-count">8 items</div>
+  </div>
+  <div class="toc-item">
+    <div class="toc-num">C·04</div>
+    <div>
+      <div class="toc-name">Interface & Accessibilité</div>
+      <div class="toc-sub">Voice mode, PWA, WhatsApp, sessions planifiées</div>
+    </div>
+    <div class="toc-count">6 items</div>
+  </div>
+  <div class="toc-item">
+    <div class="toc-num">C·05</div>
+    <div>
+      <div class="toc-name">Profondeur Personnelle</div>
+      <div class="toc-sub">L'avantage que personne ne peut copier</div>
+    </div>
+    <div class="toc-count">6 items</div>
+  </div>
+  <div class="toc-item">
+    <div class="toc-num">C·06</div>
+    <div>
+      <div class="toc-name">Team & Distribution</div>
+      <div class="toc-sub">White-label, multi-user, API, marketplace</div>
+    </div>
+    <div class="toc-count">6 items</div>
+  </div>
+  <div class="toc-item">
+    <div class="toc-num">C·07</div>
+    <div>
+      <div class="toc-name">Trust & Proof</div>
+      <div class="toc-sub">ROI tracker, décisions, rapport mensuel</div>
+    </div>
+    <div class="toc-count">4 items</div>
+  </div>
+  <div class="toc-item">
+    <div class="toc-num">C·08</div>
+    <div>
+      <div class="toc-name">Interface & Esthétique (code only)</div>
+      <div class="toc-sub">Ce qu'on peut améliorer maintenant sans nouveau service</div>
+    </div>
+    <div class="toc-count">25+ items</div>
+  </div>
+  <div class="toc-section-gap"></div>
+  <div class="toc-item">
+    <div class="toc-num">→</div>
+    <div>
+      <div class="toc-name">Roadmap par Sprint</div>
+      <div class="toc-sub">4 sprints · ordre d'attaque · objectifs par phase</div>
+    </div>
+    <div class="toc-count">4 sprints</div>
+  </div>
+  <div class="toc-item">
+    <div class="toc-num">∎</div>
+    <div>
+      <div class="toc-name">Conclusion · La vision finale</div>
+      <div class="toc-sub">Chief of Staff IA · Entrepreneur solo → équipe de 10</div>
+    </div>
+  </div>
+
+  <div style="margin-top:40px; padding:20px 24px; background:rgba(99,102,241,0.05); border:1px solid rgba(99,102,241,0.15); border-radius:10px;">
+    <div style="font-family:'Space Grotesk',sans-serif; font-size:12px; font-weight:600; color:rgba(99,102,241,0.8); margin-bottom:8px;">Total des items planifiés</div>
+    <div style="display:flex; gap:32px; flex-wrap:wrap;">
+      <div><span style="font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700; color:#f1f5f9;">57</span><span style="font-size:11px; color:#64748b; margin-left:6px;">fonctionnalités</span></div>
+      <div><span style="font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700; color:#f1f5f9;">4</span><span style="font-size:11px; color:#64748b; margin-left:6px;">sprints</span></div>
+      <div><span style="font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700; color:#f1f5f9;">8</span><span style="font-size:11px; color:#64748b; margin-left:6px;">couches</span></div>
+      <div><span style="font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700; color:#d4af37;">1</span><span style="font-size:11px; color:#64748b; margin-left:6px;">produit qui écrase tout</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 3 — COMPETITIVE POSITION
+═══════════════════════════════════════════════════════════ -->
+<div class="page section-page">
+  <div class="section-header">
+    <div class="section-header-glow bg1"></div>
+    <div class="section-eyebrow">Positionnement stratégique</div>
+    <div class="section-title">QG vs le marché</div>
+    <div class="section-desc">Analyse des deux références concurrentes et identification de l'avantage injuste durable.</div>
+  </div>
+  <div class="section-body">
+    <div class="vs-grid">
+      <div class="vs-card qg">
+        <div class="vs-name" style="color:#6366f1;">The Headquarters</div>
+        <div class="vs-tag">Notre produit · L'objectif</div>
+        <div class="vs-point vs-win">✓ 6 frameworks en débat</div>
+        <div class="vs-point vs-win">✓ Vraies données business (dashboard)</div>
+        <div class="vs-point vs-win">✓ Mémoire longue (Mem0)</div>
+        <div class="vs-point vs-win">✓ Accountability + streaks</div>
+        <div class="vs-point vs-win">✓ Contexte québécois/FR</div>
+        <div class="vs-point vs-win">✓ White-label agences</div>
+        <div class="vs-point" style="color:rgba(245,158,11,0.7);">→ Autonomie à construire</div>
+        <div class="vs-point" style="color:rgba(245,158,11,0.7);">→ Mobile à optimiser</div>
+      </div>
+      <div class="vs-card manus">
+        <div class="vs-name">Manus AI</div>
+        <div class="vs-tag">Agent autonome généraliste</div>
+        <div class="vs-point vs-win">✓ Computer use réel</div>
+        <div class="vs-point vs-win">✓ Tâches longue durée</div>
+        <div class="vs-point vs-win">✓ Exécution dans le monde réel</div>
+        <div class="vs-point vs-loss">✗ Aucune personnalisation</div>
+        <div class="vs-point vs-loss">✗ Pas de mémoire business</div>
+        <div class="vs-point vs-loss">✗ Pas de conseil multi-agent</div>
+        <div class="vs-point vs-loss">✗ Pas de contexte entrepreneur</div>
+        <div class="vs-point vs-loss">✗ Générique par design</div>
+      </div>
+      <div class="vs-card sintra">
+        <div class="vs-name">Sintra AI</div>
+        <div class="vs-tag">Personas business génériques</div>
+        <div class="vs-point vs-win">✓ Onboarding soigné</div>
+        <div class="vs-point vs-win">✓ UI propre</div>
+        <div class="vs-point vs-win">✓ Mobile app</div>
+        <div class="vs-point vs-loss">✗ Aucune donnée réelle</div>
+        <div class="vs-point vs-loss">✗ Pas de mémoire cross-session</div>
+        <div class="vs-point vs-loss">✗ Un agent par tâche (pas de débat)</div>
+        <div class="vs-point vs-loss">✗ Américano-centrique</div>
+        <div class="vs-point vs-loss">✗ Pas de ROI mesurable</div>
+      </div>
+    </div>
+
+    <div style="background:rgba(212,175,55,0.05); border:1px solid rgba(212,175,55,0.15); border-radius:10px; padding:20px 24px;">
+      <div style="font-family:'Space Grotesk',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:rgba(212,175,55,0.7); margin-bottom:12px;">L'avantage injuste — ce que personne ne peut copier</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div style="font-size:12px; color:rgba(203,213,225,0.65); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+          <span style="color:rgba(212,175,55,0.8); margin-right:8px;">①</span>Tes vrais chiffres dans chaque réponse des agents
+        </div>
+        <div style="font-size:12px; color:rgba(203,213,225,0.65); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+          <span style="color:rgba(212,175,55,0.8); margin-right:8px;">②</span>Six frameworks opposés qui se confrontent sur ton cas
+        </div>
+        <div style="font-size:12px; color:rgba(203,213,225,0.65); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+          <span style="color:rgba(212,175,55,0.8); margin-right:8px;">③</span>Mémoire qui s'accumule — QG te connaît mieux au fil du temps
+        </div>
+        <div style="font-size:12px; color:rgba(203,213,225,0.65); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+          <span style="color:rgba(212,175,55,0.8); margin-right:8px;">④</span>Accountability réelle (streak, décisions, victoires tracées)
+        </div>
+        <div style="font-size:12px; color:rgba(203,213,225,0.65); padding:8px 0;">
+          <span style="color:rgba(212,175,55,0.8); margin-right:8px;">⑤</span>Contexte entrepreneur québécois / francophone natif
+        </div>
+        <div style="font-size:12px; color:rgba(203,213,225,0.65); padding:8px 0;">
+          <span style="color:rgba(212,175,55,0.8); margin-right:8px;">⑥</span>White-label pour NT Solutions — produit ET canal de distribution
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 4 — COUCHE 1: AUTONOMIE
+═══════════════════════════════════════════════════════════ -->
+<div class="page section-page">
+  <div class="section-header">
+    <div class="section-header-glow bg1"></div>
+    <div class="section-eyebrow">Couche 01 / 08</div>
+    <div class="layer-number c1">AUTONOMIE</div>
+    <div class="section-title">Agents qui agissent<br/>sans toi</div>
+    <div class="section-desc">La différence fondamentale avec un chatbot : les agents ne conseillent plus, ils exécutent. Actions réelles dans le monde réel, sans intervention manuelle.</div>
+  </div>
+  <div class="section-body">
+    <div class="items-grid">
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#6366f1;"></div>
+        <div class="item-title">Dashboard auto-update NLP</div>
+        <div class="item-desc">Tu mentionnes un chiffre en session → le MRR, le pipeline ou les dépenses se mettent à jour automatiquement. Zéro saisie manuelle.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#6366f1;"></div>
+        <div class="item-title">Calendar Write (pas juste read)</div>
+        <div class="item-desc">Un agent dit "bloque mardi 14h" → l'événement est créé dans Google Calendar avec le contexte. Actuellement QG lit le calendrier. Il faut qu'il écrive dedans.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#6366f1;"></div>
+        <div class="item-title">Pipeline auto-move</div>
+        <div class="item-desc">"J'ai eu une démo avec Acme" → prospect passe automatiquement au statut Demo dans le pipeline. Lecture sémantique de la conversation.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#6366f1;"></div>
+        <div class="item-title">Morning Briefing Automatique</div>
+        <div class="item-desc">Cron à 8h : notification push avec emails urgents + agenda + prochain move prioritaire. Sans ouvrir l'app. Agent prépare le contexte overnight.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#6366f1;"></div>
+        <div class="item-title">Gmail Surveillance Proactive</div>
+        <div class="item-desc">Agent tourne en background. Détecte les emails avec "urgent", "contrat", "invoice" → notification dans l'app + résumé + action suggérée.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#6366f1;"></div>
+        <div class="item-title">Follow-up Batch</div>
+        <div class="item-desc">"Relance tous les prospects sans réponse depuis 7 jours" → emails personnalisés générés, affichés pour approbation, envoyés en un clic.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#6366f1;"></div>
+        <div class="item-title">Multi-step Workflows</div>
+        <div class="item-desc">"Prépare mon appel avec Acme" → cherche email + research web + historique session + génère script + crée événement. Une commande, 5 actions.</div>
+        <div class="item-tags"><span class="tag tag-high">effort haut</span><span class="tag tag-impact">impact ++++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#6366f1;"></div>
+        <div class="item-title">Agents Persistants</div>
+        <div class="item-desc">Agents qui ne s'arrêtent pas entre les sessions. Surveillance continue : emails, pipeline, métriques. Contactent l'utilisateur si quelque chose dévie.</div>
+        <div class="item-tags"><span class="tag tag-high">effort haut</span><span class="tag tag-impact">impact ++++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#6366f1;"></div>
+        <div class="item-title">LinkedIn Outreach Automatisé</div>
+        <div class="item-desc">Agent rédige le message LinkedIn optimal pour chaque prospect (ton, angle, hook) basé sur le profil et l'historique. Tu copies-colles ou approuves l'envoi.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#6366f1;"></div>
+        <div class="item-title">Web Research On-Demand</div>
+        <div class="item-desc">Avant un appel, l'agent cherche automatiquement LinkedIn + site web + actualités du prospect. Brief complet dans la session sans aucune recherche manuelle.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 5 — COUCHE 2: INTELLIGENCE PRÉDICTIVE
+═══════════════════════════════════════════════════════════ -->
+<div class="page section-page">
+  <div class="section-header">
+    <div class="section-header-glow bg2"></div>
+    <div class="section-eyebrow">Couche 02 / 08</div>
+    <div class="layer-number c2">INTELLIGENCE PRÉDICTIVE</div>
+    <div class="section-title">L'app qui voit<br/>avant toi</div>
+    <div class="section-desc">Des agents qui détectent les patterns, prédisent les problèmes et déclenchent des actions avant que tu aies à demander. De la réactivité à l'anticipation.</div>
+  </div>
+  <div class="section-body">
+    <div class="items-grid">
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#06b6d4;"></div>
+        <div class="item-title">Pattern Detection → Action</div>
+        <div class="item-desc">3 sessions consécutives sans parler de prospection → agent te le signale automatiquement avec un conseil d'action. La mémoire qui travaille pour toi.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#06b6d4;"></div>
+        <div class="item-title">Anomaly Alerts</div>
+        <div class="item-desc">Outreach en baisse de 60% cette semaine vs la dernière → notification push proactive. Le système détecte les déviations de tes propres patterns.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#06b6d4;"></div>
+        <div class="item-title">Revenue Forecasting</div>
+        <div class="item-desc">"À ton rythme actuel, tu atteins ton objectif annuel en août" — calculé en temps réel depuis le dashboard. Projection visible dans chaque session.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#06b6d4;"></div>
+        <div class="item-title">Plateau Prediction</div>
+        <div class="item-desc">"Tu vas plafonner à X$ si tu ne changes pas Y dans les 30 prochains jours." Basé sur les patterns de croissance et les benchmarks du secteur.</div>
+        <div class="item-tags"><span class="tag tag-high">effort haut</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#06b6d4;"></div>
+        <div class="item-title">Decision Outcome Tracking</div>
+        <div class="item-desc">Tu as suivi le conseil de Cardone il y a 2 semaines — l'agent te demande ce que ça a donné. Les décisions ont un cycle de vie complet : conseil → action → résultat.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#06b6d4;"></div>
+        <div class="item-title">Agent Performance Scoring</div>
+        <div class="item-desc">Quel conseiller t'a donné les conseils avec le meilleur taux de résultat sur tes cas spécifiques ? Score calculé sur tes données réelles. Personnalisation maximale.</div>
+        <div class="item-tags"><span class="tag tag-high">effort haut</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card highlight">
+        <div class="item-left-bar" style="background:#06b6d4;"></div>
+        <div class="item-title">Emotional Pattern Memory</div>
+        <div class="item-desc">QG sait que tu bloques sur la prospection quand tu es en mode stress. Il adapte son approche selon ton état émotionnel détecté. Aucun concurrent ne fait ça.</div>
+        <div class="item-tags"><span class="tag tag-high">effort haut</span><span class="tag tag-impact">impact ++++</span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 6 — COUCHE 3: INTÉGRATIONS
+═══════════════════════════════════════════════════════════ -->
+<div class="page section-page">
+  <div class="section-header">
+    <div class="section-header-glow bg3"></div>
+    <div class="section-eyebrow">Couche 03 / 08</div>
+    <div class="layer-number c3">INTÉGRATIONS RÉELLES</div>
+    <div class="section-title">QG connecté<br/>à ton monde</div>
+    <div class="section-desc">Des intégrations qui lisent ET écrivent dans les outils que tu utilises déjà. Pas des démos. De vraies connexions qui éliminent le travail manuel.</div>
+  </div>
+  <div class="section-body">
+    <div class="items-grid">
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#10b981;"></div>
+        <div class="item-title">Stripe / Payments Integration</div>
+        <div class="item-desc">Revenus réels synchronisés en temps réel dans le dashboard. Plus de saisie manuelle. MRR, ARR, dernière transaction — tous automatiques.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#10b981;"></div>
+        <div class="item-title">Notion / Obsidian Sync</div>
+        <div class="item-desc">Décisions et améliorations exportées automatiquement vers ton espace Notion. Bidirectionnel : les notes Notion enrichissent le contexte des agents.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#10b981;"></div>
+        <div class="item-title">Slack / Discord Bot</div>
+        <div class="item-desc">Pose une question à ton équipe depuis Slack. "/qg quelle est ma priorité aujourd'hui ?" → réponse d'un agent en 10 secondes, sans ouvrir l'app.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#10b981;"></div>
+        <div class="item-title">Chrome Extension</div>
+        <div class="item-desc">Sur n'importe quelle page web (LinkedIn, email, article) un agent analyse et conseille. Bouton overlay qui ouvre une mini-session avec le contenu de la page.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#10b981;"></div>
+        <div class="item-title">Zapier / Make Webhooks</div>
+        <div class="item-desc">Connecte QG à n'importe quel autre outil via webhooks. Les power users et les clients NT Solutions construisent leurs propres automatisations dessus.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#10b981;"></div>
+        <div class="item-title">HubSpot / Pipedrive Sync</div>
+        <div class="item-desc">Le pipeline QG parle au CRM de l'agence. Prospects mis à jour des deux côtés. Les clients NT Solutions avec un CRM existant peuvent l'intégrer directement.</div>
+        <div class="item-tags"><span class="tag tag-high">effort haut</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#10b981;"></div>
+        <div class="item-title">Invoice Assistant</div>
+        <div class="item-desc">"Génère la facture pour Acme — 2 000$/mois — service de novembre" → facture créée, connectée à Wave ou QuickBooks, prête à envoyer.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#10b981;"></div>
+        <div class="item-title">Email Plugin (Gmail sidebar)</div>
+        <div class="item-desc">Dans Gmail, un panneau latéral QG suggère une réponse directement pendant la lecture. L'agent analyse le contexte de l'email et propose le bon angle.</div>
+        <div class="item-tags"><span class="tag tag-high">effort haut</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 7 — COUCHE 4: INTERFACE & ACCESSIBILITÉ
+═══════════════════════════════════════════════════════════ -->
+<div class="page section-page">
+  <div class="section-header">
+    <div class="section-header-glow bg4"></div>
+    <div class="section-eyebrow">Couche 04 / 08</div>
+    <div class="layer-number c4">INTERFACE & ACCESSIBILITÉ</div>
+    <div class="section-title">QG dans ta poche<br/>et dans ta voix</div>
+    <div class="section-desc">L'entrepreneur pense depuis son téléphone, en déplacement, à la volée. QG doit être là partout, sans friction, en moins de 2 secondes d'accès.</div>
+  </div>
+  <div class="section-body">
+    <div class="items-single">
+
+      <div class="item-card highlight">
+        <div class="item-left-bar" style="background:#a78bfa;"></div>
+        <div class="item-title">Voice Mode</div>
+        <div class="item-desc">Parle à tes agents comme au téléphone. WebSpeech API pour l'input + Text-to-Speech pour les réponses. Mains libres en voiture, en marche, sans écran. Interface naturelle que même Sintra n'a pas vraiment.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact ++++</span></div>
+      </div>
+
+      <div class="item-card highlight">
+        <div class="item-left-bar" style="background:#a78bfa;"></div>
+        <div class="item-title">Mobile PWA Optimisée</div>
+        <div class="item-desc">Progressive Web App avec offline capability, push notifications natives, accès en 2 secondes. Touch targets à 44px minimum, viewport 100dvh, safe-area-inset pour iPhone. L'app mobile que QG mérite.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#a78bfa;"></div>
+        <div class="item-title">WhatsApp Bot</div>
+        <div class="item-desc">Envoie un message à ton équipe depuis WhatsApp. Répond comme un agent dans la même interface que tu utilises déjà. Aucune friction d'adoption.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#a78bfa;"></div>
+        <div class="item-title">Sessions Planifiées Automatiques</div>
+        <div class="item-desc">Lundi 8h : une session stratégique s'ouvre avec le résumé de la semaine, les emails importants, l'agenda et le delta du pipeline. L'équipe t'attend déjà avec le brief. Aucune demande nécessaire.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact +++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#a78bfa;"></div>
+        <div class="item-title">Onboarding Guidé 3 Étapes</div>
+        <div class="item-desc">Première valeur en moins de 5 minutes. Tour interactif qui démontre les modes de session, connecte Gmail/Calendar, et déclenche une première session démonstrative automatique. Sintra convertit mieux car il tient la main.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#a78bfa;"></div>
+        <div class="item-title">Bibliothèque de Situations</div>
+        <div class="item-desc">50 scénarios pré-construits classés par situation : négociation à la baisse, cold LinkedIn, client difficile, offre qui ne se vend pas, plateau de croissance. Un clic → session pré-configurée.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 8 — COUCHE 5: PROFONDEUR PERSONNELLE
+═══════════════════════════════════════════════════════════ -->
+<div class="page section-page">
+  <div class="section-header">
+    <div class="section-header-glow bg5"></div>
+    <div class="section-eyebrow">Couche 05 / 08</div>
+    <div class="layer-number c5">PROFONDEUR PERSONNELLE</div>
+    <div class="section-title">L'avantage que<br/>personne ne copie</div>
+    <div class="section-desc">Sintra est générique par design — il ne peut pas être toi. Cette couche exploite la personnalisation profonde qui est architecturalement impossible à reproduire pour un concurrent généraliste.</div>
+  </div>
+  <div class="section-body">
+    <div class="items-single">
+
+      <div class="item-card gold-accent">
+        <div class="item-left-bar" style="background:#d4af37;"></div>
+        <div class="item-title">Custom Agent Training</div>
+        <div class="item-desc">Upload tes propres documents : tes offres, tes scripts, tes frameworks perso, tes livres préférés. Les agents apprennent ta façon de penser et conseillent dans ton propre langage. Le QG devient littéralement toi en version augmentée.</div>
+        <div class="item-tags"><span class="tag tag-high">effort haut</span><span class="tag tag-impact">impact ++++</span></div>
+      </div>
+
+      <div class="item-card gold-accent">
+        <div class="item-left-bar" style="background:#d4af37;"></div>
+        <div class="item-title">Agent Coach Post-Session</div>
+        <div class="item-desc">Après chaque session, un agent analyse comment tu as formulé tes questions, quels blocages reviennent, ce que tu évites systématiquement de traiter. Coaching méta sur ta façon de penser — pas juste sur tes problèmes business.</div>
+        <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact ++++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#d4af37;"></div>
+        <div class="item-title">Memory Longitudinale Cumulative</div>
+        <div class="item-desc">Au bout de 6 mois d'utilisation, QG te connaît mieux qu'un coach humain à 300$/h. Tes patterns, tes angles morts, tes forces, tes déclencheurs de stress. La mémoire qui s'accumule est l'actif le plus précieux de l'app.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact ++++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#d4af37;"></div>
+        <div class="item-title">Accountability Streaks Avancés</div>
+        <div class="item-desc">Pas juste le streak de connexion. Streak d'outreach (X contacts/semaine), streak de suivi pipeline, streak de sessions stratégiques. Chaque dimension de ton business a son propre indicateur de régularité.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#d4af37;"></div>
+        <div class="item-title">Journal de Victoires avec ROI</div>
+        <div class="item-desc">Chaque win tracké et relié à la session qui l'a produit. Preuve concrète : "Cette session avec Cardone il y a 3 semaines a généré ce deal." ROI visible, personnel, indiscutable.</div>
+        <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+      <div class="item-card">
+        <div class="item-left-bar" style="background:#d4af37;"></div>
+        <div class="item-title">Benchmarking Anonyme</div>
+        <div class="item-desc">"Les entrepreneurs à ton stade de revenus font en moyenne 12 contacts/semaine. Tu en fais 4." Comparaison anonyme avec la base d'utilisateurs — un miroir objectif sans jugement.</div>
+        <div class="item-tags"><span class="tag tag-high">effort haut</span><span class="tag tag-impact">impact ++</span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 9 — COUCHE 6 & 7: DISTRIBUTION + TRUST
+═══════════════════════════════════════════════════════════ -->
+<div class="page section-page">
+  <div class="section-header">
+    <div class="section-header-glow bg6"></div>
+    <div class="section-eyebrow">Couches 06 & 07 / 08</div>
+    <div class="layer-number c6">DISTRIBUTION · TRUST & PROOF</div>
+    <div class="section-title">Croître et<br/>prouver la valeur</div>
+    <div class="section-desc">Transformer QG en platform revendable ET en outil qui prouve son ROI à chaque utilisateur. La croissance et la rétention en une seule couche.</div>
+  </div>
+  <div class="section-body">
+    <div style="margin-bottom:20px;">
+      <div style="font-family:'Space Grotesk',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.15em; text-transform:uppercase; color:rgba(249,115,22,0.7); margin-bottom:12px;">COUCHE 06 — TEAM & DISTRIBUTION</div>
+      <div class="items-grid">
+        <div class="item-card">
+          <div class="item-left-bar" style="background:#f97316;"></div>
+          <div class="item-title">White-Label pour Agences</div>
+          <div class="item-desc">NT Solutions revend QG customisé à ses clients. Chaque déploiement = son propre QG avec données réelles du client, agents renommés, couleurs de l'agence.</div>
+          <div class="item-tags"><span class="tag tag-high">effort haut</span><span class="tag tag-impact">impact ++++</span></div>
+        </div>
+        <div class="item-card">
+          <div class="item-left-bar" style="background:#f97316;"></div>
+          <div class="item-title">API Publique + Webhooks</div>
+          <div class="item-desc">Les power users et devs construisent dessus. QG devient une platform. Chaque builder externe est un canal d'acquisition.</div>
+          <div class="item-tags"><span class="tag tag-high">effort haut</span><span class="tag tag-impact">impact +++</span></div>
+        </div>
+        <div class="item-card">
+          <div class="item-left-bar" style="background:#f97316;"></div>
+          <div class="item-title">Multi-Utilisateurs</div>
+          <div class="item-desc">Fondateur + associé partagent le même board, la même mémoire, les mêmes décisions. Le ticket moyen double immédiatement.</div>
+          <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact +++</span></div>
+        </div>
+        <div class="item-card">
+          <div class="item-left-bar" style="background:#f97316;"></div>
+          <div class="item-title">Marketplace de Packs</div>
+          <div class="item-desc">Packs spécialisés : "Pack SaaS B2B", "Pack agence créative", "Pack coach", "Pack e-commerce". Chaque pack = agents + prompts + situations + KPIs du secteur.</div>
+          <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact ++</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-family:'Space Grotesk',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.15em; text-transform:uppercase; color:rgba(236,72,153,0.7); margin-bottom:12px;">COUCHE 07 — TRUST & PROOF</div>
+      <div class="items-grid">
+        <div class="item-card">
+          <div class="item-left-bar" style="background:#ec4899;"></div>
+          <div class="item-title">Session ROI Tracker</div>
+          <div class="item-desc">"Depuis que tu utilises QG, ton MRR a augmenté de X%." Données réelles. La preuve irréfutable que l'app génère un retour mesurable.</div>
+          <div class="item-tags"><span class="tag tag-med">effort moyen</span><span class="tag tag-impact">impact ++++</span></div>
+        </div>
+        <div class="item-card">
+          <div class="item-left-bar" style="background:#ec4899;"></div>
+          <div class="item-title">Rapport Mensuel Automatique</div>
+          <div class="item-desc">PDF auto-généré le 1er du mois : sessions, décisions, victoires, métriques, progression. Envoyé par email. Preuve de valeur sans effort.</div>
+          <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact +++</span></div>
+        </div>
+        <div class="item-card">
+          <div class="item-left-bar" style="background:#ec4899;"></div>
+          <div class="item-title">Décisions avec Résultats</div>
+          <div class="item-desc">Chaque décision a un cycle complet : conseil → action → résultat enregistré. Ton track record visible. La preuve que tu agis sur tes décisions.</div>
+          <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact ++</span></div>
+        </div>
+        <div class="item-card">
+          <div class="item-left-bar" style="background:#ec4899;"></div>
+          <div class="item-title">Export Complet des Données</div>
+          <div class="item-desc">Toute la mémoire, les sessions, les décisions exportables. Ownership total. La confiance des utilisateurs enterprise passe par la portabilité des données.</div>
+          <div class="item-tags"><span class="tag tag-low">effort bas</span><span class="tag tag-impact">impact +</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 10 — COUCHE 8: UI & ESTHÉTIQUE (CODE ONLY)
+═══════════════════════════════════════════════════════════ -->
+<div class="page section-page">
+  <div class="section-header">
+    <div class="section-header-glow bg8"></div>
+    <div class="section-eyebrow">Couche 08 / 08</div>
+    <div class="layer-number c8">INTERFACE & ESTHÉTIQUE</div>
+    <div class="section-title">Ce qu'on règle<br/>maintenant — code only</div>
+    <div class="section-desc">25+ améliorations qui ne nécessitent aucun nouveau service, aucune API externe. Juste du React et du CSS. Impact visuel immédiat.</div>
+  </div>
+  <div class="section-body" style="padding-top:20px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+
+      <div class="ui-category">
+        <div class="ui-cat-title">Micro-interactions & Animations</div>
+        <div class="ui-items">
+          <div class="ui-item"><div class="ui-dot" style="background:#6366f1;"></div><div><div class="ui-item-title">Transitions entre pages</div><div class="ui-item-desc">Fade + translateY 200ms — aucun cut brutal</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#6366f1;"></div><div><div class="ui-item-title">Press states sur boutons</div><div class="ui-item-desc">scale(0.97) au click — retour physique</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#6366f1;"></div><div><div class="ui-item-title">Smooth height sur les panels</div><div class="ui-item-desc">max-height transition pour les expansions</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#6366f1;"></div><div><div class="ui-item-title">Skeleton loaders</div><div class="ui-item-desc">Shimmer CSS — emails, events, sessions</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#6366f1;"></div><div><div class="ui-item-title">Scroll shadows</div><div class="ui-item-desc">Shadow top/bottom sur les listes scrollables</div></div></div>
+        </div>
+      </div>
+
+      <div class="ui-category">
+        <div class="ui-cat-title">Typographie</div>
+        <div class="ui-items">
+          <div class="ui-item"><div class="ui-dot" style="background:#a78bfa;"></div><div><div class="ui-item-title">Échelle typographique</div><div class="ui-item-desc">10/11/12/13/14/16/20px — standardiser</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#a78bfa;"></div><div><div class="ui-item-title">Line-height messages agents</div><div class="ui-item-desc">1.7 sur les réponses longues — +40% lisibilité</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#a78bfa;"></div><div><div class="ui-item-title">Letter-spacing labels uppercase</div><div class="ui-item-desc">Standardiser à 0.08em partout</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#a78bfa;"></div><div><div class="ui-item-title">Gradient text titres premium</div><div class="ui-item-desc">CSS background-clip:text sur les headings clés</div></div></div>
+        </div>
+      </div>
+
+      <div class="ui-category">
+        <div class="ui-cat-title">Couleur & Profondeur</div>
+        <div class="ui-items">
+          <div class="ui-item"><div class="ui-dot" style="background:#10b981;"></div><div><div class="ui-item-title">Noise texture background</div><div class="ui-item-desc">SVG data URI 1-2% opacity — profondeur organique</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#10b981;"></div><div><div class="ui-item-title">Ambient glow des agents</div><div class="ui-item-desc">glowRgb déjà en place — utiliser dans les bulles</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#10b981;"></div><div><div class="ui-item-title">Glassmorphism cards</div><div class="ui-item-desc">rgba(255,255,255,0.03) + backdrop-filter</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#10b981;"></div><div><div class="ui-item-title">Border tokens unifiés</div><div class="ui-item-desc">Un seul token rgba(255,255,255,0.07) — audit complet</div></div></div>
+        </div>
+      </div>
+
+      <div class="ui-category">
+        <div class="ui-cat-title">Accessibilité</div>
+        <div class="ui-items">
+          <div class="ui-item"><div class="ui-dot" style="background:#f59e0b;"></div><div><div class="ui-item-title">Focus rings CSS global</div><div class="ui-item-desc">*:focus-visible { outline: 2px solid indigo } — 1 ligne</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#f59e0b;"></div><div><div class="ui-item-title">ARIA labels boutons icon</div><div class="ui-item-desc">Son, replay, feedback — tous sans label actuellement</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#f59e0b;"></div><div><div class="ui-item-title">prefers-reduced-motion</div><div class="ui-item-desc">Désactiver animations pour les users sensibles</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#f59e0b;"></div><div><div class="ui-item-title">Contraste textes secondaires</div><div class="ui-item-desc">0.35 → 0.45 opacity minimum sur les infos</div></div></div>
+        </div>
+      </div>
+
+      <div class="ui-category">
+        <div class="ui-cat-title">Mobile</div>
+        <div class="ui-items">
+          <div class="ui-item"><div class="ui-dot" style="background:#ef4444;"></div><div><div class="ui-item-title">100dvh fix</div><div class="ui-item-desc">Dynamic viewport — clavier mobile stable</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#ef4444;"></div><div><div class="ui-item-title">safe-area-inset</div><div class="ui-item-desc">iPhone notch/Dynamic Island — env() padding</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#ef4444;"></div><div><div class="ui-item-title">Touch targets 44px</div><div class="ui-item-desc">Apple HIG minimum — boutons pill actuellement 28px</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#ef4444;"></div><div><div class="ui-item-title">-webkit-tap-highlight-color</div><div class="ui-item-desc">Supprimer le highlight bleu au tap</div></div></div>
+        </div>
+      </div>
+
+      <div class="ui-category">
+        <div class="ui-cat-title">Composants spécifiques</div>
+        <div class="ui-items">
+          <div class="ui-item"><div class="ui-dot" style="background:#06b6d4;"></div><div><div class="ui-item-title">ChatInput glow focus</div><div class="ui-item-desc">Border indigo au focus + bg distinct</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#06b6d4;"></div><div><div class="ui-item-title">Toast notification global</div><div class="ui-item-desc">Système léger sans lib — 30 lignes React</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#06b6d4;"></div><div><div class="ui-item-title">::selection custom par agent</div><div class="ui-item-desc">Couleur de sélection de texte selon l'agent actif</div></div></div>
+          <div class="ui-item"><div class="ui-dot" style="background:#06b6d4;"></div><div><div class="ui-item-title">Header icône active pill</div><div class="ui-item-desc">Background pill sur la page courante — nav claire</div></div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 11 — ROADMAP
+═══════════════════════════════════════════════════════════ -->
+<div class="page section-page">
+  <div class="section-header">
+    <div class="section-header-glow" style="background:radial-gradient(circle, rgba(212,175,55,0.1), transparent 70%);"></div>
+    <div class="section-eyebrow">Roadmap d'exécution</div>
+    <div class="section-title">4 Sprints vers<br/>le produit final</div>
+    <div class="section-desc">Chaque sprint a un objectif unique : créer l'habitude, prouver la valeur, monétiser, puis dominer. Dans cet ordre.</div>
+  </div>
+  <div class="section-body">
+
+    <div class="sprint-block s1">
+      <div class="sprint-header">
+        <div class="sprint-num">Sprint 1 — Créer l'habitude</div>
+        <div class="sprint-timing">Semaines 1–3</div>
+      </div>
+      <div class="sprint-goal">Objectif : QG devient l'app qu'on ouvre en premier le matin. Accessibilité maximale.</div>
+      <div class="sprint-items">
+        <div class="sprint-item"><strong>Voice Mode</strong>Parle aux agents mains libres</div>
+        <div class="sprint-item"><strong>Mobile PWA</strong>Accès en 2s, push notifs</div>
+        <div class="sprint-item"><strong>Morning Briefing</strong>Cron 8h auto avec contexte</div>
+        <div class="sprint-item"><strong>Sessions planifiées</strong>Lundi automatique pré-chargé</div>
+        <div class="sprint-item"><strong>UI Code Fixes</strong>Transitions, focus, mobile</div>
+        <div class="sprint-item"><strong>Onboarding guidé</strong>Première valeur en 5 min</div>
+      </div>
+    </div>
+
+    <div class="sprint-block s2">
+      <div class="sprint-header">
+        <div class="sprint-num">Sprint 2 — Prouver la valeur</div>
+        <div class="sprint-timing">Semaines 4–7</div>
+      </div>
+      <div class="sprint-goal">Objectif : QG agit dans le monde réel. L'utilisateur voit des résultats concrets mesurables.</div>
+      <div class="sprint-items">
+        <div class="sprint-item"><strong>Calendar Write</strong>Créer de vrais événements</div>
+        <div class="sprint-item"><strong>Pipeline NLP</strong>Auto-update depuis la conv.</div>
+        <div class="sprint-item"><strong>Stripe Connect</strong>Revenus réels en temps réel</div>
+        <div class="sprint-item"><strong>Follow-up Batch</strong>Emails bulk en un clic</div>
+        <div class="sprint-item"><strong>ROI Tracker</strong>Prouver le retour chiffré</div>
+        <div class="sprint-item"><strong>Rapport mensuel</strong>PDF auto le 1er du mois</div>
+      </div>
+    </div>
+
+    <div class="sprint-block s3">
+      <div class="sprint-header">
+        <div class="sprint-num">Sprint 3 — Monétiser</div>
+        <div class="sprint-timing">Semaines 8–12</div>
+      </div>
+      <div class="sprint-goal">Objectif : QG génère du revenu pour NT Solutions. White-label + multi-user + API.</div>
+      <div class="sprint-items">
+        <div class="sprint-item"><strong>White-Label</strong>Premier client NT Solutions</div>
+        <div class="sprint-item"><strong>Multi-Utilisateurs</strong>Fondateur + associé</div>
+        <div class="sprint-item"><strong>API Publique</strong>Webhooks + accès dev</div>
+        <div class="sprint-item"><strong>Zapier/Make</strong>Connecteurs no-code</div>
+        <div class="sprint-item"><strong>Packs sectoriels</strong>SaaS, agence, coach</div>
+        <div class="sprint-item"><strong>Referral system</strong>Croissance organique</div>
+      </div>
+    </div>
+
+    <div class="sprint-block s4">
+      <div class="sprint-header">
+        <div class="sprint-num">Sprint 4 — Dominer</div>
+        <div class="sprint-timing">Semaines 13–20</div>
+      </div>
+      <div class="sprint-goal">Objectif : fonctionnalités que personne d'autre ne peut construire. Moat définitif.</div>
+      <div class="sprint-items">
+        <div class="sprint-item"><strong>Agent Coach</strong>Coaching méta post-session</div>
+        <div class="sprint-item"><strong>Intelligence prédictive</strong>Patterns + anomalies + forecast</div>
+        <div class="sprint-item"><strong>Custom Training</strong>Upload tes propres docs</div>
+        <div class="sprint-item"><strong>Benchmarking</strong>Comparaison anonyme</div>
+        <div class="sprint-item"><strong>Agents persistants</strong>Surveillance continue</div>
+        <div class="sprint-item"><strong>Chrome Extension</strong>QG partout sur le web</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 12 — CONCLUSION
+═══════════════════════════════════════════════════════════ -->
+<div class="page conclusion-page">
+
+  <div class="conclusion-label">Vision finale</div>
+
+  <div class="conclusion-title">
+    L'entrepreneur solo qui<br/>performe comme une<br/><strong>équipe de dix.</strong>
+  </div>
+
+  <div class="conclusion-equation">
+    <div class="eq-line"><span class="eq-key">CRM léger</span> <span class="eq-plus">+</span> Chief of Staff IA</div>
+    <div class="eq-line"><span class="eq-key">Coach exécutif</span> <span class="eq-plus">+</span> Système d'accountability</div>
+    <div class="eq-line"><span class="eq-key">Automatisation business</span> <span class="eq-plus">+</span> Platform white-label</div>
+    <div class="eq-line" style="margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.07);">= <span class="eq-final">The Headquarters — Aucun concurrent ne combine ces 7 couches.</span></div>
+  </div>
+
+  <div class="conclusion-stats">
+    <div class="stat-box">
+      <div class="stat-num" style="color:#6366f1;">57</div>
+      <div class="stat-label">Fonctionnalités planifiées</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:#10b981;">4</div>
+      <div class="stat-label">Sprints d'exécution</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:#d4af37;">8</div>
+      <div class="stat-label">Couches stratégiques</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:#f1f5f9;">1</div>
+      <div class="stat-label">Produit qui écrase tout</div>
+    </div>
+  </div>
+
+  <div style="background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.15); border-radius:12px; padding:24px 28px; margin-bottom:32px;">
+    <div style="font-family:'Space Grotesk',sans-serif; font-size:12px; font-weight:600; color:rgba(99,102,241,0.8); margin-bottom:14px; letter-spacing:0.08em; text-transform:uppercase;">Pourquoi Sintra et Manus ne peuvent pas gagner contre ça</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <div style="font-size:12px; color:rgba(148,163,184,0.6); line-height:1.6;"><strong style="color:rgba(203,213,225,0.8);">Manus</strong> exécute dans le vide. Il n'a pas tes chiffres, ton pipeline, ton historique. Il est puissant mais aveugle à ton business spécifique.</div>
+      <div style="font-size:12px; color:rgba(148,163,184,0.6); line-height:1.6;"><strong style="color:rgba(203,213,225,0.8);">Sintra</strong> est générique par architecture. Il ne peut pas savoir que tu as 3 retainers, que ton best month c'était janvier, que tu bloques sur la prospection.</div>
+      <div style="font-size:12px; color:rgba(148,163,184,0.6); line-height:1.6;"><strong style="color:rgba(203,213,225,0.8);">QG</strong> s'améliore avec chaque session. La mémoire cumulative est un actif qui croît — et que personne d'autre ne peut générer pour toi.</div>
+      <div style="font-size:12px; color:rgba(148,163,184,0.6); line-height:1.6;"><strong style="color:rgba(203,213,225,0.8);">NT Solutions</strong> peut revendre QG à ses clients. Le produit est aussi le canal de distribution. Double levier de croissance.</div>
+    </div>
+  </div>
+
+  <div class="conclusion-footer">
+    <div class="date">The Headquarters · Plan Stratégique 2026 · Avril 2026</div>
+    <div class="hq">QG · HQ · NT Solutions</div>
+  </div>
+
+</div>
+
+</body>
+</html>
