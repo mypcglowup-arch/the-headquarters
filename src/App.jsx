@@ -11,7 +11,7 @@ import { updateStreak } from './utils/streak.js';
 import { logAppOpen, logSessionStart } from './utils/momentum.js';
 import { saveSession, formatHistoryContext, loadHistory } from './utils/sessionHistory.js';
 import { useAutoSave, mergeSaveStatus } from './hooks/useAutoSave.js';
-import { syncSession, syncDecisions, syncImprovementItem, syncImprovementStatus, syncFeedback, syncMomentum, syncAgentNames, syncExpense, syncOneTimeRevenue, syncRetainer, syncRetainerDelete, syncDashboardState, fetchDashboardState, syncFollowupLog, fetchWeeklyFollowups, fetchWeeklyOneTimeRevenues, fetchWeeklyRetainerChanges, syncDecisionOutcome } from './lib/sync.js';
+import { syncSession, syncDecisions, syncImprovementItem, syncImprovementStatus, syncFeedback, syncMomentum, syncAgentNames, syncExpense, syncOneTimeRevenue, syncRetainer, syncRetainerDelete, syncDashboardState, fetchDashboardState, syncFollowupLog, fetchWeeklyFollowups, fetchWeeklyOneTimeRevenues, fetchWeeklyRetainerChanges, syncDecisionOutcome, syncSituationFavorite, fetchSituationFavorites } from './lib/sync.js';
 import { searchMemories, addSessionMemory, addArchivistMemory, fetchMemoriesForRecap, isMem0Enabled } from './lib/mem0.js';
 import { getDayGreeting } from './utils/greeting.js';
 import {
@@ -38,6 +38,7 @@ import DashboardScreen from './components/DashboardScreen.jsx';
 import ProspectsScreen from './components/ProspectsScreen.jsx';
 import ReplayScreen from './components/ReplayScreen.jsx';
 import LibraryScreen from './components/LibraryScreen.jsx';
+import SituationsScreen from './components/SituationsScreen.jsx';
 import WorkflowBuilder from './components/WorkflowBuilder.jsx';
 import PulseScoreCard from './components/PulseScoreCard.jsx';
 import DailyCheckIn, { hasCheckedInToday } from './components/DailyCheckIn.jsx';
@@ -102,6 +103,7 @@ const LS_NAMES     = 'qg_agent_names_v1';
 const LS_COUNT     = 'qg_session_count_v1';
 const LS_INTERACTIONS = 'qg_interaction_count_v1';
 const LS_MONDAY_SESSION = 'qg_monday_session_date_v1';
+const LS_SITUATION_FAVS = 'qg_situation_favorites_v1';
 const LS_SOUND     = 'qg_sound_enabled_v1';
 const LS_VOICE     = 'qg_voice_mode_v1';
 const LS_LAST_SPOKE = 'qg_agent_last_spoke_v1';
@@ -246,6 +248,7 @@ export default function App() {
   const [sessionCount, setSessionCount] = useState(() => loadLS(LS_COUNT, 0));
   const [interactionCount, setInteractionCount] = useState(() => loadLS(LS_INTERACTIONS, 0));
   const [mondaySessionFiredIso, setMondaySessionFiredIso] = useState(() => loadLS(LS_MONDAY_SESSION, null));
+  const [situationFavorites, setSituationFavorites] = useState(() => loadLS(LS_SITUATION_FAVS, []));
   const [soundEnabled, setSoundEnabled] = useState(() => loadLS(LS_SOUND, true));
   const [voiceMode,    setVoiceMode]    = useState(() => loadLS(LS_VOICE, false) === true);
   const lastSpokenMsgIdRef = useRef(null);
@@ -539,6 +542,7 @@ export default function App() {
   const s4 = useAutoSave(LS_COUNT,      sessionCount,         300);
   useAutoSave(LS_INTERACTIONS,          interactionCount,     300);
   useAutoSave(LS_MONDAY_SESSION,        mondaySessionFiredIso, 300);
+  useAutoSave(LS_SITUATION_FAVS,        situationFavorites,   300);
   const s5 = useAutoSave(LS_SOUND,      soundEnabled,         300);
   const s6 = useAutoSave(LS_LAST_SPOKE, agentLastSpoke,       300);
   const s7 = useAutoSave(LS_DECISIONS,  decisions,            300);
@@ -2334,6 +2338,43 @@ export default function App() {
     setInteractionCount((c) => c + 1);
   }
 
+  function toggleSituationFavorite(situationId) {
+    const already = situationFavorites.includes(situationId);
+    const next = already
+      ? situationFavorites.filter((id) => id !== situationId)
+      : [situationId, ...situationFavorites];
+    setSituationFavorites(next);
+    syncSituationFavorite(situationId, already ? 'remove' : 'add');
+  }
+
+  function useSituationInChat({ situation, variant }) {
+    if (!situation) return;
+    const agentKey = situation.agent;
+    const script = variant
+      ? (variant.script?.[lang] || variant.script?.fr || '')
+      : (situation.script?.[lang] || situation.script?.fr || '');
+    const title = situation.title?.[lang] || situation.title?.fr || '';
+    const prefill = `@${agentKey} ${lang === 'fr' ? 'Situation' : 'Situation'}: ${title}\n\n${lang === 'fr' ? 'Framework de référence' : 'Reference framework'}:\n${script}\n\n${lang === 'fr' ? 'Adapte-le à mon contexte actuel.' : 'Adapt it to my current context.'}`;
+    // Queue the message — startSession will fire and sendMessage picks it up
+    pendingGlobalMsg.current = prefill;
+    startSession(null, 'strategic');
+    setTimeout(() => { if (pendingGlobalMsg.current) sendMessage(pendingGlobalMsg.current); pendingGlobalMsg.current = null; }, 220);
+  }
+
+  // Cloud reconciliation for situation favorites (once, on mount)
+  useEffect(() => {
+    (async () => {
+      try {
+        const cloud = await fetchSituationFavorites();
+        if (!Array.isArray(cloud) || cloud.length === 0) return;
+        setSituationFavorites((local) => {
+          const merged = Array.from(new Set([...cloud, ...(local || [])]));
+          return merged;
+        });
+      } catch { /* silent */ }
+    })();
+  }, []);
+
   function addFeedback(msgId, value) {
     setFeedbacks((prev) => {
       if (value === null) { const next = { ...prev }; delete next[msgId]; return next; }
@@ -2362,6 +2403,7 @@ export default function App() {
         onGoDashboard={() => setScreen(screen === 'dashboard' ? (sessionStarted ? 'chat' : 'home') : 'dashboard')}
         onGoProspects={() => setScreen(screen === 'prospects' ? (sessionStarted ? 'chat' : 'home') : 'prospects')}
         onGoLibrary={() => setScreen(screen === 'library' ? (sessionStarted ? 'chat' : 'home') : 'library')}
+        onGoSituations={() => setScreen(screen === 'situations' ? (sessionStarted ? 'chat' : 'home') : 'situations')}
         onGoWorkflow={() => setScreen(screen === 'workflow' ? (sessionStarted ? 'chat' : 'home') : 'workflow')}
         onGoEmail={() => { setUrgentEmailCount(0); setScreen(screen === 'dashboard' ? (sessionStarted ? 'chat' : 'home') : 'dashboard'); }}
         urgentEmailCount={urgentEmailCount}
@@ -2523,6 +2565,21 @@ export default function App() {
           <div className={`${sessionStarted ? 'absolute inset-0 z-20 animate-panel-in' : 'flex-1 animate-screen-in'} flex flex-col overflow-hidden ${darkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
             {sessionStarted && <BackToChatBar darkMode={darkMode} onBack={() => setScreen('chat')} />}
             <LibraryScreen darkMode={darkMode} lang={lang} />
+          </div>
+        )}
+
+        {screen === 'situations' && (
+          <div className={`${sessionStarted ? 'absolute inset-0 z-20 animate-panel-in' : 'flex-1 animate-screen-in'} flex flex-col overflow-hidden ${darkMode ? 'bg-gray-950' : ''}`} style={!darkMode ? { background: '#F5F4F0' } : {}}>
+            {sessionStarted && <BackToChatBar darkMode={darkMode} onBack={() => setScreen('chat')} />}
+            <SituationsScreen
+              darkMode={darkMode}
+              lang={lang}
+              favorites={situationFavorites}
+              onToggleFavorite={toggleSituationFavorite}
+              onUseInChat={useSituationInChat}
+              agentNames={agentNames}
+              agentPhotos={agentPhotos}
+            />
           </div>
         )}
 

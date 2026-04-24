@@ -2,6 +2,96 @@
 
 ## [Unreleased]
 
+### Added — Bibliothèque de situations (50 scénarios pré-construits)
+Nouvelle section de l'app : 50 scénarios-frameworks pour les moments critiques du quotidien solo-consultant. Chaque scénario = agent assigné + framework structuré + 0-2 variants selon contexte. Recherche par mot-clé (accent-insensitive, multi-word AND). Favoris sauvegardés localStorage + Supabase. "Utiliser avec [Agent]" démarre une session stratégique avec le framework pré-rempli + @mention de l'agent.
+
+### Répartition
+| Agent | N | Spécialité |
+|---|---|---|
+| **VOSS** | 10 | Négociation, objections, client difficile |
+| **CARDONE** | 10 | Prospection, follow-ups, closing |
+| **HORMOZI** | 8 | Pricing, offers, qualification |
+| **GARYV** | 8 | LinkedIn, contenu, brand, troll |
+| **ROBBINS** | 7 | Mindset, blocages, état mental |
+| **NAVAL** | 7 | Levier, systèmes, dire non |
+| **Total** | **50** | |
+
+### Format — frameworks pas mot-à-mot
+Chaque script suit une structure explicite avec `→` arrows + phrases d'exemple optionnelles inline. Universel, adaptable. Exemple :
+
+> Structure : labeliser → retourner la question → tenir la ligne.
+>
+> 1. **Labeliser** (nommer ce qu'il ressent sans juger)
+>    → "On dirait que le budget est serré."
+>    → "Tu veux être sûr que ça vaut le coup."
+>
+> 2. **Retourner** (accusation audit inversé)
+>    → "Qu'est-ce qui te ferait dire oui à ce prix-ci ?"
+
+### Catégories
+negotiation · objection · closing · prospecting · content · mindset · pricing · difficult-client · referral · leverage
+
+### Data model
+```js
+{
+  id: 'negotiate-price-down',
+  agent: 'VOSS',
+  category: 'negotiation',
+  title: { fr: '...' },            // EN TBD
+  context: { fr: '...' },          // quand utiliser
+  script: { fr: '...' },           // framework base
+  variants: [
+    { label: { fr: '...' }, script: { fr: '...' } },
+  ],
+  keywords: ['prix', 'rabais', ...],
+}
+```
+
+### UX flow
+```
+Header → bouton "Situations" (icon Library)
+  → SituationsScreen
+     ├─ Search bar (accent-insensitive, AND-mode)
+     ├─ Filter chips catégories + agents (avatars colored)
+     ├─ Strip "Tes favoris" (top, si favorites > 0)
+     └─ Grid responsive (1/2/3 col) · hover glow agent-colored
+        └─ Click card → detail modal
+           ├─ Variants tabs (Base + variants)
+           ├─ Script rendered (markdown bold supporté)
+           ├─ Actions : Copier · Utiliser avec [Agent] · Favori
+           └─ "Utiliser" → pendingGlobalMsg + startSession('strategic')
+                          + pré-remplit "@AGENT Situation: titre\n\nFramework:\n{script}\n\nAdapte-le..."
+```
+
+### Fichiers créés
+- `src/data/situations.js` — 50 scénarios + `searchSituations()`, `filterByCategory()`, `filterByAgent()`, `SITUATION_CATEGORIES`
+- `src/components/SituationsScreen.jsx` — screen complet + `SituationCard` + `SituationDetailModal` + `FilterChip` + `renderScript` (markdown bold)
+
+### Fichiers modifiés
+- `src/App.jsx` — import SituationsScreen + sync funcs, `LS_SITUATION_FAVS = 'qg_situation_favorites_v1'`, `situationFavorites` state + useAutoSave, `toggleSituationFavorite()`, `useSituationInChat()` (pré-fill via pendingGlobalMsg + startSession), `fetchSituationFavorites()` reconciliation cloud au mount, case `screen === 'situations'`, prop Header `onGoSituations`
+- `src/components/Header.jsx` — import `Library` icon, prop `onGoSituations`, nav button conditionnel
+
+### Storage
+- `localStorage['qg_situation_favorites_v1']` = `['situation-id-1', 'situation-id-2', ...]` (source de vérité)
+- Table Supabase `situation_favorites (situation_id PK, added_at)`
+- Reconciliation merge au mount (cloud + local → Set unique)
+
+### SQL migration Supabase
+```sql
+create table if not exists public.situation_favorites (
+  situation_id text primary key,
+  added_at     timestamptz default now()
+);
+
+alter table public.situation_favorites enable row level security;
+create policy "situation_favorites_all" on public.situation_favorites for all using (true) with check (true);
+```
+
+### EN translations
+TODO phase ultérieure. Structure `{ fr, en }` en place pour ajout rapide — il faudra juste traduire `title`, `context`, `script`, `variants[].label`, `variants[].script` de chacun des 50 scénarios (+ `SITUATION_CATEGORIES[].label`). Les composants render `s.title[lang] || s.title.fr` donc rien à changer côté UI.
+
+---
+
 ### Added — Sessions planifiées automatiques (lundi matin 8h)
 Chaque lundi matin (ou lors du premier chargement après 8h, rattrapage jusqu'au mercredi 8h), l'app démarre automatiquement une session avec un message d'ouverture généré par l'agent ayant le signal le plus fort sur la semaine écoulée. **L'utilisateur arrive → la réunion a déjà commencé.**
 

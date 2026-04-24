@@ -1,4 +1,4 @@
-import { Sun, Moon, Zap, Brain, Home, Square, BookOpen, Compass, Map, BarChart2, Users, Check, AlertCircle, Bookmark, Mail, Volume2, VolumeX, Wrench } from 'lucide-react';
+import { Sun, Moon, Zap, Brain, Home, Square, BookOpen, Compass, Map, BarChart2, Users, Check, AlertCircle, Bookmark, Mail, Volume2, VolumeX, Wrench, Library } from 'lucide-react';
 import { t } from '../i18n.js';
 
 export default function Header({
@@ -8,7 +8,7 @@ export default function Header({
   voiceMode = false, onToggleVoice,
   lang, onToggleLang,
   saveStatus, screen, onGoHome,
-  onGoJournal, onGoDecisions, onGoDashboard, onGoProspects, onGoLibrary, onGoWorkflow,
+  onGoJournal, onGoDecisions, onGoDashboard, onGoProspects, onGoLibrary, onGoSituations, onGoWorkflow,
   onGoEmail, urgentEmailCount = 0,
   sessionEnded, onEndSession, isLoading,
   improvementCount, decisionsCount,
@@ -158,6 +158,7 @@ export default function Header({
           { onClick: onGoDecisions,  title: t('header.decisions', lang), icon: <Compass size={15} />, active: screen === 'decisions', badge: decisionsCount > 0 ? (decisionsCount > 9 ? '9+' : decisionsCount) : null, badgeColor: '#3b82f6' },
           { onClick: onGoJournal,    title: t('header.journal', lang),   icon: <BookOpen size={15} />, active: screen === 'journal',   badge: improvementCount > 0 ? (improvementCount > 9 ? '9+' : improvementCount) : null, badgeColor: '#10b981' },
           { onClick: onGoLibrary,    title: lang === 'fr' ? 'Bibliothèque' : 'Library', icon: <Bookmark size={15} />, active: screen === 'library' },
+          ...(onGoSituations ? [{ onClick: onGoSituations, title: lang === 'fr' ? 'Situations' : 'Situations', icon: <Library size={15} />, active: screen === 'situations' }] : []),
           ...(onGoWorkflow ? [{ onClick: onGoWorkflow, title: lang === 'fr' ? 'Workflow Builder' : 'Workflow Builder', icon: <Wrench size={15} />, active: screen === 'workflow' }] : []),
         ].map(({ onClick, title, icon, active, badge, badgeColor }) => (
           <button

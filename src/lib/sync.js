@@ -143,6 +143,38 @@ export async function syncMomentum(streak, sessionsWeek, totalSessions, interact
   }
 }
 
+// ─── Situation library favorites ────────────────────────────────────────────
+export async function syncSituationFavorite(situationId, action) {
+  if (!isSupabaseEnabled()) return;
+  try {
+    if (action === 'add') {
+      await supabase.from('situation_favorites').upsert({
+        situation_id: situationId,
+        added_at:     new Date().toISOString(),
+      }, { onConflict: 'situation_id' });
+    } else if (action === 'remove') {
+      await supabase.from('situation_favorites').delete().eq('situation_id', situationId);
+    }
+  } catch (e) {
+    console.warn('[Sync] syncSituationFavorite failed:', e.message);
+  }
+}
+
+export async function fetchSituationFavorites() {
+  if (!isSupabaseEnabled()) return [];
+  try {
+    const { data, error } = await supabase
+      .from('situation_favorites')
+      .select('situation_id')
+      .order('added_at', { ascending: false });
+    if (error) throw error;
+    return Array.isArray(data) ? data.map((r) => r.situation_id) : [];
+  } catch (e) {
+    console.warn('[Sync] fetchSituationFavorites failed:', e.message);
+    return [];
+  }
+}
+
 // ─── Monday auto-session dedup ──────────────────────────────────────────────
 // Insert on first fire for a given Monday ISO date. PK on monday_date blocks
 // double-fire across devices (reload same day → existing row → insert skipped).
