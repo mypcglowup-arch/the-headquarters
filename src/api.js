@@ -1639,15 +1639,633 @@ Output ONLY the JSON object.`;
   }
 }
 
+// ─── Anomaly alert — week-over-week drop notification ───────────────────────
+// Given a detected anomaly (current < previous by ≥ 40% on an axis), generate
+// a short direct message in the voice of the owner agent. Numbers FIRST,
+// diagnostic, then one concrete move. Never alarmist.
+export async function generateAnomalyAlert(anomaly, lang = 'fr') {
+  if (!anomaly) return null;
+  const agentPrompt = AGENT_PROMPTS[anomaly.agent];
+  if (!agentPrompt) return null;
+
+  const dropPctRounded = Math.round(anomaly.dropPct * 100);
+
+  const axisDescriptions = {
+    outreach: {
+      unit: lang === 'fr' ? 'prospects contactés' : 'prospects contacted',
+      lens: lang === 'fr'
+        ? 'ton activité outreach (emails de relance + touches prospects) cette semaine vs la semaine passée'
+        : 'your outreach activity (follow-up emails + prospect touches) this week vs last week',
+    },
+    pipeline: {
+      unit: lang === 'fr' ? 'mouvements pipeline' : 'pipeline movements',
+      lens: lang === 'fr'
+        ? 'les mouvements sur ton pipeline (status changes, contacts prospects) cette semaine vs la semaine passée'
+        : 'your pipeline activity (status changes, prospect contacts) this week vs last week',
+    },
+    mrr: {
+      unit: lang === 'fr' ? 'mouvements revenus' : 'revenue movements',
+      lens: lang === 'fr'
+        ? 'les ajouts de revenus (nouveaux retainers + one-time) cette semaine vs la semaine passée'
+        : 'revenue additions (new retainers + one-time) this week vs last week',
+    },
+  };
+  const ax = axisDescriptions[anomaly.axis] || axisDescriptions.outreach;
+
+  const system = `${agentPrompt}
+
+ANOMALY CONTEXT (internal — you open the session by speaking to this directly):
+Samuel's numbers on ${ax.lens}:
+  Previous week: ${anomaly.previous} ${ax.unit}
+  This week:     ${anomaly.current} ${ax.unit}
+  Drop:          -${dropPctRounded}%
+
+TASK: Open the session with a 2-3 sentence message that:
+  1. States the numbers FIRST — concretely. No wind-up.
+  2. ONE observation about what the drop means (not a lecture).
+  3. ONE concrete move to take today. Not next week. Today.
+
+HARD RULES (non-negotiable — violations make it feel fake):
+
+NEVER write any of these:
+  - "Attention" / "Watch out" / "Alerte" / "Warning"
+  - "Je remarque" / "J'observe" / "I notice"
+  - "Inquiétant" / "Worrying" / "Concerning" / "Problème"
+  - "Ne t'inquiète pas" / "Don't worry"
+  - "Tout n'est pas perdu" / "It's not the end"
+  - Long preamble before the numbers — START with the numbers
+  - "Je voulais te parler de ça" / "I wanted to talk about"
+  - Questions that feel like interrogation ("Pourquoi t'as pas...")
+  - Pep talk / motivational closing
+
+DO write:
+  - Direct sentence starting with the raw numbers (ex: "${lang === 'fr' ? '2 prospects contactés cette semaine vs 11 la semaine passée.' : '2 prospects contacted this week vs 11 last week.'}")
+  - Your natural voice (tone of ${anomaly.agent}) — colleague who saw the numbers and decided to say something
+  - ONE concrete action — specific, executable today (ex: "${lang === 'fr' ? 'Bloque 90 min demain matin pour 10 dials.' : 'Block 90 min tomorrow morning for 10 dials.'}")
+  - 2-3 sentences MAX. Under 55 words.
+
+Language: ${lang === 'fr' ? 'FRANÇAIS québécois, tutoiement' : 'ENGLISH, "you"'}.
+
+Output ONLY the message text. No quotes, no JSON, no label.`;
+
+  try {
+    const text = await callClaude(
+      system,
+      [{ role: 'user', content: 'Open the session with this anomaly.' }],
+      300, false, null, false, false, anomaly.agent, 'claude-sonnet-4-5'
+    );
+    const cleaned = String(text || '').trim().replace(/^["']|["']$/g, '');
+    if (!cleaned || cleaned.length < 20) return null;
+
+    // Guardrail: reject alarmist or procedural phrasings that slipped through
+    const banned = [
+      /\battention\b/i, /\balerte\b/i, /\bwarning\b/i, /\bwatch out\b/i,
+      /\bje remarque\b/i, /\bj[''']observe\b/i, /\bi notice\b/i,
+      /\binqui[èe]tant\b/i, /\bconcerning\b/i, /\bworrying\b/i,
+      /\bne t[''']inqui[èe]te pas\b/i, /\bdon[''']t worry\b/i,
+      /\btout n[''']est pas perdu\b/i,
+      /\bje voulais te parler\b/i, /\bi wanted to talk\b/i,
+    ];
+    for (const re of banned) {
+      if (re.test(cleaned)) {
+        console.warn('[generateAnomalyAlert] rejected — banned phrase:', re);
+        return null;
+      }
+    }
+    return cleaned;
+  } catch (err) {
+    console.warn('[generateAnomalyAlert] failed:', err.message);
+    return null;
+  }
+}
+
+// ─── Layer 2: Le Fil Rouge ──────────────────────────────────────────────────
+// Generate a single natural sentence that bridges last session → this one.
+// Replaces the robotic "structured briefing" with a human-sounding opener
+// in the voice of whichever agent owns the unresolved topic.
+export async function generateFilRouge({ lastSession = null, memories = [], lang = 'fr' } = {}) {
+  if (!lastSession && (!memories || memories.length === 0)) return null;
+
+  const lastBlock = lastSession
+    ? [
+        lastSession.consensus            ? `  consensus: ${lastSession.consensus}` : null,
+        lastSession.summary?.consensusAction ? `  action: ${lastSession.summary.consensusAction}` : null,
+        lastSession.summary?.keyDecisions?.length
+          ? `  key decisions: ${lastSession.summary.keyDecisions.slice(0, 3).map((d) => typeof d === 'string' ? d : d.decision).join(' | ')}`
+          : null,
+      ].filter(Boolean).join('\n') || '  (none)'
+    : '  (none)';
+
+  const memoryBlock = memories.length > 0
+    ? memories.slice(0, 5).map((m, i) => `  ${i + 1}. ${m}`).join('\n')
+    : '  (none)';
+
+  const system = `You write the FIL ROUGE — a single natural sentence that picks up where the last session left off. Think: a senior colleague walking in and leaning against the doorframe, saying ONE thing that reopens the thread. Reply STRICT JSON only.
+
+Last session context:
+${lastBlock}
+
+Recent memories:
+${memoryBlock}
+
+Schema:
+{
+  "agent":   "HORMOZI" | "CARDONE" | "ROBBINS" | "GARYV" | "NAVAL" | "VOSS" | "COORDINATOR",
+  "content": string,    // ONE sentence, ≤ 140 chars, conversational. See examples.
+  "confidence": number  // 0..1 — how grounded this is in sources
+}
+
+EXAMPLES OF GOOD fil rouge (tone target):
+- "La dernière fois t'étais bloqué sur le pricing de Dubé. T'as dormi là-dessus ?"
+- "Toujours pas rappelé Marco ? Just checking."
+- "Tu voulais envoyer la proposition à Salon Éclat hier. Ça a bougé ?"
+- "Le bug Make.com — t'as trouvé d'où ça venait ?"
+- "Still sitting on the Dubé quote? Any movement?"
+
+EXAMPLES OF BAD fil rouge (DO NOT produce these):
+- "Résumé de la dernière session : ..." (robotic)
+- "Je voulais te faire un point sur..." (procedural)
+- "Depuis notre dernière conversation..." (mechanical)
+- Long paragraphs (ONE sentence only)
+- Motivational pep talks ("Prêt à repartir fort ?")
+
+HARD RULES:
+- Language: ${lang === 'fr' ? 'FRANÇAIS québécois, tutoiement' : 'ENGLISH, "you"'}.
+- ONE sentence. ≤ 140 chars.
+- Pick the agent whose domain owns the last unresolved thing:
+  · pricing / offer / money → HORMOZI
+  · sales / prospect / close → CARDONE
+  · mindset / block / energy → ROBBINS
+  · content / brand → GARYV
+  · system / leverage / scaling → NAVAL
+  · negotiation / objection / difficult conversation → VOSS
+  · ambiguous / general → COORDINATOR
+- The sentence must reference a SPECIFIC thing (name, number, decision, deadline) from the sources. Never invent.
+- No "bonne journée", no "en passant", no pep talk.
+- confidence < 0.5 → caller drops.
+- Output ONLY the JSON.`;
+
+  try {
+    const text = await callClaude(system, [{ role: 'user', content: 'Write the fil rouge.' }], 240, false, null, false, false, 'COORDINATOR', 'claude-sonnet-4-5');
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    const VALID_AGENTS = new Set(['HORMOZI', 'CARDONE', 'ROBBINS', 'GARYV', 'NAVAL', 'VOSS', 'COORDINATOR']);
+    if (!VALID_AGENTS.has(parsed.agent)) return null;
+    if (typeof parsed.confidence !== 'number' || parsed.confidence < 0.5) return null;
+    const content = String(parsed.content || '').trim().replace(/^["']|["']$/g, '');
+    if (!content || content.length < 10 || content.length > 200) return null;
+    // Reject banned phrasings
+    const banned = [
+      /\brésumé\b/i, /\brecap\b/i, /\bsummary\b/i,
+      /\bdepuis notre\b/i, /\bsince our last\b/i,
+      /\bpoint sur\b/i, /\bfaire un point\b/i,
+      /\bbonne journée\b/i, /\bprêt à\b/i, /\bready to\b/i,
+    ];
+    for (const re of banned) {
+      if (re.test(content)) {
+        console.warn('[generateFilRouge] rejected — banned phrase:', re);
+        return null;
+      }
+    }
+    return { agent: parsed.agent, content };
+  } catch (err) {
+    console.warn('[generateFilRouge] failed:', err.message);
+    return null;
+  }
+}
+
+// ─── Layer 1 + 3: Interjection analyzer ─────────────────────────────────────
+// After the lead agent responds, decide if a non-lead agent should inject a
+// single observation. Unifies two triggers:
+//   · Layer 1 (observer): user message signals something the lead missed
+//   · Layer 3 (silent pressure): a critical topic has been silent too long
+// Returns null OR { agent, content, trigger } — NEVER more than one.
+export async function analyzeInterjection({
+  leadAgent,
+  userMessage,
+  leadResponse,
+  staleTopics = [],
+  lang = 'fr',
+} = {}) {
+  if (!leadAgent || !userMessage) return null;
+
+  const staleBlock = staleTopics.length > 0
+    ? staleTopics.slice(0, 4).map((s) => `  - ${s.topic} (owner: ${s.agent}) — ${s.daysSilent ?? 'jamais'}j sans mention, seuil ${s.thresholdDays}j`).join('\n')
+    : '  (none)';
+
+  const system = `You decide if a NON-LEAD agent should slip a brief observation into the conversation AFTER the lead agent responded. Reply STRICT JSON only.
+
+Lead agent: ${leadAgent}
+User's message:
+"""
+${String(userMessage).slice(0, 800)}
+"""
+Lead agent's response:
+"""
+${String(leadResponse).slice(0, 800)}
+"""
+Stale topics (not mentioned in a while — Layer 3 trigger):
+${staleBlock}
+
+Two triggers can cause an interjection:
+
+  LAYER 1 — OBSERVER:
+    User's message contains a signal the lead agent missed. Examples:
+    · emotional hesitation, self-doubt, contradiction → ROBBINS
+    · unnamed opportunity in what the user said → HORMOZI or CARDONE
+    · pricing friction, cost framing → HORMOZI
+    · a negotiation moment slipping by → VOSS
+    · a scale/system concern being downplayed → NAVAL
+    · brand / content angle → GARYV
+
+  LAYER 3 — SILENT PRESSURE:
+    A topic above hasn't been mentioned in long enough that its owner agent
+    should slip it in naturally — but ONLY if the current conversation has
+    a natural lateral bridge. Don't force it.
+
+Schema:
+{
+  "shouldInterject": boolean,
+  "agent":           string,  // HORMOZI | CARDONE | ROBBINS | GARYV | NAVAL | VOSS (NEVER the lead)
+  "content":         string,  // ≤ 150 chars, 1-3 sentences max. Must be NOVEL — NOT what lead said.
+  "trigger":         "observer" | "silent_pressure",
+  "confidence":      number
+}
+
+HARD RULES (violations → shouldInterject=false):
+- agent MUST be different from leadAgent (${leadAgent}).
+- agent MUST stay in their domain. ROBBINS never prices. HORMOZI never does mindset.
+- content must ADD something the lead missed — NEVER rephrase the lead.
+- NEVER two interjections in a row (assume this is one pass — the next turn decides fresh).
+- confidence ≥ 0.70 for observer, ≥ 0.65 for silent_pressure. Below → false.
+- NEVER use: "Je remarque", "J'observe", "Depuis X jours", "En passant", "Petit point", "Je te glisse", "J'ajoute juste", "I'd just add", "By the way", "Real quick".
+- Opening with a question is OK. Opening with "Si je peux..." is NOT.
+- Language of content: ${lang === 'fr' ? 'FRANÇAIS québécois, tutoiement' : 'ENGLISH, "you"'}.
+- If unsure → shouldInterject=false. Silence is always acceptable.
+- Output ONLY the JSON.`;
+
+  try {
+    const text = await callClaude(system, [{ role: 'user', content: 'Should anyone interject?' }], 300, false, null, false, false, 'COORDINATOR', HAIKU_MODEL);
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    if (!parsed.shouldInterject) return null;
+
+    const VALID_AGENTS = new Set(['HORMOZI', 'CARDONE', 'ROBBINS', 'GARYV', 'NAVAL', 'VOSS']);
+    if (!VALID_AGENTS.has(parsed.agent)) return null;
+    if (parsed.agent === leadAgent) return null; // never the same agent
+
+    const minConf = parsed.trigger === 'observer' ? 0.70 : 0.65;
+    if (typeof parsed.confidence !== 'number' || parsed.confidence < minConf) return null;
+
+    const content = String(parsed.content || '').trim().replace(/^["']|["']$/g, '');
+    if (!content || content.length < 10 || content.length > 250) return null;
+
+    // Banned phrasings — mechanical / lazy / boilerplate
+    const banned = [
+      /\bje remarque\b/i, /\bj[''']observe\b/i, /\bi notice\b/i,
+      /\bdepuis \d+ jours\b/i, /\bsince \d+ days\b/i,
+      /\ben passant\b/i, /\bby the way\b/i, /\breal quick\b/i,
+      /\bj[''']ajoute juste\b/i, /\bi[''']d just add\b/i, /\bjuste pour\b/i,
+      /\bpetit point\b/i, /\bje te glisse\b/i, /\bje me permets\b/i,
+      /\bsi je peux me permettre\b/i, /\bsi je peux ajouter\b/i,
+    ];
+    for (const re of banned) {
+      if (re.test(content)) {
+        console.warn('[analyzeInterjection] rejected — banned:', re);
+        return null;
+      }
+    }
+
+    return { agent: parsed.agent, content, trigger: parsed.trigger };
+  } catch (err) {
+    console.warn('[analyzeInterjection] failed:', err.message);
+    return null;
+  }
+}
+
+// ─── Meeting Room pattern detection ─────────────────────────────────────────
+// Scans memories + recent sessions + pipeline + retainers for negative
+// patterns that warrant a proactive agent intervention. Returns a list of
+// candidate patterns with { type, agent, reason, severity, confidence }.
+// Caller applies cooldown + phase severity filter.
+export async function detectMeetingPatterns({
+  sessionCount = 0,
+  memories = [],
+  recentSessions = [],
+  retainers = [],
+  prospects = [],
+  lang = 'fr',
+} = {}) {
+  if (sessionCount < 2) return [];  // need SOME history
+
+  const memoryBlock = memories.length > 0
+    ? memories.slice(0, 12).map((m, i) => `  [${i + 1}] ${String(m).slice(0, 250)}`).join('\n')
+    : '  (none)';
+
+  const sessionBlock = recentSessions.length > 0
+    ? recentSessions.slice(0, 5).map((s, i) => {
+        const date = s.date ? new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+        const consensus = s.consensus || s.summary?.consensusAction || '';
+        const messageCount = s.messages?.length || 0;
+        return `  [${i + 1}] ${date} · ${messageCount} msgs · consensus: ${consensus || '(none)'}`;
+      }).join('\n')
+    : '  (none)';
+
+  const now = Date.now();
+  const retainerBlock = retainers.length > 0
+    ? retainers.slice(0, 8).map((r) => {
+        const touchedAt = Number(r.lastTouchedAt || r.startedAt || 0);
+        const days = touchedAt ? Math.floor((now - touchedAt) / 86400000) : null;
+        return `  - ${r.name} ($${r.amount}/mo) — ${days ?? '?'}j sans activité`;
+      }).join('\n')
+    : '  (none)';
+
+  const hotProspects = (prospects || [])
+    .filter((p) => p && ['Chaud', 'Démo', 'Répondu'].includes(p.status))
+    .slice(0, 10);
+  const prospectBlock = hotProspects.length > 0
+    ? hotProspects.map((p) => {
+        const last = Number(p.lastContactAt || p.createdAt || 0);
+        const days = last ? Math.floor((now - last) / 86400000) : null;
+        return `  - ${p.businessName || p.name || 'Prospect'} (${p.status}) — last ${days ?? '?'}j`;
+      }).join('\n')
+    : '  (none)';
+
+  const system = `You scan Samuel's business context for NEGATIVE PATTERNS that warrant a senior colleague speaking up. Reply STRICT JSON only.
+
+Samuel's context (session ${sessionCount}):
+
+Recent memories:
+${memoryBlock}
+
+Last 5 sessions:
+${sessionBlock}
+
+Active retainers (sorted by staleness):
+${retainerBlock}
+
+Hot prospects (Chaud / Démo / Répondu):
+${prospectBlock}
+
+Pattern types you can surface (use these EXACT type IDs):
+
+  "avoidance_prospection"
+    Trigger: NO mention of prospecting / outreach / cold calls / new leads across the last 3+ sessions.
+    Owner agent: CARDONE
+
+  "repeated_block"
+    Trigger: the SAME blocker (pricing doubt, time anxiety, skill gap, etc.) mentioned in 3+ sessions without resolution.
+    Owner agent: ROBBINS
+
+  "decision_without_execution"
+    Trigger: a consensus action from 2+ sessions ago with NO follow-up mention since.
+    Owner agent: HORMOZI
+
+  "energy_drop"
+    Trigger: words like "fatigué / épuisé / saturé / overwhelmed / stuck" in 2+ recent sessions.
+    Owner agent: ROBBINS
+
+  "ignored_opportunity"
+    Trigger: a prospect in status Chaud/Démo/Répondu with last contact > 14 days.
+    Owner agent: CARDONE
+
+  "stale_retainer"
+    Trigger: an existing retainer with no activity > 30 days — churn risk.
+    Owner agent: VOSS
+
+  "silence_on_long_term"
+    Trigger: no mention of long-term vision, scaling, or leverage in 10+ sessions.
+    Owner agent: NAVAL
+
+  "content_stall"
+    Trigger: no mention of content, brand, social output in 5+ sessions.
+    Owner agent: GARYV
+
+Schema:
+{
+  "patterns": [
+    {
+      "type":       string (one of the type IDs above),
+      "agent":      string (HORMOZI | CARDONE | ROBBINS | GARYV | NAVAL | VOSS),
+      "reason":     string (≤ 140 chars — the factual evidence, not a lecture),
+      "severity":   "low" | "medium" | "high",
+      "confidence": number (0 to 1)
+    }
+  ]
+}
+
+Severity guide:
+- "high"   = actively losing something right now (stale hot prospect, stale retainer, repeated block shutting Samuel down)
+- "medium" = concerning drift (avoidance, energy drop)
+- "low"    = mild background observation (long-term silence on non-urgent topic)
+
+HARD RULES:
+- Only surface REAL patterns grounded in the sources above. NEVER invent.
+- If nothing meaningful, return { "patterns": [] }.
+- confidence < 0.7 → skip that pattern.
+- Maximum 3 patterns total (pick the most critical).
+- Reason should cite specific evidence (name, number, time span) — never vague.
+- Language of reason field: ${lang === 'fr' ? 'FRANÇAIS' : 'ENGLISH'}.
+- Output ONLY the JSON.`;
+
+  try {
+    const text = await callClaude(system, [{ role: 'user', content: 'Scan for patterns.' }], 600, false, null, false, false, 'COORDINATOR', HAIKU_MODEL);
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return [];
+    const parsed = JSON.parse(match[0]);
+    if (!Array.isArray(parsed.patterns)) return [];
+
+    const VALID_TYPES  = new Set(['avoidance_prospection', 'repeated_block', 'decision_without_execution', 'energy_drop', 'ignored_opportunity', 'stale_retainer', 'silence_on_long_term', 'content_stall']);
+    const VALID_AGENTS = new Set(['HORMOZI', 'CARDONE', 'ROBBINS', 'GARYV', 'NAVAL', 'VOSS']);
+    const VALID_SEV    = new Set(['low', 'medium', 'high']);
+
+    return parsed.patterns
+      .filter((p) => p && VALID_TYPES.has(p.type) && VALID_AGENTS.has(p.agent))
+      .filter((p) => VALID_SEV.has(p.severity))
+      .filter((p) => typeof p.confidence === 'number' && p.confidence >= 0.7)
+      .map((p) => ({
+        type:       p.type,
+        agent:      p.agent,
+        reason:     String(p.reason || '').slice(0, 200),
+        severity:   p.severity,
+        confidence: p.confidence,
+      }))
+      .slice(0, 3);
+  } catch (err) {
+    console.warn('[detectMeetingPatterns] failed:', err.message);
+    return [];
+  }
+}
+
+// ─── Meeting Room proactive opening — the agent speaks first ────────────────
+// Generates a natural, colleague-style opening in the voice of the agent who
+// noticed the pattern. The MUST-NOT list is long because the risk is this
+// feeling mechanical — any hint of "pattern detected" kills the magic.
+export async function generateAgentOpening({ agent, pattern, maturity, lang = 'fr' } = {}) {
+  if (!agent || !pattern) return null;
+
+  const agentPrompt = AGENT_PROMPTS[agent];
+  if (!agentPrompt) return null;
+
+  const system = `${agentPrompt}
+
+MEETING ROOM CONTEXT:
+You're opening a new session with Samuel. You haven't been asked — you're choosing to speak first because something you've been watching has crossed a line. Think of yourself as a senior colleague who walks into the office, sees Samuel at his desk, and decides it's time to say what's been on your mind. No one appointed you the "pattern detector". You just know this guy well enough to notice.
+
+What you've been watching (internal note — NEVER mention this directly):
+  Pattern: ${pattern.type}
+  Evidence: ${pattern.reason}
+  Severity: ${pattern.severity}
+
+Maturity context: ${maturity?.phase || 'reactive'} — ${maturity?.behaviorSuffix ? maturity.behaviorSuffix.split('\n')[1] : ''}
+
+HARD RULES for this opening (non-negotiable — failures make it feel robotic):
+
+NEVER write any of these:
+  - "Je remarque que..." / "J'observe que..." / "I notice..."
+  - "Pattern détecté" / "Signal observé" / "It looks like..."
+  - "Depuis X jours..." stated as a mechanical count ("3 semaines sans prospection")
+  - "Je voulais te parler de..." / "On doit parler de..."
+  - Any sentence structure that reads like a system report
+  - Any invocation of "tu n'as pas..." as an accusation
+  - Opening with a question (you came in with a POINT, not a check-in)
+
+DO write like:
+  - A colleague leaning on the doorframe who saw the calendar blank and says what he'd say
+  - Direct, concrete, your natural voice (tone of ${agent})
+  - ONE concrete angle — not a list, not a recap
+  - 2-4 sentences max. Under 60 words.
+  - End with an invitation to engage, but lateral — not "what do you want to do?" (weak)
+
+Language: ${lang === 'fr' ? 'FRANÇAIS québécois naturel, tutoiement' : 'ENGLISH, addressed as "you"'}.
+
+Output ONLY the message text. No quotes, no header, no JSON.`;
+
+  try {
+    const text = await callClaude(system, [{ role: 'user', content: 'Open the session.' }], 350, false, null, false, false, agent, 'claude-sonnet-4-5');
+    const cleaned = String(text || '').trim().replace(/^["']|["']$/g, '');
+    if (!cleaned || cleaned.length < 20) return null;
+    // Guardrail: if the opening slipped in a banned phrase, reject it
+    const banned = [
+      /\bje remarque\b/i, /\bj[''']observe\b/i, /\bi notice\b/i,
+      /pattern d[ée]tect/i, /signal observ/i,
+      /\bit looks like\b/i, /\bon dirait que\b/i,
+    ];
+    for (const re of banned) {
+      if (re.test(cleaned)) {
+        console.warn('[generateAgentOpening] rejected — banned phrase detected:', re);
+        return null;
+      }
+    }
+    return cleaned;
+  } catch (err) {
+    console.warn('[generateAgentOpening] failed:', err.message);
+    return null;
+  }
+}
+
+// ─── Memory pre-classifier — strict re-validation step ──────────────────────
+// Takes raw Mem0 entries and forces each one through Samuel's categorization
+// rules (win / blocker / nextMove). Ambiguous → nextMove by default.
+// Returns an object with 3 buckets the briefing/recap can then cherry-pick from.
+//
+// This is the "revalider avant affichage" step — never trust the source's
+// implicit categorization; always re-run every memory through these rules.
+export async function classifyMemories(memories = [], lang = 'fr') {
+  if (!Array.isArray(memories) || memories.length === 0) {
+    return { wins: [], blockers: [], nextMoves: [] };
+  }
+
+  // Compact numbered list — the model returns the same indices with a label
+  const list = memories.slice(0, 20).map((m, i) => `  [${i}] ${String(m).slice(0, 300)}`).join('\n');
+
+  const system = `You classify each memory below into EXACTLY ONE category. Reply STRICT JSON only.
+
+STRICT RULES (non-negotiable):
+
+  WIN = something ACCOMPLISHED / COMPLETED.
+    Examples: "A signé Dubé à 500$/mo" · "A buildé le Workflow Builder" · "A lancé le site"
+    NOT a win: plans, in-progress work, documents being written, aspirational thoughts.
+
+  BLOCKER = ACTIVE obstacle currently preventing forward motion.
+    Examples: "Pas encore de client" · "Bug Make.com non résolu" · "Hésitation sur pricing"
+    NOT a blocker: past problems already solved, generic worries, future hypotheticals.
+
+  NEXT_MOVE = CONCRETE action to take, INCLUDING in-progress work.
+    Examples: "Appeler Marco vendredi" · "Finaliser proposition" · "Envoyer devis Salon Éclat"
+    "Documents de vente en cours" → NEXT_MOVE (in-progress work = action still owed).
+    "Plan stratégique à rédiger" → NEXT_MOVE.
+    DEFAULT FALLBACK: if a memory is ambiguous or doesn't clearly match WIN or BLOCKER, classify as NEXT_MOVE.
+
+Input memories (numbered):
+${list}
+
+Schema:
+{
+  "classifications": [
+    { "i": number, "c": "WIN" | "BLOCKER" | "NEXT_MOVE" }
+  ]
+}
+
+- Classify EVERY memory. No skipping.
+- When in doubt → NEXT_MOVE.
+- Output ONLY the JSON. No prose.`;
+
+  try {
+    const text = await callClaude(
+      system,
+      [{ role: 'user', content: 'Classify each memory.' }],
+      600, false, null, false, false, 'COORDINATOR', HAIKU_MODEL
+    );
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return { wins: [], blockers: [], nextMoves: memories };  // fallback: all → nextMove
+    const parsed = JSON.parse(match[0]);
+    if (!Array.isArray(parsed.classifications)) {
+      return { wins: [], blockers: [], nextMoves: memories };
+    }
+
+    const wins = [], blockers = [], nextMoves = [];
+    for (const row of parsed.classifications) {
+      const idx = Number(row.i);
+      const mem = memories[idx];
+      if (!mem || typeof idx !== 'number') continue;
+      const cat = String(row.c || '').toUpperCase();
+      if      (cat === 'WIN')       wins.push(mem);
+      else if (cat === 'BLOCKER')   blockers.push(mem);
+      else                          nextMoves.push(mem); // NEXT_MOVE or anything ambiguous
+    }
+
+    // Ensure every input memory landed somewhere (default → nextMove)
+    const allCategorized = new Set([...wins, ...blockers, ...nextMoves]);
+    for (const m of memories) {
+      if (!allCategorized.has(m)) nextMoves.push(m);
+    }
+
+    console.log('[classifyMemories]', wins.length, 'wins ·', blockers.length, 'blockers ·', nextMoves.length, 'nextMoves');
+    return { wins, blockers, nextMoves };
+  } catch (err) {
+    console.warn('[classifyMemories] failed:', err.message, '— defaulting all to nextMoves');
+    return { wins: [], blockers: [], nextMoves: memories };
+  }
+}
+
 // ─── Memory recap (session-start welcome) ────────────────────────────────────
 // Compress raw Mem0 entries + last local session summary into a 3-point recap.
 // Returns null when there's nothing meaningful to show.
 export async function generateMemoryRecap({ memories = [], lastSession = null }, lang = 'fr') {
   if ((!memories || memories.length === 0) && !lastSession) return null;
 
-  const memoryBlock = memories.length > 0
-    ? memories.slice(0, 8).map((m, i) => `  ${i + 1}. ${m}`).join('\n')
-    : '  (none)';
+  // ── Step 1: Pre-classify every memory before display (Samuel's rules) ──
+  const { wins, blockers, nextMoves } = memories.length > 0
+    ? await classifyMemories(memories, lang)
+    : { wins: [], blockers: [], nextMoves: [] };
+
+  const winsBlock     = wins.length     > 0 ? wins.slice(0, 5).map((m, i) => `  ${i + 1}. ${m}`).join('\n')     : '  (none)';
+  const blockersBlock = blockers.length > 0 ? blockers.slice(0, 5).map((m, i) => `  ${i + 1}. ${m}`).join('\n') : '  (none)';
+  const nextMovesBlk  = nextMoves.length > 0 ? nextMoves.slice(0, 5).map((m, i) => `  ${i + 1}. ${m}`).join('\n') : '  (none)';
+
   const lastBlock = lastSession
     ? [
         lastSession.consensus            ? `  consensus: ${lastSession.consensus}`         : null,
@@ -1660,8 +2278,16 @@ export async function generateMemoryRecap({ memories = [], lastSession = null },
 
   const system = `You generate an ULTRA-SHORT session-start recap for Samuel. He runs NT Solutions (AI agency, Quebec) + PC Glow Up. Reply with STRICT JSON only.
 
-Stored memories (long-term):
-${memoryBlock}
+Memories have ALREADY been classified by Samuel's strict rules. Pick ONE item per category (or leave empty). Do NOT re-classify. Do NOT move items between categories.
+
+VICTOIRES (completed accomplishments — use for lastWin):
+${winsBlock}
+
+BLOCAGES (active obstacles — use for lastBlocker):
+${blockersBlock}
+
+PROCHAINS MOVES (concrete actions / in-progress work — use for nextMove):
+${nextMovesBlk}
 
 Last session (local):
 ${lastBlock}
@@ -1669,20 +2295,24 @@ ${lastBlock}
 Schema:
 {
   "welcomeLine": string,   // 1 line, ≤ 60 chars. Warm, dry, never syrupy.
-  "lastWin":     string,   // ≤ 80 chars (fits 2 lines mobile). Concrete win — name, number, or specific progress. Empty if nothing solid.
-  "lastBlocker": string,   // ≤ 80 chars. Concrete blocker. Empty if nothing solid.
-  "nextMove":    string,   // ≤ 80 chars. One concrete next move owed. Empty if nothing solid.
+  "lastWin":     string,   // ≤ 80 chars. Pick the BEST item from VICTOIRES above, reformulated. Empty if VICTOIRES is "(none)" or weak.
+  "lastBlocker": string,   // ≤ 80 chars. Pick the BEST item from BLOCAGES above. Empty if BLOCAGES is "(none)" or weak.
+  "nextMove":    string,   // ≤ 80 chars. Pick the BEST item from PROCHAINS MOVES above. Empty if weak.
   "confidence":  number    // 0 to 1
 }
 
+FILTER FOR RELEVANCE (max 3 populated fields, empty is OK):
+- Pick the MOST recent / most actionable item in each bucket.
+- An empty field is BETTER than a weak field. Don't pad.
+- If a bucket has "(none)" → leave that field empty.
+
 HARD RULES:
 - Language: ${lang === 'fr' ? 'FRANÇAIS' : 'ENGLISH'}
-- Max 80 chars per point. NEVER exceed. If it doesn't fit in 80 chars, cut ruthlessly.
-- MAX 3 meaningful fields (lastWin, lastBlocker, nextMove). Leave welcomeLine empty if no natural one-liner.
-- Be specific or be empty. Never pad with filler like "on continue sur la lancée" or "prochaine étape importante".
-- Use real names, numbers, dates verbatim from sources. Never invent.
-- confidence < 0.5 → caller drops the recap. Don't ship weak recaps.
-- Never reference "Mem0" or "memory system". Speak as QG.
+- Max 80 chars per point. NEVER exceed.
+- Real names, numbers, dates verbatim. Never invent.
+- Never reference "Mem0" or "memory system".
+- NEVER move a memory between categories — they were pre-validated.
+- confidence < 0.5 → caller drops.
 - Output ONLY the JSON.`;
 
   try {
@@ -2051,6 +2681,307 @@ Keep under 500 words. Pas de réponses vagues. Chaque réponse = un contre-argum
   };
 }
 
+// ─── Morning briefing (session 7+) ──────────────────────────────────────────
+// Aggregates Mem0 memories + Gmail top business + Calendar today + retainers
+// staleness + last session consensus into 4 concrete lines. Unlocked only
+// when sessionCount >= 7 — earlier, the UI shows a locked teaser instead.
+export async function generateMorningBriefing({
+  memories = [],
+  lastSession = null,
+  retainers = [],
+  emails = [],
+  calendarEvents = [],
+  lang = 'fr',
+} = {}) {
+  // ── Step 1: Pre-classify memories before the briefing sees them ──
+  // This guarantees the briefing's nextMoveLine never shows a "win" and
+  // vice-versa — every memory is re-validated against Samuel's rules.
+  const { wins, blockers, nextMoves } = memories.length > 0
+    ? await classifyMemories(memories, lang)
+    : { wins: [], blockers: [], nextMoves: [] };
+
+  const winsBlock      = wins.length     > 0 ? wins.slice(0, 5).map((m, i) => `  ${i + 1}. ${m}`).join('\n')      : '  (none)';
+  const blockersBlock  = blockers.length > 0 ? blockers.slice(0, 5).map((m, i) => `  ${i + 1}. ${m}`).join('\n')  : '  (none)';
+  const nextMovesBlock = nextMoves.length > 0 ? nextMoves.slice(0, 5).map((m, i) => `  ${i + 1}. ${m}`).join('\n') : '  (none)';
+  const lastBlock = lastSession
+    ? [
+        lastSession.consensus            ? `  consensus: ${lastSession.consensus}` : null,
+        lastSession.summary?.consensusAction ? `  action: ${lastSession.summary.consensusAction}` : null,
+      ].filter(Boolean).join('\n') || '  (none)'
+    : '  (none)';
+  const emailBlock = Array.isArray(emails) && emails.length > 0
+    ? emails.slice(0, 3).map((e, i) => {
+        const from = (e.from || '').split('<')[0].trim() || '?';
+        const subj = e.subject || '(no subject)';
+        const preview = String(e.snippet || e.body || '').replace(/\s+/g, ' ').slice(0, 120);
+        return `  ${i + 1}. ${from} — ${subj} — ${preview}`;
+      }).join('\n')
+    : '  (none)';
+  const calBlock = Array.isArray(calendarEvents) && calendarEvents.length > 0
+    ? calendarEvents.slice(0, 5).map((e) => {
+        const startRaw = e.start?.dateTime || e.start?.date || '';
+        const d = startRaw ? new Date(startRaw) : null;
+        const when = d && !isNaN(d.getTime())
+          ? d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : '—';
+        return `  - ${when}: ${e.summary || '(untitled)'}`;
+      }).join('\n')
+    : '  (none)';
+  // Retainers sorted by "most stale" — lastTouchedAt oldest first
+  const staleRetainers = (retainers || [])
+    .filter((r) => r && r.name)
+    .map((r) => {
+      const last = Number(r.lastTouchedAt || r.startedAt || 0);
+      const days = last ? Math.floor((Date.now() - last) / 86_400_000) : null;
+      return { name: r.name, amount: r.amount || 0, days };
+    })
+    .sort((a, b) => (b.days ?? 0) - (a.days ?? 0));
+  const retainerBlock = staleRetainers.length > 0
+    ? staleRetainers.slice(0, 5).map((r) => `  - ${r.name} ($${r.amount}/mo) — ${r.days ?? '?'}j sans activité`).join('\n')
+    : '  (none)';
+
+  const system = `You generate a MORNING BRIEFING for Samuel (NT Solutions consultant, Quebec) at the start of a new session. He's past session 7 — you now know him. Reply with STRICT JSON only.
+
+Sources (use verbatim facts only — NEVER invent):
+
+Memories have ALREADY been classified by Samuel's strict rules. Do NOT re-classify or move items between categories — they were pre-validated.
+
+VICTOIRES (for context only — completed things, NOT for nextMoveLine):
+${winsBlock}
+
+BLOCAGES (active obstacles — for context, NOT for nextMoveLine):
+${blockersBlock}
+
+PROCHAINS MOVES (concrete actions / in-progress work — THIS is what nextMoveLine draws from):
+${nextMovesBlock}
+
+Last session:
+${lastBlock}
+
+Unread business emails:
+${emailBlock}
+
+Calendar (next events):
+${calBlock}
+
+Retainers sorted by staleness:
+${retainerBlock}
+
+Schema:
+{
+  "emailsLine":    string,  // ≤ 100 chars. The ONE email worth acting on THIS MORNING. Empty if inbox clean.
+  "calendarLine":  string,  // ≤ 100 chars. Next event + a beat about it. Empty if nothing today/tomorrow.
+  "nextMoveLine":  string,  // ≤ 100 chars. Concrete ACTION owed (includes in-progress work). Empty if nothing solid.
+  "prospectLine":  string,  // ≤ 100 chars. Retainer/prospect needing a touch most — name + days silent. Empty if none.
+  "confidence":    number   // 0 to 1
+}
+
+CATEGORIZATION RULES (STRICT — apply before filling fields):
+
+  nextMoveLine = CONCRETE ACTION OWED — pick BEST item from the PROCHAINS MOVES bucket above.
+    Examples (OK): "Finaliser docs de vente promises à Marco" · "Envoyer devis à Salon Éclat" · "Appeler Dubé vendredi"
+    NOT here: items from VICTOIRES (those are completed), items from BLOCAGES (those are stuck).
+    NEVER re-categorize — the buckets above are authoritative.
+
+  emailsLine = SPECIFIC email that needs Samuel's response this morning. Name + ask.
+    NOT: promotional, newsletters, generic Gmail chatter.
+
+  calendarLine = Upcoming event with context. Name + when + any prep needed.
+    NOT: completed events, personal stuff without prep.
+
+  prospectLine = ONE prospect/retainer who's gone silent and needs outreach.
+    Format: "Name — X jours sans activité · context"
+
+FILTER FOR ULTRA-RELEVANCE (MAX 3 populated fields, not 4):
+- Pick the 3 MOST actionable items across the 4 slots.
+- LEAVE ONE SLOT EMPTY if it would be weaker than the others.
+- An empty field >> a filler field.
+- Prioritize: time-sensitive (today/tomorrow) > ongoing work > old context.
+
+HARD RULES:
+- Language: ${lang === 'fr' ? 'FRANÇAIS' : 'ENGLISH'}
+- Each populated line: ULTRA concrete, zero filler, ≤ 100 chars.
+- Real names, numbers, dates from sources. NEVER invent.
+- NEVER say "continue sur la lancée", "bonne journée", or generic pep talk.
+- Never reference "Mem0" or "memory system".
+- confidence < 0.5 → caller drops. Ship only quality briefings.
+- Output ONLY the JSON.`;
+
+  try {
+    console.log('[generateMorningBriefing] sources — memories:', memories.length, 'emails:', emails.length, 'cal:', calendarEvents.length, 'retainers:', retainers.length);
+    const text = await callClaude(
+      system,
+      [{ role: 'user', content: 'Generate the morning briefing.' }],
+      500,
+      false,
+      null, false, false, 'COORDINATOR',
+      'claude-sonnet-4-5'
+    );
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+
+    if (typeof parsed.confidence !== 'number' || parsed.confidence < 0.5) {
+      console.warn('[generateMorningBriefing] dropped — confidence=', parsed.confidence);
+      return null;
+    }
+    let emailsLine   = String(parsed.emailsLine   || '').slice(0, 120).trim();
+    let calendarLine = String(parsed.calendarLine || '').slice(0, 120).trim();
+    let nextMoveLine = String(parsed.nextMoveLine || '').slice(0, 120).trim();
+    let prospectLine = String(parsed.prospectLine || '').slice(0, 120).trim();
+
+    // Enforce the "max 3 populated fields" rule programmatically.
+    // If the LLM returned 4, drop the weakest (shortest, least specific).
+    const fields = [
+      { key: 'emailsLine',   value: emailsLine },
+      { key: 'calendarLine', value: calendarLine },
+      { key: 'nextMoveLine', value: nextMoveLine },
+      { key: 'prospectLine', value: prospectLine },
+    ];
+    const populated = fields.filter((f) => f.value);
+    if (populated.length > 3) {
+      // Drop the shortest populated field (proxy for weakest signal)
+      const weakest = [...populated].sort((a, b) => a.value.length - b.value.length)[0];
+      if (weakest.key === 'emailsLine')   emailsLine   = '';
+      if (weakest.key === 'calendarLine') calendarLine = '';
+      if (weakest.key === 'nextMoveLine') nextMoveLine = '';
+      if (weakest.key === 'prospectLine') prospectLine = '';
+      console.log('[generateMorningBriefing] trimmed to 3 — dropped', weakest.key);
+    }
+
+    const filledAfter = [emailsLine, calendarLine, nextMoveLine, prospectLine].filter(Boolean).length;
+    if (filledAfter < 2) {
+      console.warn('[generateMorningBriefing] dropped — only', filledAfter, 'of 4 fields filled after trim');
+      return null;
+    }
+    return { emailsLine, calendarLine, nextMoveLine, prospectLine, confidence: parsed.confidence };
+  } catch (err) {
+    console.warn('[generateMorningBriefing] failed:', err.message);
+    return null;
+  }
+}
+
+// ─── Batch follow-up — intent extraction + per-prospect message gen ─────────
+// Returns null when the user didn't clearly ask for a batch follow-up.
+export async function extractBatchFollowupIntent(userInput, lang = 'fr') {
+  if (!userInput) return null;
+  const system = `You detect a BATCH FOLLOW-UP intent in a short user message. Reply STRICT JSON only.
+
+Schema:
+{
+  "isBatchFollowup": boolean,
+  "daysThreshold":   number,            // 1..90, default 7
+  "statusFilter":    string[],          // prospect statuses to include; empty = default
+  "confidence":      number             // 0..1
+}
+
+Trigger examples (all → isBatchFollowup=true):
+- "relance tous les prospects sans réponse depuis 7 jours"
+- "follow up all prospects that haven't replied in 10 days"
+- "batch relance sur les ghostés"
+- "envoie une relance à tous ceux que j'ai pas contacté depuis 2 semaines"
+- "relance les prospects en démo"
+
+NOT a batch intent:
+- "réponds à cet email" (single email reply)
+- "relance Dubé" (single named prospect)
+
+Valid status values: Contacté, Répondu, Chaud, Démo, Signé, Client actif, Perdu.
+Default statusFilter when unspecified: ["Contacté","Répondu","Chaud","Démo"] (exclude closed/lost).
+
+Rules:
+- Parse "semaine" = 7d, "2 semaines" = 14d, "mois" = 30d.
+- If unclear number, default to 7.
+- confidence < 0.6 → caller drops.
+- Language user speaks: ${lang === 'fr' ? 'FRENCH' : 'ENGLISH'}.
+
+Output ONLY the JSON.`;
+  try {
+    const text = await callClaude(system, [{ role: 'user', content: userInput }], 180, false, null, false, false, 'COORDINATOR', HAIKU_MODEL);
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    if (!parsed.isBatchFollowup) return null;
+    if (typeof parsed.confidence !== 'number' || parsed.confidence < 0.6) return null;
+    const days = Math.max(1, Math.min(90, Math.round(Number(parsed.daysThreshold) || 7)));
+    const DEFAULT_STATUSES = ['Contacté', 'Répondu', 'Chaud', 'Démo'];
+    const VALID = new Set(['Contacté', 'Répondu', 'Chaud', 'Démo', 'Signé', 'Client actif', 'Perdu']);
+    let statuses = Array.isArray(parsed.statusFilter)
+      ? parsed.statusFilter.filter((s) => VALID.has(s))
+      : [];
+    if (statuses.length === 0) statuses = DEFAULT_STATUSES;
+    return { daysThreshold: days, statusFilter: statuses, confidence: parsed.confidence };
+  } catch (err) {
+    console.warn('[extractBatchFollowupIntent] failed:', err.message);
+    return null;
+  }
+}
+
+// Generate a personalized follow-up message for ONE prospect.
+// Input context is kept small (stale prospect + last note + industry) to keep
+// Sonnet tokens low. Returns { subject, body } or null on failure.
+export async function generateFollowupMessage(prospect, { daysSinceContact, lang = 'fr' } = {}) {
+  if (!prospect) return null;
+  const contactName  = prospect.contactName || prospect.name || prospect.businessName || 'Contact';
+  const businessName = prospect.businessName || prospect.name || '';
+  const industry     = prospect.industry || '';
+  const status       = prospect.status || 'Contacté';
+  const lastNote     = (prospect.contactHistory?.[0]?.note || prospect.notes || '').slice(0, 300);
+  const objections   = Array.isArray(prospect.objections) ? prospect.objections.slice(0, 3).join('; ') : '';
+
+  // Status-adapted tone guidance
+  const toneMap = {
+    'Contacté': 'Re-engage warmly. Assume the first contact went into the void. Light, low-pressure, curious tone.',
+    'Répondu':  'Follow up on their reply. Assume a short pause in the thread. Professional, forward-moving.',
+    'Chaud':    'Warm re-engagement. They were interested — reignite specifically on a concrete next step.',
+    'Démo':     'Post-demo follow-up. Reference the demo they saw. Direct ask about the next step / decision.',
+  };
+  const tone = toneMap[status] || toneMap['Contacté'];
+
+  const system = `You write ONE follow-up email from Samuel (NT Solutions consultant) to a prospect who has gone silent. Output STRICT JSON only — no prose, no markdown fences.
+
+Schema:
+{
+  "subject": string,   // ≤ 70 chars, concrete, NOT clickbait
+  "body":    string    // 70–140 words, plain text with \\n line breaks. Sign off: "Samuel"
+}
+
+Context:
+Contact: ${contactName}
+Business: ${businessName}
+Industry: ${industry}
+Prospect status: ${status}
+Days since last contact: ${daysSinceContact}
+Last note: ${lastNote || '(none)'}
+Known objections: ${objections || '(none)'}
+
+Tone directive: ${tone}
+
+HARD RULES:
+- Language: ${lang === 'fr' ? 'FRANÇAIS québécois naturel (tutoiement)' : 'ENGLISH plain (addressed as "you")'}.
+- Never open with "J'espère que tu vas bien" / "I hope this finds you well" — banned.
+- Start with a SPECIFIC reference: industry pain point, a signal from lastNote, or a past interaction.
+- Give ONE concrete ask (15 min call, reply to a single yes/no question, etc.) — not multiple options.
+- Never mention "relance" / "follow up" literally in the body — just BE the follow-up.
+- Never fake urgency ("last chance", "limited slots") — Samuel doesn't do that.
+- Sign off: "Samuel" (one line, no title, no signature block).
+- Output ONLY JSON.`;
+
+  try {
+    const text = await callClaude(system, [{ role: 'user', content: 'Write the follow-up email.' }], 400, false, null, false, false, 'VOSS', 'claude-sonnet-4-5');
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    const subject = String(parsed.subject || '').slice(0, 120).trim();
+    const body    = String(parsed.body    || '').slice(0, 2000).trim();
+    if (!subject || !body) return null;
+    return { subject, body };
+  } catch (err) {
+    console.warn('[generateFollowupMessage] failed:', err.message, 'for', contactName);
+    return null;
+  }
+}
+
 // ─── Session runner ───────────────────────────────────────────────────────────
 
 // ─── Daily quote ─────────────────────────────────────────────────────────────
@@ -2221,9 +3152,10 @@ function buildSessionMemory(conversationHistory) {
 
 const SILENCE_RULE_SUFFIX = `\n\nCONVERSATION ROLE: You are supporting this conversation, not leading. Stay silent UNLESS all of these are true:\n1. Your specific domain expertise is directly needed\n2. The lead agent missed something critical\n3. Your contribution is maximum 2 sentences\n4. You have not spoken in the last 3 exchanges\nIf nothing essential to add, respond with exactly "—"`;
 
-export async function runSession(userInput, conversationHistory, mode, deepMode, agentNames = {}, onProgress, focusAgent = null, calendarContext = null, attachment = null, streamCallbacks = null, thinkingMode = false, conversationState = null, lang = 'fr') {
+export async function runSession(userInput, conversationHistory, mode, deepMode, agentNames = {}, onProgress, focusAgent = null, calendarContext = null, attachment = null, streamCallbacks = null, thinkingMode = false, conversationState = null, lang = 'fr', maturitySuffix = '') {
   const langInstruction = getLangInstruction(lang);
   const calendarSuffix = calendarContext ? `\n\n${calendarContext}` : '';
+  const matSuffix       = maturitySuffix ? `\n\n${maturitySuffix}` : '';
   // Inject CSV/XLSX data as a system suffix
   const dataSuffix = attachment && (attachment.type === 'csv' || attachment.type === 'xlsx')
     ? `\n\nUPLOADED DATA FILE — ${attachment.name}:\n\`\`\`\n${attachment.text}\n\`\`\``
@@ -2481,7 +3413,7 @@ export async function runSession(userInput, conversationHistory, mode, deepMode,
   }
 
   // Call lead agent (streaming if callbacks provided)
-  const leadSystem = BASE_CONTEXT + langInstruction + calendarSuffix + dataSuffix + emotionalSuffix + sessionMemorySuffix + '\n\n' + buildAgentPrompt(routing.lead) + modeSuffix + continuationSuffix;
+  const leadSystem = BASE_CONTEXT + langInstruction + calendarSuffix + dataSuffix + emotionalSuffix + sessionMemorySuffix + matSuffix + '\n\n' + buildAgentPrompt(routing.lead) + modeSuffix + continuationSuffix;
   const leadResponse = await callLead(routing.lead, leadSystem, leadMessages, 1000, attachment);
 
   const responses = [{ agent: routing.lead, content: leadResponse }];
@@ -2504,7 +3436,7 @@ export async function runSession(userInput, conversationHistory, mode, deepMode,
 
   const supportResults = await Promise.all(
     routing.supporting.map((agentName) => {
-      const supportSystem = BASE_CONTEXT + langInstruction + calendarSuffix + dataSuffix + emotionalSuffix + SILENCE_RULE_SUFFIX + '\n\n' + buildAgentPrompt(agentName) + modeSuffix;
+      const supportSystem = BASE_CONTEXT + langInstruction + calendarSuffix + dataSuffix + emotionalSuffix + matSuffix + SILENCE_RULE_SUFFIX + '\n\n' + buildAgentPrompt(agentName) + modeSuffix;
       return callClaude(supportSystem, [{ role: 'user', content: contextWithLead }], 1000, deepMode, attachment, true, false, agentName)
         .then((content) => ({ agent: agentName, content }))
         .catch(() => null);

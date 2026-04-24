@@ -211,6 +211,78 @@ export async function syncOneTimeRevenue(entry) {
   }
 }
 
+// ─── Weekly fetchers for anomaly detection ──────────────────────────────────
+// All fire-and-forget: return [] on failure (Supabase down, table missing,
+// RLS, etc.) so the anomaly detector gracefully falls back to localStorage.
+
+export async function fetchWeeklyFollowups(sinceTs) {
+  if (!isSupabaseEnabled()) return [];
+  try {
+    const sinceIso = new Date(sinceTs).toISOString();
+    const { data, error } = await supabase
+      .from('followup_log')
+      .select('id, sent_at, status')
+      .gte('sent_at', sinceIso)
+      .order('sent_at', { ascending: false })
+      .limit(500);
+    if (error) { console.warn('[Sync] fetchWeeklyFollowups:', error.message); return []; }
+    return Array.isArray(data) ? data : [];
+  } catch (e) { console.warn('[Sync] fetchWeeklyFollowups failed:', e.message); return []; }
+}
+
+export async function fetchWeeklyOneTimeRevenues(sinceTs) {
+  if (!isSupabaseEnabled()) return [];
+  try {
+    const sinceIso = new Date(sinceTs).toISOString();
+    const { data, error } = await supabase
+      .from('one_time_revenues')
+      .select('id, amount, date, client_name')
+      .gte('date', sinceIso)
+      .order('date', { ascending: false })
+      .limit(200);
+    if (error) { console.warn('[Sync] fetchWeeklyOneTimeRevenues:', error.message); return []; }
+    return Array.isArray(data) ? data : [];
+  } catch (e) { console.warn('[Sync] fetchWeeklyOneTimeRevenues failed:', e.message); return []; }
+}
+
+export async function fetchWeeklyRetainerChanges(sinceTs) {
+  if (!isSupabaseEnabled()) return [];
+  try {
+    const sinceIso = new Date(sinceTs).toISOString();
+    const { data, error } = await supabase
+      .from('retainers')
+      .select('id, name, amount, updated_at')
+      .gte('updated_at', sinceIso)
+      .order('updated_at', { ascending: false })
+      .limit(200);
+    if (error) { console.warn('[Sync] fetchWeeklyRetainerChanges:', error.message); return []; }
+    return Array.isArray(data) ? data : [];
+  } catch (e) { console.warn('[Sync] fetchWeeklyRetainerChanges failed:', e.message); return []; }
+}
+
+// ─── Batch follow-up log ────────────────────────────────────────────────────
+// Append-only ledger of every follow-up email Samuel sends through QG. Useful
+// to prevent double-relancing, build response-rate stats, and audit history.
+// Table schema provided in CHANGELOG.
+export async function syncFollowupLog(entry) {
+  if (!isSupabaseEnabled() || !entry?.id) return;
+  try {
+    await supabase.from('followup_log').insert({
+      id:            String(entry.id),
+      prospect_id:   entry.prospectId ? String(entry.prospectId) : null,
+      prospect_name: entry.prospectName || null,
+      subject:       entry.subject || null,
+      body:          entry.body || null,
+      sent_at:       new Date(entry.sentAt || Date.now()).toISOString(),
+      batch_id:      entry.batchId || null,
+      status:        entry.status || 'sent',  // 'sent' | 'failed' | 'skipped'
+      session_id:    entry.sessionId || null,
+    });
+  } catch (e) {
+    console.warn('[Sync] syncFollowupLog failed:', e.message);
+  }
+}
+
 // ─── Focus sessions (Pomodoro per client) ───────────────────────────────────
 // Append-only ledger. client_name NULL = General/Admin (non-client work).
 // Table schema provided in CHANGELOG.

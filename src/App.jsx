@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { runSession, archiveSession, callConsensus, getDailyQuote, getMomentumMirror, generateMondayReport, callClaudeStream, draftEmailReply, analyzeEmail, extractCalendarEvent, extractPipelineAction, extractDashboardUpdate, generateMemoryRecap } from './api.js';
+import { runSession, archiveSession, callConsensus, getDailyQuote, getMomentumMirror, generateMondayReport, callClaudeStream, draftEmailReply, analyzeEmail, extractCalendarEvent, extractPipelineAction, extractDashboardUpdate, generateMemoryRecap, generateMorningBriefing, extractBatchFollowupIntent, generateFollowupMessage, detectMeetingPatterns, generateAgentOpening, generateFilRouge, analyzeInterjection, generateAnomalyAlert } from './api.js';
+import { getMaturityPhase, pickBestPattern, markPatternFired, pruneCooldowns } from './utils/meetingRoom.js';
+import { updateTopicTracker, getStaleTopics } from './utils/topicTracker.js';
+import { pickTopAnomaly, markAxisFired, getWeekWindows } from './utils/anomalyDetector.js';
 import { t, detectDefaultLang } from './i18n.js';
 import { DEFAULT_AGENT_NAMES, COMMERCIAL_MODE, AGENT_CONFIG } from './prompts.js';
 import { playDing } from './utils/sound.js';
@@ -7,7 +10,7 @@ import { updateStreak } from './utils/streak.js';
 import { logAppOpen, logSessionStart } from './utils/momentum.js';
 import { saveSession, formatHistoryContext, loadHistory } from './utils/sessionHistory.js';
 import { useAutoSave, mergeSaveStatus } from './hooks/useAutoSave.js';
-import { syncSession, syncDecisions, syncImprovementItem, syncImprovementStatus, syncFeedback, syncMomentum, syncAgentNames, syncExpense, syncOneTimeRevenue, syncRetainer, syncRetainerDelete, syncDashboardState, fetchDashboardState } from './lib/sync.js';
+import { syncSession, syncDecisions, syncImprovementItem, syncImprovementStatus, syncFeedback, syncMomentum, syncAgentNames, syncExpense, syncOneTimeRevenue, syncRetainer, syncRetainerDelete, syncDashboardState, fetchDashboardState, syncFollowupLog, fetchWeeklyFollowups, fetchWeeklyOneTimeRevenues, fetchWeeklyRetainerChanges } from './lib/sync.js';
 import { searchMemories, addSessionMemory, addArchivistMemory, fetchMemoriesForRecap, isMem0Enabled } from './lib/mem0.js';
 import { getDayGreeting } from './utils/greeting.js';
 import {
@@ -280,6 +283,8 @@ export default function App() {
   const typingDebounceRef  = useRef(null);  // Step 7: debounce timer for typing pre-fetch
   const pendingGlobalMsg   = useRef(null);  // Message queued via GlobalFloatingInput
   const recapFiredForSessionRef = useRef(null);  // Session id we already fired a recap for
+  const briefingLockedRef       = useRef(false); // true once user has interacted — blocks late async briefings
+  const interjectCooldownRef    = useRef(false); // true for 30s after an interjection fires — prevents back-to-back
   const [streak, setStreak]           = useState(0);
   const [dailyQuote, setDailyQuote]   = useState(null);
   const [momentumMirror, setMomentumMirror] = useState(null);
@@ -622,52 +627,190 @@ export default function App() {
       }
     }, 400);
 
-    // Memory recap — fire async. Guards: not first-ever session, mem0 enabled,
-    // not already fired for this session.
+    // Meeting Room + Morning Briefing — orchestrated at session start.
+    //
+    // Step 1: detect negative patterns (Haiku). If one crosses the phase's
+    //         severity bar AND isn't cooled down → the relevant agent opens
+    //         the session organically (Sonnet) AND the briefing is SUPPRESSED
+    //         (the agent's voice replaces the structured briefing).
+    //
+    // Step 2: Otherwise, normal briefing flow (locked teaser / full briefing).
+    //
+    // Both phases can be cancelled mid-flight by briefingLockedRef (user typing).
+    briefingLockedRef.current = false;
+
+    const BRIEFING_UNLOCK_AT = 7;
     const thisSessionId = sessionIdRef.current;
-    if (isMem0Enabled() && sessionCount > 0 && recapFiredForSessionRef.current !== thisSessionId) {
+    const alreadyFired  = recapFiredForSessionRef.current === thisSessionId;
+
+    if (!alreadyFired && sessionCount > 0) {
       recapFiredForSessionRef.current = thisSessionId;
-      const loadingId = `memory-recap-loading-${thisSessionId}`;
-      setTimeout(() => {
-        setMessages((prev) => [...prev, {
-          id:        loadingId,
-          type:      'memory-recap-loading',
-          timestamp: new Date(),
-        }]);
-      }, 250);
+
+      // ── Priority 1: Anomaly alert ────────────────────────────────────
+      // Checks week-over-week drops on outreach / pipeline / MRR. If a drop
+      // > 40% is detected on an axis with meaningful baseline → the owner
+      // agent opens with numbers + diagnostic + one concrete move.
+      // If this fires, all lower layers (Meeting Room, Fil Rouge, locked
+      // teaser) are skipped via briefingLockedRef.
+      (async () => {
+        try {
+          if (briefingLockedRef.current) return;
+
+          // Need at least a session or two of activity before anomaly detection is meaningful
+          if (sessionCount < 2) return;
+
+          const now = Date.now();
+          const { previousStart } = getWeekWindows(now);
+
+          // Fetch Supabase sources in parallel. All return [] on failure.
+          const [followups, oneTimes, retainerChanges] = await Promise.all([
+            fetchWeeklyFollowups(previousStart),
+            fetchWeeklyOneTimeRevenues(previousStart),
+            fetchWeeklyRetainerChanges(previousStart),
+          ]);
+          if (briefingLockedRef.current) return;
+
+          const localProspects = loadLS('hq_prospects', []);
+          const sources = {
+            followups,
+            oneTimes,
+            retainerChanges,
+            prospects: Array.isArray(localProspects) ? localProspects : [],
+            dashboardSnapshot: dashboard,
+          };
+
+          const anomaly = pickTopAnomaly(sources, now);
+          if (!anomaly) return; // nothing severe enough
+
+          const alert = await generateAnomalyAlert(anomaly, lang);
+          if (briefingLockedRef.current || !alert) return;
+
+          // Commit: push agent message + mark cooldown + lock lower layers
+          setMessages((prev) => [...prev, {
+            id:        `anomaly-${anomaly.axis}-${thisSessionId}`,
+            type:      'agent',
+            agent:     anomaly.agent,
+            content:   alert,
+            streaming: false,
+            timestamp: new Date(),
+            meta:      { source: 'anomaly', axis: anomaly.axis, dropPct: anomaly.dropPct },
+          }]);
+          markAxisFired(anomaly.axis, now);
+          briefingLockedRef.current = true; // suppress Meeting Room + Fil Rouge
+          console.log('[Anomaly] fired:', anomaly.agent, 'on', anomaly.axis, `${Math.round(anomaly.dropPct * 100)}% drop`);
+        } catch (err) {
+          console.warn('[Anomaly] failed:', err.message);
+        }
+      })();
+
+      // ── Meeting Room: pattern-triggered proactive opening ────────────
+      // Runs in parallel with briefing prep. If a pattern fires, we push the
+      // agent's opening message AND skip the structured briefing.
+      const maturity = getMaturityPhase(sessionCount);
+      pruneCooldowns(sessionCount);
+      let meetingRoomFired = false;
 
       (async () => {
         try {
+          if (briefingLockedRef.current) return;
+
+          // Need at least 2 sessions of history for patterns to exist
+          if (sessionCount < 2) return;
+
           const history = loadHistory();
-          const lastSession = history && history.length > 0 ? history[0] : null;
           const memories = await fetchMemoriesForRecap();
-          if ((!memories || memories.length === 0) && !lastSession) {
-            setMessages((prev) => prev.filter((m) => m.id !== loadingId));
-            return;
-          }
-          const recap = await generateMemoryRecap({ memories: memories || [], lastSession }, lang);
-          if (!recap) {
-            setMessages((prev) => prev.filter((m) => m.id !== loadingId));
-            return;
-          }
-          // Replace the loading placeholder with the real recap
-          setMessages((prev) => prev.map((m) => m.id === loadingId
-            ? {
-                id:           `memory-recap-${thisSessionId}`,
-                type:         'memory-recap',
-                welcomeLine:  recap.welcomeLine,
-                lastWin:      recap.lastWin,
-                lastBlocker:  recap.lastBlocker,
-                nextMove:     recap.nextMove,
-                timestamp:    new Date(),
-              }
-            : m
-          ));
+          if (briefingLockedRef.current) return;
+
+          const prospects = loadLS('hq_prospects', []);
+          const patterns = await detectMeetingPatterns({
+            sessionCount,
+            memories: memories || [],
+            recentSessions: (history || []).slice(0, 5),
+            retainers: dashboard.retainers || [],
+            prospects:  Array.isArray(prospects) ? prospects : [],
+            lang,
+          });
+          if (briefingLockedRef.current) return;
+
+          const chosen = pickBestPattern(patterns, sessionCount, maturity);
+          if (!chosen) return; // nothing urgent enough
+
+          const opening = await generateAgentOpening({
+            agent:    chosen.agent,
+            pattern:  chosen,
+            maturity,
+            lang,
+          });
+          if (briefingLockedRef.current || !opening) return;
+
+          // Commit: push agent message + mark pattern fired + block briefing
+          setMessages((prev) => [...prev, {
+            id:        `meeting-opening-${thisSessionId}`,
+            type:      'agent',
+            agent:     chosen.agent,
+            content:   opening,
+            streaming: false,
+            timestamp: new Date(),
+            meta:      { source: 'meetingRoom', pattern: chosen.type },
+          }]);
+          markPatternFired(chosen.type, sessionCount);
+          meetingRoomFired = true;
+          // Also trip the briefingLock so the briefing flow (below) skips
+          briefingLockedRef.current = true;
+          console.log('[MeetingRoom] fired:', chosen.agent, 'for pattern', chosen.type);
         } catch (err) {
-          console.warn('[Memory recap] failed:', err.message);
-          setMessages((prev) => prev.filter((m) => m.id !== loadingId));
+          console.warn('[MeetingRoom] failed:', err.message);
         }
       })();
+
+      // ── Variant 1: locked teaser for sessions 1-3 (learning phase) ────
+      const FIL_ROUGE_UNLOCK_AT = 4;
+      if (sessionCount < FIL_ROUGE_UNLOCK_AT) {
+        setTimeout(() => {
+          if (briefingLockedRef.current) return;
+          setMessages((prev) => [...prev, {
+            id:           `briefing-locked-${thisSessionId}`,
+            type:         'briefing-locked',
+            sessionCount: sessionCount,
+            timestamp:    new Date(),
+          }]);
+        }, 250);
+      }
+
+      // ── Variant 2: Fil Rouge for sessions 4+ (replaces structured briefing) ──
+      // One natural sentence bridging last session to now. Agent-voice.
+      else {
+        (async () => {
+          try {
+            if (briefingLockedRef.current) return;
+
+            const history = loadHistory();
+            const lastSession = history && history.length > 0 ? history[0] : null;
+            const memories = isMem0Enabled() ? await fetchMemoriesForRecap() : [];
+            if (briefingLockedRef.current) return;
+
+            const fil = await generateFilRouge({
+              lastSession,
+              memories: memories || [],
+              lang,
+            });
+            if (briefingLockedRef.current || !fil) return;
+
+            setMessages((prev) => [...prev, {
+              id:        `fil-rouge-${thisSessionId}`,
+              type:      'agent',
+              agent:     fil.agent,
+              content:   fil.content,
+              streaming: false,
+              timestamp: new Date(),
+              meta:      { source: 'filRouge' },
+            }]);
+            console.log('[FilRouge] fired:', fil.agent);
+          } catch (err) {
+            console.warn('[FilRouge] failed:', err.message);
+          }
+        })();
+      }
     }
 
   }
@@ -676,6 +819,21 @@ export default function App() {
     if (!text.trim() && !attachment) return;
     if (isLoading) return;
     setError(null);
+
+    // User is actively interacting — kill any briefing / memory-recap still
+    // loading from the session start. Briefing is "at start" ONLY — the user
+    // engaging means the window is closed. Also lock the ref so no pending
+    // async briefing resolves into the message stream later.
+    briefingLockedRef.current = true;
+    setMessages((prev) => prev.filter((m) =>
+      m.type !== 'briefing-loading' &&
+      m.type !== 'memory-recap-loading' &&
+      m.type !== 'briefing-locked'
+    ));
+
+    // Topic tracker — record any topic keywords the user mentioned so the
+    // "silent pressure" layer knows what's been covered. Fire-and-forget.
+    try { updateTopicTracker(text || ''); } catch { /* ignore */ }
 
     const displayText = text.trim() || `[Attached: ${attachment?.name}]`;
     const userMsg = {
@@ -990,6 +1148,141 @@ export default function App() {
     }
     // ── End Pipeline + Dashboard intent detection ────────────────────────────
 
+    // ── Batch follow-up intent detection ─────────────────────────────────────
+    // "relance tous les prospects sans réponse depuis 7 jours" style commands.
+    // Fan out: 1 Haiku to confirm intent + parse threshold, then parallel
+    // Sonnet calls (chunked 5) to generate per-prospect follow-up emails.
+    const BATCH_FOLLOWUP_TRIGGERS = [
+      // FR
+      'relance tous', 'relance ceux', 'relance les', 'relance sans réponse',
+      'relancer tous', 'relancer ceux', 'relancer les',
+      'batch relance', 'envoie une relance', 'envoie des relances', 'envoies des relance',
+      'ghosté', 'ghostés', 'silence radio',
+      "tous les prospects sans", 'prospects qui ont pas répondu',
+      // EN
+      'follow up all', 'follow up everyone', 'follow up all prospects',
+      'batch follow', 'bulk follow up', 'reach out to all prospects',
+      'silent prospects', 'prospects who haven',
+    ];
+    const mentionsBatchFollowup = !attachment && BATCH_FOLLOWUP_TRIGGERS.some((t) => lowerInput.includes(t));
+
+    if (mentionsBatchFollowup) {
+      try {
+        const intent = await extractBatchFollowupIntent(text, lang);
+        if (!intent) {
+          // Low confidence — fall through to normal agent flow
+        } else {
+          // Load + filter eligible prospects
+          const prospects = loadLS('hq_prospects', []);
+          if (!Array.isArray(prospects) || prospects.length === 0) {
+            setMessages((prev) => [...prev, {
+              id: `system-batch-empty-${Date.now()}`,
+              type: 'system',
+              content: lang === 'fr'
+                ? 'Aucun prospect dans le CRM. Ajoute-en d\'abord depuis la section Prospects.'
+                : 'No prospects in the CRM. Add some from the Prospects section first.',
+              timestamp: new Date(),
+            }]);
+            setIsLoading(false);
+            return;
+          }
+
+          const now = Date.now();
+          const msPerDay = 86_400_000;
+          const eligible = prospects.filter((p) => {
+            if (!p?.email || !String(p.email).trim()) return false;
+            if (!intent.statusFilter.includes(p.status)) return false;
+            const lastTs = Number(p.lastContactAt || p.createdAt || 0);
+            if (!lastTs) return true; // never contacted → include
+            const daysSince = Math.floor((now - lastTs) / msPerDay);
+            return daysSince >= intent.daysThreshold;
+          });
+
+          if (eligible.length === 0) {
+            setMessages((prev) => [...prev, {
+              id: `system-batch-none-${Date.now()}`,
+              type: 'system',
+              content: lang === 'fr'
+                ? `Aucun prospect éligible (email requis, statut dans ${intent.statusFilter.join(', ')}, silence ≥ ${intent.daysThreshold} jours). 👌`
+                : `No eligible prospects (email required, status in ${intent.statusFilter.join(', ')}, silent ≥ ${intent.daysThreshold} days). 👌`,
+              timestamp: new Date(),
+            }]);
+            setIsLoading(false);
+            return;
+          }
+
+          // Cap at 20 to keep costs sane and UI manageable
+          const capped = eligible.slice(0, 20);
+
+          // Push loading placeholder
+          const batchId = `batch-${Date.now()}`;
+          const loadingId = `batch-followup-loading-${batchId}`;
+          setMessages((prev) => [...prev, {
+            id: loadingId,
+            type: 'batch-followup-loading',
+            total: capped.length,
+            daysThreshold: intent.daysThreshold,
+            timestamp: new Date(),
+          }]);
+
+          // Generate messages in parallel, chunked by 5
+          const items = [];
+          const CHUNK = 5;
+          for (let i = 0; i < capped.length; i += CHUNK) {
+            const slice = capped.slice(i, i + CHUNK);
+            const results = await Promise.all(slice.map(async (p) => {
+              const lastTs = Number(p.lastContactAt || p.createdAt || 0);
+              const daysSince = lastTs ? Math.floor((now - lastTs) / msPerDay) : intent.daysThreshold;
+              const msg = await generateFollowupMessage(p, { daysSinceContact: daysSince, lang });
+              return msg ? {
+                prospectId:   p.id,
+                prospectName: p.contactName || p.name || p.businessName || 'Contact',
+                businessName: p.businessName || p.name || '',
+                email:        p.email,
+                status:       p.status || 'Contacté',
+                daysSince,
+                subject:      msg.subject,
+                body:         msg.body,
+                selected:     true,
+              } : null;
+            }));
+            items.push(...results.filter(Boolean));
+          }
+
+          if (items.length === 0) {
+            setMessages((prev) => prev.filter((m) => m.id !== loadingId));
+            setMessages((prev) => [...prev, {
+              id: `system-batch-gen-fail-${Date.now()}`,
+              type: 'system',
+              content: lang === 'fr' ? 'Impossible de générer les relances — réessaie.' : 'Failed to generate follow-ups — retry.',
+              timestamp: new Date(),
+            }]);
+            setIsLoading(false);
+            return;
+          }
+
+          // Replace loading with the editable batch card
+          setMessages((prev) => prev.map((m) => m.id === loadingId
+            ? {
+                id:             `batch-followup-preview-${batchId}`,
+                type:           'batch-followup-preview',
+                batchId,
+                items,
+                daysThreshold:  intent.daysThreshold,
+                timestamp:      new Date(),
+              }
+            : m
+          ));
+        }
+        setIsLoading(false);
+        return;
+      } catch (err) {
+        console.warn('[Batch followup] error:', err.message);
+        // fall through
+      }
+    }
+    // ── End Batch follow-up intent detection ─────────────────────────────────
+
     const PDF_TRIGGERS = ['pdf', 'rapport', 'report', 'document', 'export', 'fais-moi', 'fais moi', 'donne-moi', 'donne moi', 'drop'];
     const isPdfDrop = PDF_TRIGGERS.some((t) => text.toLowerCase().includes(t));
 
@@ -1105,6 +1398,8 @@ export default function App() {
       // ── End Gmail injection ───────────────────────────────────────────────────
 
       const combinedContext = [gmailCtxBlock, dateCtx, pulseCtx, checkInCtx, emotionCtx, winsCtx, financialContext, historyContext, memContext, calendarContext].filter(Boolean).join('\n\n') || null;
+      // Meeting Room: maturity suffix tells agents how directive/reactive to be this session
+      const maturityCtx = getMaturityPhase(sessionCount);
       const result = await runSession(
         text.trim() || (attachment?.type === 'image' ? `Analyze this image and give me strategic advice.` : `Analyze the attached file: ${attachment?.name}`),
         messages.filter((m) => m.type === 'user' || m.type === 'agent'),
@@ -1118,7 +1413,8 @@ export default function App() {
         streamCallbacks,
         thinkingMode,
         conversationState,
-        lang
+        lang,
+        maturityCtx?.behaviorSuffix || ''
       );
 
       // Flush any pending RAF token update
@@ -1200,6 +1496,55 @@ export default function App() {
               topicLocked: !shouldReset && !isNewAgent && (prev.topicLocked || prev.threadDepth > 0),
             };
           });
+        }
+
+        // ── Update topic tracker with whatever agents just said ──────────
+        try {
+          const allAgentText = (result.responses || []).map((r) => r.content).join('\n');
+          updateTopicTracker(allAgentText);
+        } catch { /* ignore */ }
+
+        // ── Layer 1 + 3: Interjection pass ──────────────────────────────
+        // Only 1 interjection per turn. Cooldown handled by interjectCooldownRef.
+        // Skip entirely if: isFocus mode (single agent by design), if result
+        // already has supporting agents that said something, or cooldown active.
+        const leadAgentKey = result.activeAgent;
+        const leadResponse = result.responses?.find((r) => r.agent === leadAgentKey)?.content || '';
+        const supportingSpoke = (result.responses || []).filter((r) => r.agent !== leadAgentKey && r.content && r.content.trim() !== '—').length > 0;
+        const focusMode = sessionMode === 'focus' || sessionMode === 'prepCall' || sessionMode === 'negotiation' || sessionMode === 'debate' || sessionMode === 'analysis';
+
+        if (leadAgentKey && leadResponse && !supportingSpoke && !focusMode && !interjectCooldownRef.current) {
+          (async () => {
+            try {
+              const staleTopics = getStaleTopics(Date.now())
+                .filter((s) => s.agent !== leadAgentKey); // don't surface pressure for the lead's own domain
+              const interject = await analyzeInterjection({
+                leadAgent:    leadAgentKey,
+                userMessage:  text,
+                leadResponse,
+                staleTopics,
+                lang,
+              });
+              if (!interject) return;
+              // Cooldown: skip interjections on the next turn
+              interjectCooldownRef.current = true;
+              setTimeout(() => { interjectCooldownRef.current = false; }, 30_000);
+              // Small visual delay so the interjection lands like a natural beat
+              await new Promise((r) => setTimeout(r, 400));
+              setMessages((prev) => [...prev, {
+                id:        `interject-${Date.now()}-${interject.agent}`,
+                type:      'agent',
+                agent:     interject.agent,
+                content:   interject.content,
+                streaming: false,
+                timestamp: new Date(),
+                meta:      { source: 'interject', trigger: interject.trigger, leadAgent: leadAgentKey },
+              }]);
+              console.log('[Interject]', interject.agent, 'via', interject.trigger);
+            } catch (err) {
+              console.warn('[Interject] failed:', err.message);
+            }
+          })();
         }
       }
     } catch (err) {
@@ -1595,6 +1940,85 @@ export default function App() {
     }
   }
 
+  async function handleBatchFollowupSend(msgId, { items, batchId }) {
+    const tokens = getGmailTokens();
+    if (!tokens) {
+      setError(lang === 'fr' ? 'Gmail non connecté — reconnecte depuis l\'accueil.' : 'Gmail not connected — reconnect from home.');
+      return;
+    }
+    const sessionId = sessionIdRef.current;
+    const results = [];
+
+    // Send sequentially with a 500ms gap to avoid spam-trigger heuristics
+    for (const it of items) {
+      try {
+        await gmailService.sendEmail(tokens.access_token, it.email, it.subject, it.body, null);
+        results.push({ ...it, status: 'sent' });
+        // Update prospect.lastContactAt in localStorage + push contactHistory entry
+        try {
+          const list = loadLS('hq_prospects', []);
+          const idx = list.findIndex((p) => String(p.id) === String(it.prospectId));
+          if (idx !== -1) {
+            const now = Date.now();
+            const prev = list[idx];
+            list[idx] = {
+              ...prev,
+              lastContactAt: now,
+              contactHistory: [
+                { date: now, type: 'followup', subject: it.subject, note: `Relance batch: ${it.subject}` },
+                ...(prev.contactHistory || []),
+              ].slice(0, 30),
+            };
+            localStorage.setItem('hq_prospects', JSON.stringify(list));
+          }
+        } catch { /* ignore localStorage write failure */ }
+
+        syncFollowupLog({
+          id:           `${batchId}-${it.prospectId || Math.random().toString(36).slice(2, 9)}`,
+          prospectId:   it.prospectId,
+          prospectName: it.prospectName,
+          subject:      it.subject,
+          body:         it.body,
+          sentAt:       Date.now(),
+          batchId,
+          status:       'sent',
+          sessionId,
+        });
+      } catch (err) {
+        results.push({ ...it, status: 'failed', error: err.message });
+        syncFollowupLog({
+          id:           `${batchId}-${it.prospectId || Math.random().toString(36).slice(2, 9)}-fail`,
+          prospectId:   it.prospectId,
+          prospectName: it.prospectName,
+          subject:      it.subject,
+          body:         it.body,
+          sentAt:       Date.now(),
+          batchId,
+          status:       'failed',
+          sessionId,
+        });
+        if (err.message === 'UNAUTHORIZED') { clearGmailTokens(); setGmailConnected(false); break; }
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    const sent   = results.filter((r) => r.status === 'sent').length;
+    const failed = results.filter((r) => r.status === 'failed').length;
+
+    // Transition the preview message to the applied state
+    setMessages((prev) => prev.map((m) => m.id === msgId
+      ? { ...m, type: 'batch-followup-applied', applied: true, results, sent, failed }
+      : m
+    ));
+
+    toast(
+      lang === 'fr'
+        ? `${sent} relance${sent !== 1 ? 's' : ''} envoyée${sent !== 1 ? 's' : ''}${failed > 0 ? ` · ${failed} échec${failed !== 1 ? 's' : ''}` : ''} ✓`
+        : `${sent} follow-up${sent !== 1 ? 's' : ''} sent${failed > 0 ? ` · ${failed} failure${failed !== 1 ? 's' : ''}` : ''} ✓`,
+      { type: sent > 0 ? 'success' : 'error', duration: 4000 }
+    );
+  }
+
   async function handleSendEmailReply(msgId, to, subject, body, threadId) {
     const tokens = getGmailTokens();
     if (!tokens) {
@@ -1756,6 +2180,7 @@ export default function App() {
             onCreateCalendarEvent={handleCreateCalendarEvent}
             onApplyPipelineUpdate={handleApplyPipelineUpdate}
             onApplyDashboardUpdate={handleApplyDashboardUpdate}
+            onBatchFollowupSend={handleBatchFollowupSend}
             onToast={toast}
           />
         )}

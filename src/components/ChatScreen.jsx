@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Volume2, VolumeX, CheckSquare, Square, ScrollText, Crosshair, Layers, AlertTriangle, Mail, Send, Edit3, X, CheckCircle, Calendar, ExternalLink, TrendingUp, ArrowRight, DollarSign, Minus, Zap, Brain, Trophy, AlertCircle, ArrowUpRight, UserX } from 'lucide-react';
+import { Volume2, VolumeX, CheckSquare, Square, ScrollText, Crosshair, Layers, AlertTriangle, Mail, Send, Edit3, X, CheckCircle, Calendar, ExternalLink, TrendingUp, ArrowRight, DollarSign, Minus, Zap, Brain, Trophy, AlertCircle, ArrowUpRight, UserX, Sunrise, UserCheck, Lock, Users, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import MessageBubble from './MessageBubble.jsx';
 import ChatInput from './ChatInput.jsx';
 import HistoryPanel from './HistoryPanel.jsx';
@@ -45,6 +45,7 @@ export default function ChatScreen({
   onCreateCalendarEvent,
   onApplyPipelineUpdate,
   onApplyDashboardUpdate,
+  onBatchFollowupSend,
   onToast,
 }) {
   const bottomRef = useRef(null);
@@ -402,10 +403,22 @@ export default function ChatScreen({
         )}
 
         {messages.map((msg, idx) => {
-          // ── Memory recap card ──────────────────────────────────────────────
+          // ── Memory recap card (legacy — kept for backward compat) ──────────
           if (msg.type === 'memory-recap-loading' || msg.type === 'memory-recap') {
             return (
               <MemoryRecapCard
+                key={msg.id}
+                message={msg}
+                darkMode={darkMode}
+                lang={lang}
+              />
+            );
+          }
+
+          // ── Morning briefing card (new — replaces memory-recap at session 7+) ──
+          if (msg.type === 'briefing-locked' || msg.type === 'briefing-loading' || msg.type === 'briefing-ready') {
+            return (
+              <MorningBriefingCard
                 key={msg.id}
                 message={msg}
                 darkMode={darkMode}
@@ -422,6 +435,21 @@ export default function ChatScreen({
                 message={msg}
                 darkMode={darkMode}
                 lang={lang}
+              />
+            );
+          }
+
+          // ── Batch follow-up cards (loading / preview / applied) ────────────
+          if (msg.type === 'batch-followup-loading'
+           || msg.type === 'batch-followup-preview'
+           || msg.type === 'batch-followup-applied') {
+            return (
+              <BatchFollowupCard
+                key={msg.id}
+                message={msg}
+                darkMode={darkMode}
+                lang={lang}
+                onSend={onBatchFollowupSend}
               />
             );
           }
@@ -1667,3 +1695,403 @@ function ChurnRiskAlertCard({ message, darkMode, lang }) {
     </div>
   );
 }
+
+// ── Morning briefing card (3 variants: locked / loading / ready) ──────────────
+const BRIEFING_UNLOCK_AT = 7;
+
+function BriefingLine({ Icon, colorRgb, label, text, darkMode }) {
+  if (!text) return null;
+  return (
+    <div className="flex items-start gap-2.5">
+      <div
+        className="flex-shrink-0 flex items-center justify-center rounded-md mt-0.5"
+        style={{
+          width: 22, height: 22,
+          background: `rgba(${colorRgb},0.12)`,
+          border: `1px solid rgba(${colorRgb},0.22)`,
+        }}
+      >
+        <Icon size={11} style={{ color: `rgba(${colorRgb},0.95)` }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: `rgba(${colorRgb},0.85)` }}>
+          {label}
+        </div>
+        <p className="text-[13px] leading-snug" style={{ color: darkMode ? 'rgba(226,232,240,0.95)' : 'rgba(15,23,42,0.9)' }}>
+          {text}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function MorningBriefingCard({ message, darkMode, lang }) {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+
+  const accent = '99,102,241'; // indigo — QG brand
+  const isLocked  = message.type === 'briefing-locked';
+  const isLoading = message.type === 'briefing-loading';
+
+  return (
+    <div className="flex justify-start mb-4 px-1">
+      <div className="w-full max-w-[88%] rounded-2xl overflow-hidden"
+        style={{
+          background: darkMode ? 'rgba(8,12,22,0.85)' : 'rgba(248,250,252,0.95)',
+          border:     `1px solid rgba(${accent},0.22)`,
+          backdropFilter: 'blur(8px)',
+        }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b"
+          style={{ borderColor: `rgba(${accent},0.14)`, background: `rgba(${accent},0.05)` }}>
+          <div className="flex items-center gap-2">
+            {isLocked
+              ? <Lock size={12} style={{ color: `rgba(${accent},0.9)` }} />
+              : <Sunrise size={12} style={{ color: `rgba(${accent},0.9)` }} />}
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: `rgba(${accent},0.9)` }}>
+              {isLocked
+                ? (lang === 'fr' ? 'Briefing — en cours d\'apprentissage' : 'Briefing — learning mode')
+                : (lang === 'fr' ? 'Briefing du matin' : 'Morning briefing')}
+            </span>
+          </div>
+          {!isLoading && (
+            <button
+              onClick={() => setDismissed(true)}
+              aria-label={lang === 'fr' ? 'Fermer' : 'Dismiss'}
+              className="opacity-40 hover:opacity-80 transition-opacity"
+            >
+              <X size={11} style={{ color: darkMode ? 'rgba(148,163,184,0.6)' : 'rgba(100,116,139,0.7)' }} />
+            </button>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="px-4 py-3">
+          {isLocked && (() => {
+            const sessionsDone = Number(message.sessionCount) || 0;
+            const sessionsLeft = Math.max(0, BRIEFING_UNLOCK_AT - sessionsDone);
+            const pct = Math.min(100, Math.round((sessionsDone / BRIEFING_UNLOCK_AT) * 100));
+            return (
+              <div>
+                <p className="text-[13px] leading-relaxed mb-3" style={{ color: darkMode ? 'rgba(203,213,225,0.9)' : 'rgba(30,41,59,0.9)' }}>
+                  {lang === 'fr'
+                    ? `Les agents apprennent à te connaître — ${sessionsLeft} session${sessionsLeft > 1 ? 's' : ''} avant ton premier briefing personnalisé.`
+                    : `The agents are learning about you — ${sessionsLeft} session${sessionsLeft > 1 ? 's' : ''} until your first personalized briefing.`}
+                </p>
+                {/* Progress bar */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: `rgba(${accent},0.12)` }}>
+                    <div
+                      style={{
+                        width: `${pct}%`, height: '100%',
+                        background: `rgba(${accent},0.7)`,
+                        transition: 'width 600ms ease',
+                      }}
+                    />
+                  </div>
+                  <span className="text-[10px] font-bold" style={{ color: `rgba(${accent},0.85)` }}>
+                    {sessionsDone} / {BRIEFING_UNLOCK_AT}
+                  </span>
+                </div>
+                <p className="text-[11px] italic mt-3" style={{ color: darkMode ? 'rgba(148,163,184,0.6)' : 'rgba(100,116,139,0.7)' }}>
+                  {lang === 'fr'
+                    ? 'Plus de sessions = briefing plus précis.'
+                    : 'More sessions = more precise briefing.'}
+                </p>
+              </div>
+            );
+          })()}
+
+          {isLoading && (
+            <div className="space-y-2">
+              <div className="skeleton-line skeleton" style={{ height: 10, width: '72%', borderRadius: 4 }} />
+              <div className="skeleton-line skeleton" style={{ height: 10, width: '88%', borderRadius: 4 }} />
+              <div className="skeleton-line skeleton" style={{ height: 10, width: '65%', borderRadius: 4 }} />
+              <div className="skeleton-line skeleton" style={{ height: 10, width: '80%', borderRadius: 4 }} />
+            </div>
+          )}
+
+          {!isLocked && !isLoading && (
+            <div className="space-y-2.5">
+              <BriefingLine Icon={Mail}         colorRgb="16,185,129"  label={lang === 'fr' ? 'Emails' : 'Emails'}      text={message.emailsLine}   darkMode={darkMode} />
+              <BriefingLine Icon={Calendar}     colorRgb="251,191,36"  label={lang === 'fr' ? 'Calendrier' : 'Calendar'} text={message.calendarLine} darkMode={darkMode} />
+              <BriefingLine Icon={ArrowUpRight} colorRgb="99,102,241"  label={lang === 'fr' ? 'Prochain move' : 'Next move'} text={message.nextMoveLine} darkMode={darkMode} />
+              <BriefingLine Icon={UserCheck}    colorRgb="239,68,68"   label={lang === 'fr' ? 'Prospect à relancer' : 'Prospect to touch'} text={message.prospectLine} darkMode={darkMode} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Batch follow-up card (loading / preview / applied) ───────────────────────
+const FOLLOWUP_STATUS_COLORS = {
+  'Contacté': '249,115,22',
+  'Répondu':  '250,204,21',
+  'Chaud':    '239,68,68',
+  'Démo':     '139,92,246',
+};
+
+function BatchFollowupCard({ message, darkMode, lang, onSend }) {
+  const [dismissed, setDismissed] = useState(false);
+  const [sending, setSending]     = useState(false);
+  // Local editable copy of items
+  const [items, setItems] = useState(() => (message.items || []).map((it) => ({ ...it })));
+  const [expandedId, setExpandedId] = useState(null);
+  // Sync when the message's items change (e.g. applied transition)
+  if (dismissed) return null;
+
+  const accent = '139,92,246'; // violet — pipeline / CRM family
+
+  // ── Loading ────────────────────────────────────────────────────────────
+  if (message.type === 'batch-followup-loading') {
+    return (
+      <div className="flex justify-start mb-4 px-1">
+        <div className="w-full max-w-[88%] rounded-2xl overflow-hidden"
+          style={{ background: darkMode ? 'rgba(8,12,22,0.9)' : 'rgba(248,250,252,0.95)', border: `1px solid rgba(${accent},0.22)` }}>
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b"
+            style={{ borderColor: `rgba(${accent},0.14)`, background: `rgba(${accent},0.05)` }}>
+            <Loader2 size={12} className="animate-spin" style={{ color: `rgba(${accent},0.9)` }} />
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: `rgba(${accent},0.9)` }}>
+              {lang === 'fr' ? `Génération de ${message.total} relance${message.total > 1 ? 's' : ''}…` : `Generating ${message.total} follow-up${message.total > 1 ? 's' : ''}…`}
+            </span>
+          </div>
+          <div className="px-4 py-4 space-y-2">
+            <div className="skeleton-line skeleton" style={{ height: 10, width: '65%', borderRadius: 4 }} />
+            <div className="skeleton-line skeleton" style={{ height: 10, width: '85%', borderRadius: 4 }} />
+            <div className="skeleton-line skeleton" style={{ height: 10, width: '72%', borderRadius: 4 }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Applied (sent summary) ─────────────────────────────────────────────
+  if (message.type === 'batch-followup-applied' || message.applied) {
+    const sent   = Number(message.sent)   || 0;
+    const failed = Number(message.failed) || 0;
+    return (
+      <div className="flex justify-start mb-4 px-1">
+        <div className="w-full max-w-[88%] rounded-2xl overflow-hidden"
+          style={{ background: `rgba(${accent},0.06)`, border: `1px solid rgba(${accent},0.28)` }}>
+          <div className="flex items-center gap-2 px-4 py-3">
+            <CheckCircle size={14} style={{ color: `rgba(${accent},0.95)` }} />
+            <span className="text-sm font-semibold" style={{ color: darkMode ? '#f1f5f9' : '#0f172a' }}>
+              {lang === 'fr'
+                ? `${sent} relance${sent !== 1 ? 's' : ''} envoyée${sent !== 1 ? 's' : ''}${failed > 0 ? ` · ${failed} échec${failed !== 1 ? 's' : ''}` : ''}`
+                : `${sent} follow-up${sent !== 1 ? 's' : ''} sent${failed > 0 ? ` · ${failed} failure${failed !== 1 ? 's' : ''}` : ''}`}
+            </span>
+          </div>
+          {Array.isArray(message.results) && (
+            <div className="px-4 pb-3">
+              <div className="flex flex-wrap gap-1.5">
+                {message.results.map((r, i) => (
+                  <span key={i}
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded"
+                    style={{
+                      background: r.status === 'sent' ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                      color:      r.status === 'sent' ? 'rgba(16,185,129,0.95)' : 'rgba(239,68,68,0.95)',
+                      border: `1px solid ${r.status === 'sent' ? 'rgba(16,185,129,0.28)' : 'rgba(239,68,68,0.28)'}`,
+                    }}>
+                    {r.prospectName}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Preview (editable) ─────────────────────────────────────────────────
+  const selectedItems = items.filter((it) => it.selected);
+  const toggleSelect = (id) => {
+    setItems((prev) => prev.map((it) => it.prospectId === id ? { ...it, selected: !it.selected } : it));
+  };
+  const updateField = (id, field, value) => {
+    setItems((prev) => prev.map((it) => it.prospectId === id ? { ...it, [field]: value } : it));
+  };
+  const toggleAll = (target) => {
+    setItems((prev) => prev.map((it) => ({ ...it, selected: target })));
+  };
+  const handleSendAll = async () => {
+    if (sending || selectedItems.length === 0) return;
+    setSending(true);
+    try { await onSend?.(message.id, { items: selectedItems, batchId: message.batchId }); }
+    finally { setSending(false); }
+  };
+  const handleSendOne = async (id) => {
+    if (sending) return;
+    const it = items.find((x) => x.prospectId === id);
+    if (!it) return;
+    setSending(true);
+    try { await onSend?.(message.id, { items: [it], batchId: message.batchId }); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div className="flex justify-start mb-4 px-1">
+      <div className="w-full max-w-[88%] rounded-2xl overflow-hidden"
+        style={{ background: darkMode ? 'rgba(8,12,22,0.9)' : 'rgba(248,250,252,0.95)', border: `1px solid rgba(${accent},0.22)` }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b"
+          style={{ borderColor: `rgba(${accent},0.14)`, background: `rgba(${accent},0.05)` }}>
+          <div className="flex items-center gap-2">
+            <Users size={12} style={{ color: `rgba(${accent},0.9)` }} />
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: `rgba(${accent},0.9)` }}>
+              {lang === 'fr' ? `${items.length} relance${items.length > 1 ? 's' : ''} · silence ≥ ${message.daysThreshold}j` : `${items.length} follow-up${items.length > 1 ? 's' : ''} · silent ≥ ${message.daysThreshold}d`}
+            </span>
+          </div>
+          <button
+            onClick={() => setDismissed(true)}
+            aria-label={lang === 'fr' ? 'Fermer' : 'Dismiss'}
+            className="opacity-40 hover:opacity-80 transition-opacity">
+            <X size={11} style={{ color: darkMode ? 'rgba(148,163,184,0.6)' : 'rgba(100,116,139,0.7)' }} />
+          </button>
+        </div>
+
+        {/* Select-all strip */}
+        <div className="flex items-center justify-between px-4 py-2 border-b"
+          style={{ borderColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)' }}>
+          <button
+            onClick={() => toggleAll(selectedItems.length < items.length)}
+            className="text-[10px] font-semibold uppercase tracking-wider"
+            style={{ color: `rgba(${accent},0.85)` }}>
+            {selectedItems.length < items.length
+              ? (lang === 'fr' ? 'Tout sélectionner' : 'Select all')
+              : (lang === 'fr' ? 'Tout désélectionner' : 'Deselect all')}
+          </button>
+          <span className="text-[10px]" style={{ color: darkMode ? 'rgba(148,163,184,0.55)' : 'rgba(100,116,139,0.65)' }}>
+            {selectedItems.length} / {items.length} {lang === 'fr' ? 'sélectionnés' : 'selected'}
+          </span>
+        </div>
+
+        {/* Rows */}
+        <div className="divide-y" style={{ borderColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)' }}>
+          {items.map((it) => {
+            const expanded = expandedId === it.prospectId;
+            const statusRgb = FOLLOWUP_STATUS_COLORS[it.status] || '148,163,184';
+            return (
+              <div key={it.prospectId}
+                style={{
+                  borderBottom: darkMode ? '1px solid rgba(255,255,255,0.04)' : '1px solid rgba(0,0,0,0.05)',
+                  background: it.selected ? 'transparent' : (darkMode ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.02)'),
+                  opacity: it.selected ? 1 : 0.55,
+                }}>
+                {/* Row header */}
+                <div className="flex items-start gap-2.5 px-4 py-2.5">
+                  {/* Checkbox */}
+                  <button
+                    onClick={() => toggleSelect(it.prospectId)}
+                    aria-label={it.selected ? 'Uncheck' : 'Check'}
+                    className="flex-shrink-0 mt-0.5"
+                    style={{
+                      width: 16, height: 16, borderRadius: 4,
+                      background: it.selected ? `rgba(${accent},0.9)` : 'transparent',
+                      border: `1.5px solid ${it.selected ? `rgba(${accent},0.9)` : (darkMode ? 'rgba(148,163,184,0.4)' : 'rgba(100,116,139,0.4)')}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', transition: 'all 150ms',
+                    }}>
+                    {it.selected && <Check size={10} strokeWidth={3} style={{ color: '#fff' }} />}
+                  </button>
+                  {/* Name + meta */}
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpandedId(expanded ? null : it.prospectId)}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-[13px] font-semibold truncate" style={{ color: darkMode ? '#f1f5f9' : '#0f172a' }}>
+                        {it.prospectName}
+                      </p>
+                      {it.businessName && (
+                        <span className="text-[11px]" style={{ color: darkMode ? 'rgba(148,163,184,0.6)' : 'rgba(100,116,139,0.7)' }}>
+                          · {it.businessName}
+                        </span>
+                      )}
+                      <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded"
+                        style={{ background: `rgba(${statusRgb},0.15)`, color: `rgba(${statusRgb},0.95)`, border: `1px solid rgba(${statusRgb},0.28)` }}>
+                        {it.status}
+                      </span>
+                    </div>
+                    <p className="text-[11px] mt-0.5" style={{ color: darkMode ? 'rgba(148,163,184,0.7)' : 'rgba(100,116,139,0.8)' }}>
+                      {it.email} · {lang === 'fr' ? `${it.daysSince}j sans contact` : `${it.daysSince}d silent`}
+                    </p>
+                  </div>
+                  {/* Expand + single send */}
+                  <button
+                    onClick={() => setExpandedId(expanded ? null : it.prospectId)}
+                    aria-label={expanded ? 'Collapse' : 'Expand'}
+                    className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity">
+                    {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                  <button
+                    onClick={() => handleSendOne(it.prospectId)}
+                    disabled={sending || !it.selected}
+                    title={lang === 'fr' ? 'Envoyer uniquement celui-ci' : 'Send this one only'}
+                    className="flex-shrink-0 flex items-center justify-center rounded-md"
+                    style={{
+                      width: 26, height: 26,
+                      background: it.selected ? `rgba(${accent},0.18)` : 'transparent',
+                      border: `1px solid rgba(${accent},${it.selected ? 0.35 : 0.12})`,
+                      color: `rgba(${accent},${it.selected ? 0.95 : 0.4})`,
+                      cursor: it.selected && !sending ? 'pointer' : 'not-allowed',
+                      opacity: it.selected && !sending ? 1 : 0.5,
+                      transition: 'all 150ms',
+                    }}>
+                    <Send size={11} />
+                  </button>
+                </div>
+                {/* Expanded editor */}
+                {expanded && (
+                  <div className="px-4 pb-3 pt-0" style={{ marginLeft: 22 }}>
+                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1" style={{ color: darkMode ? 'rgba(148,163,184,0.55)' : 'rgba(100,116,139,0.65)' }}>
+                      {lang === 'fr' ? 'Sujet' : 'Subject'}
+                    </label>
+                    <input type="text" value={it.subject}
+                      onChange={(e) => updateField(it.prospectId, 'subject', e.target.value)}
+                      className="w-full text-[12px] rounded-md px-2.5 py-1.5 outline-none mb-2"
+                      style={{
+                        background: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                        border: darkMode ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)',
+                        color: darkMode ? '#e2e8f0' : '#1e293b',
+                      }} />
+                    <label className="text-[9px] font-bold uppercase tracking-wider block mb-1" style={{ color: darkMode ? 'rgba(148,163,184,0.55)' : 'rgba(100,116,139,0.65)' }}>
+                      {lang === 'fr' ? 'Corps' : 'Body'}
+                    </label>
+                    <textarea value={it.body}
+                      onChange={(e) => updateField(it.prospectId, 'body', e.target.value)}
+                      rows={8}
+                      className="w-full text-[12px] rounded-md px-2.5 py-1.5 outline-none resize-y"
+                      style={{
+                        background: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                        border: darkMode ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)',
+                        color: darkMode ? '#e2e8f0' : '#1e293b',
+                        fontFamily: 'inherit', lineHeight: 1.5,
+                      }} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer — Send-all */}
+        <div className="flex items-center gap-2 px-4 py-3">
+          <button
+            onClick={handleSendAll}
+            disabled={sending || selectedItems.length === 0}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+            style={{ background: `rgba(${accent},0.9)`, color: '#fff', boxShadow: `0 0 16px rgba(${accent},0.25)` }}>
+            {sending
+              ? <><Loader2 size={11} className="animate-spin" /> {lang === 'fr' ? 'Envoi en cours…' : 'Sending…'}</>
+              : <><Send size={11} /> {lang === 'fr' ? `Envoyer ${selectedItems.length} sélectionné${selectedItems.length > 1 ? 's' : ''}` : `Send ${selectedItems.length} selected`}</>}
+          </button>
+          <span className="text-[10px] ml-auto" style={{ color: darkMode ? 'rgba(148,163,184,0.55)' : 'rgba(100,116,139,0.65)' }}>
+            {lang === 'fr' ? 'Délai 500ms entre chaque · anti-spam' : '500ms gap between sends · anti-spam'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+

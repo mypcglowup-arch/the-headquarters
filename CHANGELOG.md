@@ -2,6 +2,412 @@
 
 ## [Unreleased]
 
+### Added — Phase 3 — Anomaly alerts (baisse > 40% semaine)
+Détection automatique de baisses semaine-sur-semaine sur 3 axes business. Si drop ≥ 40% avec baseline meaningful → l'agent owner ouvre la session avec les chiffres + diagnostic + move concret. Ton direct, jamais alarmiste.
+
+### Les 3 axes surveillés
+
+| Axe | Source principale | Agent owner | Unité comptée |
+|---|---|---|---|
+| **Outreach** | `followup_log` Supabase + `hq_prospects.contactHistory` local | CARDONE | emails + touches prospect |
+| **Pipeline activity** | `hq_prospects.lastContactAt` local | HORMOZI | prospects touchés dans la semaine |
+| **MRR / finances** | `one_time_revenues` + `retainers.updated_at` Supabase + `dashboard.oneTimeRevenues` local | HORMOZI | nouveaux revenus + changements retainer |
+
+### Seuils de déclenchement
+
+- **MIN_BASELINE = 3** : la semaine précédente doit avoir ≥ 3 actions pour être comparable (évite alert sur 1→0)
+- **DROP_THRESHOLD = 40%** : drop doit être ≥ 40% pour fire
+- **COOLDOWN = 7 jours** par axe : une fois alerté, cet axe est mute pendant 7j (évite nagging)
+- **Un seul axe alerté par session** : si plusieurs axes en drop, pick le plus sévère (% le plus élevé)
+
+### Priorité au session start (nouvelle cascade)
+
+```
+1. Anomaly alert (baisse > 40% détectée)    [NEW — top priority]
+2. Meeting Room pattern opening              [existant]
+3. Fil Rouge                                  [existant, sessions 4+]
+4. Locked teaser                              [existant, sessions 1-3]
+```
+
+Si anomaly fire, `briefingLockedRef.current = true` → toutes les couches inférieures skip.
+
+### Fichiers
+
+- `src/utils/anomalyDetector.js` (**NEW**)
+  - `detectAnomalies(sources, now)` — pure function, returns array sorted by severity desc
+  - `pickTopAnomaly(sources, now)` — convenience wrapper
+  - `getWeekWindows(now)` — compute current/previous week boundaries
+  - Cooldown store `qg_anomaly_cooldowns_v1` : `{ axis: { firedAt } }`
+  - Counters par axe : `countOutreach`, `countPipelineActivity`, `countMrrActivity`
+  - Robust : accept both Supabase rows (ISO timestamps) and localStorage entries (number timestamps)
+
+- `src/lib/sync.js`
+  - `fetchWeeklyFollowups(sinceTs)` — Supabase `followup_log.sent_at >= sinceTs`, limit 500
+  - `fetchWeeklyOneTimeRevenues(sinceTs)` — idem sur `one_time_revenues.date`, limit 200
+  - `fetchWeeklyRetainerChanges(sinceTs)` — idem sur `retainers.updated_at`, limit 200
+  - Tous fire-and-forget : return `[]` sur échec / RLS / table missing / Supabase disabled
+
+- `src/api.js` — `generateAnomalyAlert(anomaly, lang)` — Sonnet dans la voix de l'agent owner
+  - Prompt strict : **numbers FIRST**, 2-3 phrases max, ≤ 55 mots
+  - Liste de banned phrasings regex : *"attention"*, *"alerte"*, *"inquiétant"*, *"je remarque"*, *"je voulais te parler"*, etc.
+  - 5 exemples concrets de ton cible dans le prompt
+
+- `src/App.jsx`
+  - Dans `startSession()`, nouveau bloc async PRIORITÉ 1 avant Meeting Room
+  - Fetch 3 Supabase sources en parallèle via `Promise.all`
+  - `pickTopAnomaly()` + `generateAnomalyAlert()` → push agent message
+  - `markAxisFired(axis, now)` → set cooldown 7j
+  - Set `briefingLockedRef.current = true` pour lock les couches inférieures
+
+### Ton ciblé — exemples
+
+| Axe en drop | Voix | Exemple cible (généré par Sonnet) |
+|---|---|---|
+| Outreach | CARDONE | *"2 prospects contactés cette semaine vs 11 la semaine passée. Ton pipeline apprend vite ce qui ne lui arrive pas. Bloque 90 minutes demain matin pour dialer."* |
+| Pipeline | HORMOZI | *"1 mouvement pipeline cette semaine vs 8. Ça se voit dans la vitesse de signature qui suit. Review ta liste Chaud + Démo aujourd'hui avant 18h."* |
+| MRR | HORMOZI | *"Zéro nouveau revenu cette semaine vs 2 retainers ajoutés la précédente. Pas une spirale mais un signal — ton offer peut-être mal positionnée. Rappelle 3 prospects Démo."* |
+
+### Règles anti-alarmiste (stricts dans prompt + regex post-gen)
+
+Banned phrasings :
+- "Attention", "Alerte", "Watch out", "Warning"
+- "Inquiétant", "Concerning", "Worrying", "Problème"
+- "Je remarque", "J'observe", "I notice"
+- "Je voulais te parler de", "I wanted to talk about"
+- "Ne t'inquiète pas", "Don't worry"
+- "Tout n'est pas perdu"
+- Pep talk / motivational closing
+
+Structure imposée : **chiffres en ouverture → 1 observation → 1 move concret**.
+
+### Coût
+- 3 queries Supabase par session start (parallèles, léger — limit 500/200/200)
+- 1 Sonnet call seulement si anomaly fire (≤ 300 tokens)
+- Estimé : **~$0.001 / session** quand anomaly fire, $0 sinon
+
+### Known limitations
+- Si 2 axes drop simultanément avec même sévérité, un seul alerté (le premier en ordre arbitraire)
+- Pipeline activity utilise `lastContactAt` comme proxy — moins précis qu'un vrai log de status changes
+- Cooldown 7j hardcoded (pas user-settable)
+- Pas de "trend over N weeks" — comparaison binaire semaine actuelle vs précédente seulement
+- MRR axis peut être trompé : si Samuel ajoute 5 retainers la semaine X puis 0 la semaine suivante = alert même si normal
+- Si Supabase pas configuré, detection fallback localStorage uniquement : outreach reste viable (contactHistory), pipeline viable (lastContactAt), MRR partial (pas d'historique)
+
+### Added — Phase 3 — 3 couches de présence organique
+Trois mécanismes qui rendent la conversation "vivante" — les agents écoutent en silence et interviennent seulement quand c'est pertinent, jamais sur un calendrier mécanique.
+
+### Layer 1 — L'Agent Observateur
+Après qu'un agent lead réponde, une passe Haiku (`analyzeInterjection`) scanne la conversation. Si un agent non-lead détecte un signal dans le message user que le lead a manqué (hésitation émotionnelle, opportunité cachée, contradiction), il intervient **une fois** brièvement, puis se retire.
+- Exemple : Hormozi parle pricing → user hésite → Voss intervient avec une observation sur la tactical empathy → Hormozi reprend au tour suivant.
+- Règle : jamais 2 interjections d'affilée (cooldown 30s), jamais l'agent lead lui-même.
+
+### Layer 2 — Le Fil Rouge
+**Remplace** le Morning Briefing structuré par défaut (trop rapport). Au lieu d'une card à 4 sections, un **seul agent** tisse en UNE phrase la continuité avec la session précédente.
+- Activé à partir de la session 4 (avant = locked teaser "learning")
+- Pris en charge par l'agent dont le domaine correspond au dernier sujet non résolu
+- Exemple : *"La dernière fois t'étais bloqué sur le pricing de Dubé. T'as dormi là-dessus ?"*
+- Ton : collègue qui entre au bureau, pas un système qui fait un rapport
+
+### Layer 3 — La Pression Silencieuse
+Utilise la même passe `analyzeInterjection` que Layer 1 mais trigger différent : si un topic critique n'a pas été mentionné depuis trop longtemps, l'agent pertinent le glisse naturellement dans la conversation en cours.
+
+| Topic | Agent | Threshold |
+|---|---|---|
+| prospection | CARDONE | 5 jours |
+| pipeline | HORMOZI | 7 jours |
+| finances | HORMOZI | 10 jours |
+| content | GARYV | 10 jours |
+| strategy | NAVAL | 14 jours |
+| negotiation | VOSS | 14 jours |
+
+Détection par keywords FR+EN dans chaque message user ET agent. Tracking localStorage (`qg_topic_tracker_v1`).
+
+### Règles anti-mécanique (stricts)
+
+Toutes les 3 couches partagent des guardrails :
+- **Regex post-génération** bannit : *"Je remarque"*, *"J'observe"*, *"Depuis X jours"*, *"En passant"*, *"Petit point"*, *"Je te glisse"*, *"I'd just add"*, *"By the way"*, *"Real quick"*, *"Si je peux me permettre"*, etc.
+- **Confidence bar** : 0.70 pour Layer 1 (observer), 0.65 pour Layer 3 (silent pressure), 0.50 pour Fil Rouge
+- **Domain check** : l'agent interject reste dans son domaine (VOSS négocie, HORMOZI chiffre)
+- **Content must be NOVEL** : prompt interdit de rephraser le lead
+- **Max 150 chars** pour interjection, ≤ 140 chars pour Fil Rouge
+- **Silence acceptable** : si unsure → shouldInterject=false. Mieux rien qu'un faux pas
+
+### Fichiers
+
+- `src/utils/topicTracker.js` (**NEW**)
+  - `TOPICS` config avec keywords FR+EN + agent owner + threshold per topic
+  - `updateTopicTracker(text)` scan + mark every detected topic
+  - `getStaleTopics(now)` returns topics older than their threshold, sorted by staleness desc
+  - `markTopicMentioned(key)` / `getLastMention(key)` helpers
+  - localStorage `qg_topic_tracker_v1`
+
+- `src/api.js`
+  - `generateFilRouge({lastSession, memories, lang})` — Sonnet, ONE sentence ≤ 140 chars, agent-voice selection by domain of last unresolved topic
+  - `analyzeInterjection({leadAgent, userMessage, leadResponse, staleTopics, lang})` — Haiku JSON, unifies Layer 1 (observer) + Layer 3 (silent pressure) triggers, returns null OR `{agent, content, trigger}`
+  - 5 "good tone" + 5 "bad tone" examples in Fil Rouge prompt for calibration
+
+- `src/App.jsx`
+  - `startSession` : sessions ≥ 4 use Fil Rouge (pushed as normal agent message, not a card). Sessions 1-3 keep locked teaser. Meeting Room pattern still has priority.
+  - `sendMessage` :
+    - Topic tracker updated on user text AND on all agent responses (includes lead + supporting)
+    - After lead response, if no supporting agent spoke AND not in focus/prep/neg/analysis/debate mode AND not in cooldown → run `analyzeInterjection`. If positive, push a second agent message after a 400ms visual beat.
+    - `interjectCooldownRef` prevents back-to-back (30s lockout)
+
+### Comment Layer 2 (Fil Rouge) remplace le Morning Briefing
+
+Avant :
+```
+Session 7+ → Morning Briefing card structurée (Emails / Cal / Next / Prospect)
+```
+
+Maintenant :
+```
+Session 4+ → Fil Rouge agent message (1 phrase continuité narrative)
+```
+
+La card structurée reste dans le code (backward compat, au cas où) mais n'est plus push par défaut. Le Fil Rouge feel moins "système" et plus "humain".
+
+### Flow complet au session start
+
+```
+Session start
+  ↓
+Meeting Room pattern check (critical patterns)
+  ├─ fire → agent opens on pattern (existing)
+  └─ no fire → 
+      ↓
+  Sessions 1-3? → locked teaser card (learning)
+  Sessions 4+ ? → Fil Rouge (1-sentence narrative)
+```
+
+### Flow par turn
+
+```
+User sends message
+  ↓ updateTopicTracker(user text)
+  ↓ Lead agent responds (streaming)
+  ↓ updateTopicTracker(agent responses)
+  ↓ analyzeInterjection (Haiku, 1 shot)
+  ├─ shouldInterject=true → push 2nd agent message after 400ms beat
+  └─ shouldInterject=false → silence, done
+  ↓ interjectCooldownRef lockout 30s
+```
+
+### Coût
+- Fil Rouge : 1 Sonnet call par session start où session ≥ 4 → ~$0.002 / session
+- Interjection : 1 Haiku call par turn → ~$0.0003 / message
+- Topic tracker : 0$ (localStorage pur)
+
+Total estimé : **< $0.10 par mois** en usage normal.
+
+### Known limitations
+- Focus / prep / negotiation / analysis / debate modes n'ont pas d'interjection (par design — ils ont des logiques d'agents dédiés)
+- Topic tracker basé sur keywords : peut rater un sujet nuancé ("j'ai parlé au client" ne match pas "prospection")
+- Le Fil Rouge ne se déclenche que s'il y a du contenu à relayer (sinon silence)
+- Interject cooldown est global (30s) — si l'user pose une question complexe nécessitant plusieurs perspectives, une seule interjection par turn max
+- La Pression Silencieuse peut fire sur plusieurs topics simultanément mais Haiku n'en choisit qu'UN (le plus prioritaire)
+
+### Added — Phase 3 — Salle de réunion (onboarding organique + pattern overrides)
+Le comportement des agents s'adapte maintenant à la **maturité** de la relation avec Samuel (phase) ET peut être override par des **patterns négatifs** détectés automatiquement. L'objectif : ne jamais se sentir mécanique, toujours "lire la pièce".
+
+### Couche A — Maturity phase (toujours active)
+
+| Sessions | Phase | Comportement par défaut |
+|---|---|---|
+| 1-3 | `foundational` | Agents dirigent, posent les fondations, questions fondatrices |
+| 4-7 | `dialogue` | Dialogue progressif, espace donné à l'user |
+| 8-15 | `partnership` | Réactifs sauf signal clair, peer-to-peer, brief |
+| 15+ | `reactive` | Liberté totale, n'interviennent que sur patterns critiques |
+
+Suffix injecté dans chaque prompt agent via `runSession` → modulation invisible mais perceptible par l'utilisateur (ton, rythme, initiative).
+
+### Couche B — Pattern-triggered proactive opening (override)
+
+Au démarrage de session, Haiku scanne memories + 5 dernières sessions + retainers + pipeline. Si un pattern négatif crosse la barre de sévérité de la phase en cours ET n'est pas en cooldown → l'agent pertinent **ouvre la session** avec un message naturel.
+
+**8 patterns catalogués :**
+
+| Pattern | Agent qui ouvre | Trigger |
+|---|---|---|
+| `avoidance_prospection` | CARDONE | Aucune mention prospection sur 3+ sessions |
+| `repeated_block` | ROBBINS | Même blocage dans 3+ sessions sans résolution |
+| `decision_without_execution` | HORMOZI | Consensus action 2+ sessions passées sans suivi |
+| `energy_drop` | ROBBINS | Mots "fatigué/saturé/stuck" dans 2+ sessions récentes |
+| `ignored_opportunity` | CARDONE | Prospect Chaud/Démo/Répondu sans contact > 14j |
+| `stale_retainer` | VOSS | Retainer actif sans activité > 30j (churn risk) |
+| `silence_on_long_term` | NAVAL | Pas de vision long-terme depuis 10+ sessions |
+| `content_stall` | GARYV | Pas de contenu/brand depuis 5+ sessions |
+
+### Règles anti-mécanique (strictes dans le prompt d'ouverture)
+
+Interdictions explicites — si Sonnet produit un de ces phrasings, rejet automatique :
+- "Je remarque que..." / "J'observe que..." / "I notice..."
+- "Pattern détecté" / "Signal observé"
+- "Depuis X jours..." stated comme un compteur mécanique
+- "Je voulais te parler de..." / "On doit parler de..."
+- Sentence structures qui ressemblent à un system report
+- Opening avec une question (il faut entrer avec un POINT)
+
+Guardrails de sécurité :
+- Guardrail 1 : regex check post-génération qui rejette les phrasings bannis
+- Guardrail 2 : confidence ≥ 0.7 pour surfacer un pattern
+- Guardrail 3 : sévérité minimum monte avec la phase (medium en early, high en `reactive` 15+)
+
+### Cooldown anti-repeat
+
+- Chaque pattern type stocké dans `qg_meeting_room_state_v1` avec `lastFiredAt`
+- Même pattern bloqué pendant **3 sessions** suivantes (Cardone ne harcèle pas)
+- Prune automatique des entrées > 100 sessions pour éviter unbounded growth
+
+### Fichiers
+
+- `src/utils/meetingRoom.js` (**NEW**)
+  - `getMaturityPhase(sessionCount)` → `{ phase, behaviorSuffix, minSeverityForIntervention }`
+  - `isPatternCooledDown()` / `markPatternFired()` / `pruneCooldowns()`
+  - `pickBestPattern(patterns, sessionCount, maturity)` respecte cooldown + phase severity bar
+- `src/api.js`
+  - `detectMeetingPatterns({sessionCount, memories, recentSessions, retainers, prospects, lang})` — Haiku JSON, 8 types de patterns, confidence ≥ 0.7, max 3 retournés
+  - `generateAgentOpening({agent, pattern, maturity, lang})` — Sonnet dans la voix de l'agent + règles strictes anti-robot + guardrail regex post-gen
+  - `runSession` nouveau param `maturitySuffix` injecté dans leadSystem + supportSystem
+- `src/App.jsx`
+  - `startSession` : async détection patterns + proactive opening AVANT briefing. Si pattern fire → push agent message + suppress briefing via `briefingLockedRef`
+  - `sendMessage` : injection `maturitySuffix` dans `runSession` pour moduler le comportement de chaque réponse agent selon la phase
+
+### Pourquoi ça ne casse pas le feeling
+
+1. **Aucune UI spéciale** — c'est un message agent comme les autres, streamé avec le même style
+2. **Aucune annonce** — `meta.source = 'meetingRoom'` pour debugging, mais jamais affiché à l'user
+3. **Cooldown** — pas de martellement
+4. **Severity bar adaptatif** — session 15+ ne voit que les critical, jamais de micro-alertes
+5. **Phase 15+ reactive** — les agents partent en retrait par défaut. Silence si rien d'urgent.
+
+### Coût
+~$0.003 par session start quand patterns détectés (1 Haiku detect + 1 Sonnet opening). ~$0 quand silence (Haiku est le seul call, et retourne vite en no-match).
+
+### Known limitations
+- Cooldown partagé entre toutes les sessions (pas per-context)
+- Pas de feedback loop : si l'user rejette l'opening, pas de signal pour ajuster
+- Memory Viewer ne distingue pas visuellement les "source" des mémoires qui déclenchent les patterns
+- Maturity suffix actuellement appliqué dans leadSystem + supportSystem SEULEMENT (pas dans les modes specialty : prepCall, negotiation, analysis, debate — à étendre si besoin)
+
+### Added — Phase 3 — Follow-up batch NLP
+Une commande naturelle *"relance tous les prospects sans réponse depuis 7 jours"* déclenche maintenant une génération parallèle de relances personnalisées pour chaque prospect éligible du CRM. Samuel review/édite chaque message puis envoie par batch ou individuellement. Chaque envoi met à jour le prospect (`lastContactAt` + `contactHistory`) et log dans Supabase.
+
+### Flow
+
+```
+"relance tous les prospects sans réponse depuis 7 jours"
+  ↓ Haiku extractBatchFollowupIntent → { daysThreshold, statusFilter, confidence }
+  ↓ Filter hq_prospects: email exists + status in [Contacté/Répondu/Chaud/Démo] + days≥threshold
+  ↓ Cap 20 prospects, chunk par 5 pour Sonnet generateFollowupMessage (parallel)
+  ↓ Push batch-followup-preview card avec checkboxes + editable per-item
+  ↓ User action :
+     ├─ Send all selected → sequential Gmail sends (délai 500ms anti-spam)
+     └─ Per-item Send → 1 email + log
+  ↓ Per success : prospect.lastContactAt = now + contactHistory entry + syncFollowupLog
+  ↓ Toast récap : "X envoyés · Y échecs"
+```
+
+### Fichiers
+
+- `src/api.js`
+  - `extractBatchFollowupIntent(text, lang)` — Haiku JSON `{isBatchFollowup, daysThreshold, statusFilter, confidence}`. Parse "semaine"=7, "2 semaines"=14, "mois"=30. Default statusFilter exclut Signé/Client actif/Perdu.
+  - `generateFollowupMessage(prospect, {daysSinceContact, lang})` — Sonnet JSON `{subject, body}`. Ton status-adapté (Contacté=re-engage léger, Démo=direct post-démo). Règles strict : pas de "j'espère que tu vas bien", pas de fausse urgence, ONE concrete ask, sign off "Samuel".
+
+- `src/App.jsx`
+  - `BATCH_FOLLOWUP_TRIGGERS` bilingue (*"relance tous"*, *"batch relance"*, *"ghostés"*, *"follow up all"*, etc.)
+  - Détection + filtrage + parallel gen chunked par 5
+  - `handleBatchFollowupSend(msgId, {items, batchId})` — Gmail sequential avec 500ms entre chaque envoi, update `prospect.lastContactAt` + push `contactHistory`, fire `syncFollowupLog` par item (succès et échecs)
+  - Messages system si aucun prospect éligible / aucun prospect dans CRM
+
+- `src/lib/sync.js` — `syncFollowupLog({id, prospectId, prospectName, subject, body, sentAt, batchId, status, sessionId})` fire-and-forget
+
+- `src/components/ChatScreen.jsx` — `BatchFollowupCard` avec 3 variants :
+  - `batch-followup-loading` : header violet + spinner + "Génération de N relances…"
+  - `batch-followup-preview` : header count + "silence ≥ Xj" + select-all strip + liste éditable (checkbox + nom + business + status pill + days + expand/collapse + per-row Send) + footer "Envoyer N sélectionnés"
+  - `batch-followup-applied` : résumé vert "X envoyés · Y échecs" + chips nommés colorés par statut
+
+### SQL à exécuter dans Supabase
+```sql
+CREATE TABLE IF NOT EXISTS followup_log (
+  id             text PRIMARY KEY,
+  prospect_id    text,
+  prospect_name  text,
+  subject        text,
+  body           text,
+  sent_at        timestamptz DEFAULT now(),
+  batch_id       text,
+  status         text,                        -- 'sent' | 'failed' | 'skipped'
+  session_id     bigint,
+  created_at     timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_followup_prospect ON followup_log (prospect_id, sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_followup_batch    ON followup_log (batch_id);
+```
+Sans ce SQL, la feature fonctionne 100% (localStorage source truth) — juste pas de backup cloud.
+
+### Règles de filtrage par défaut
+
+| Statut prospect | Inclus ? |
+|---|---|
+| Incomplet | ❌ |
+| Cible | ❌ |
+| Prêt | ❌ |
+| Contacté | ✅ |
+| Répondu | ✅ |
+| Chaud | ✅ |
+| Démo | ✅ |
+| Signé | ❌ |
+| Client actif | ❌ |
+| Perdu | ❌ |
+
+L'utilisateur peut override via phrasing explicite : *"relance les prospects en démo"* → Haiku retourne `statusFilter: ["Démo"]`.
+
+### Safeguards anti-spam
+- **Cap 20 prospects** par batch (beyond ça = probablement pas une intention légitime)
+- **Délai 500ms** entre chaque `gmailService.sendEmail` — échelonne la charge Gmail
+- **401 UNAUTHORIZED** → stop immédiat + toast, pas d'envoi en cascade
+- **Update prospect localStorage AVANT next iteration** → même batch ne peut pas re-contacter un prospect déjà touché si relancé quickly
+
+### Known limitations
+- Pas d'annulation en cours de batch (trust Gmail queue)
+- Cap 20 hardcoded (pas réglable user-side)
+- Pas de preview de la façon dont l'email sera rendu chez le prospect (raw text)
+- `contactHistory` entry simplifiée — type='followup' + note standard, pas d'AI-enrichie
+- Pas encore de dashboard pour lire le `followup_log` Supabase (scope future)
+
+### Added — Phase 3 — Morning briefing conditionnel (session 7+)
+Le démarrage de session affiche maintenant un briefing du matin qui s'adapte à l'ancienneté de l'utilisateur. En dessous de 7 sessions, Samuel voit un **teaser "learning mode"** avec progress bar vers le déverrouillage. À partir de session 7, un **briefing complet 4 sections** est généré depuis Mem0 + Gmail + Calendar + retainers + dernière session.
+
+**Pourquoi conditionnel :** un briefing généré sans historique → filler générique *"tu as bien travaillé hier"*. Avec ≥ 7 sessions, Mem0 a assez de signal pour nommer des personnes, des deals, des blockers spécifiques.
+
+### Les 3 variants de la card
+
+| Session | Variant | Contenu |
+|---|---|---|
+| 1 | — | Skip (aucun historique) |
+| 2-6 | `briefing-locked` | *"Les agents apprennent à te connaître — X sessions avant ton premier briefing personnalisé."* + progress bar X/7 |
+| 7+ | `briefing-ready` | 4 sections colorées : **Emails** (emerald) · **Calendrier** (gold) · **Prochain move** (indigo) · **Prospect à relancer** (red) |
+
+### Sources agrégées (session 7+)
+
+- **Mem0** — memories long-terme (max 8)
+- **Gmail** — top 3 unread business (filtré par `isBusinessEmail`)
+- **Calendar** — next 5 events des 14 prochains jours
+- **Dashboard** — retainers triés par staleness (`lastTouchedAt` oldest first)
+- **Session history** — consensus + keyDecisions de la dernière session
+
+### Fichiers modifiés
+
+- `src/api.js` — nouvelle fonction `generateMorningBriefing({memories, lastSession, retainers, emails, calendarEvents, lang})` — Sonnet JSON, ≤ 100 chars par field, ≥ 2 fields requis, confidence ≥ 0.5 sinon drop
+- `src/components/ChatScreen.jsx` — nouveau composant `MorningBriefingCard` (3 variants locked/loading/ready) + helper `BriefingLine`
+- `src/App.jsx` — logique conditionnelle dans `startSession()` remplace l'ancien memory-recap flow par le briefing. `BRIEFING_UNLOCK_AT = 7`. L'ancien `MemoryRecapCard` reste dans le code pour rétrocompat mais n'est plus appelé au démarrage
+
+### Known limitations
+- Pas de replay/persistance du briefing (one-shot par session)
+- Threshold 7 hardcoded (futur : setting user)
+- Si Mem0 disabled, session 7+ = pas de briefing du tout (pas de fallback teaser)
+
 ### Added — Phase 3 — Workflow Builder V1
 Nouvelle section accessible depuis la nav (icon Wrench). Samuel pick un template → répond à 5 questions → QG génère un package complet en parallèle : **JSON Make.com prêt à importer + guide d'installation + sales script NT Solutions avec pricing auto**. Export PDF brandé.
 
