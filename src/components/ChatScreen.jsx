@@ -1952,6 +1952,17 @@ function BatchFollowupCard({ message, darkMode, lang, onSend }) {
           </button>
         </div>
 
+        {/* Ordering explanation — one italic line explaining the priority sort */}
+        {message.orderingExplanation && (
+          <div className="px-4 py-2.5 border-b"
+            style={{ borderColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)' }}>
+            <p className="text-[12px] italic leading-snug"
+              style={{ color: darkMode ? 'rgba(203,213,225,0.85)' : 'rgba(51,65,85,0.88)' }}>
+              {message.orderingExplanation}
+            </p>
+          </div>
+        )}
+
         {/* Select-all strip */}
         <div className="flex items-center justify-between px-4 py-2 border-b"
           style={{ borderColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)' }}>

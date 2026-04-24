@@ -1211,8 +1211,33 @@ export default function App() {
             return;
           }
 
-          // Cap at 20 to keep costs sane and UI manageable
+          // Sort by priority: Démo > Chaud > Répondu > Contacté (most engaged first)
+          // Then cap at 20 to keep costs sane and UI manageable.
+          const STATUS_PRIORITY = { 'Démo': 1, 'Chaud': 2, 'Répondu': 3, 'Contacté': 4 };
+          eligible.sort((a, b) => {
+            const rankA = STATUS_PRIORITY[a.status] || 99;
+            const rankB = STATUS_PRIORITY[b.status] || 99;
+            if (rankA !== rankB) return rankA - rankB;
+            // Same status → oldest lastContactAt first (most urgent to re-touch)
+            const tsA = Number(a.lastContactAt || a.createdAt || 0);
+            const tsB = Number(b.lastContactAt || b.createdAt || 0);
+            return tsA - tsB;
+          });
           const capped = eligible.slice(0, 20);
+
+          // Build ordering explanation — counts per status in the capped set
+          const statusCounts = capped.reduce((acc, p) => {
+            acc[p.status] = (acc[p.status] || 0) + 1;
+            return acc;
+          }, {});
+          const ordered = ['Démo', 'Chaud', 'Répondu', 'Contacté']
+            .filter((s) => statusCounts[s] > 0)
+            .map((s) => `${statusCounts[s]} ${s}`);
+          const orderingExplanation = ordered.length > 0
+            ? (lang === 'fr'
+                ? `J'ai classé du plus chaud au plus froid — ${ordered.join(' · ')}. On attaque les Démo en premier, c'est là que l'argent est le plus proche.`
+                : `Sorted hottest-to-coldest — ${ordered.join(' · ')}. Démo first — that's where the money is closest.`)
+            : '';
 
           // Push loading placeholder
           const batchId = `batch-${Date.now()}`;
@@ -1269,6 +1294,7 @@ export default function App() {
                 batchId,
                 items,
                 daysThreshold:  intent.daysThreshold,
+                orderingExplanation,
                 timestamp:      new Date(),
               }
             : m

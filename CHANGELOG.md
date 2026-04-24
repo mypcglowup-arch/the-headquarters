@@ -2,6 +2,120 @@
 
 ## [Unreleased]
 
+### Added — Phase 3 — Plateau prediction (widget Trajectoire)
+Nouveau widget Dashboard qui projette le MRR sur 90 jours selon 2 scénarios (trajectoire actuelle vs avec actions correctives) et détecte un plateau. Quand plateau détecté → Sonnet génère un diagnostic chiffré + 3 actions concrètes, ton Naval/Hormozi, zéro motivational.
+
+### Math de détection (locale, pure function)
+
+```js
+currentMRR        = sum(retainers.amount)
+newMRR/mo         = sum(retainers.amount where startedAt last 90d) / 3
+growthRate        = newMRR/mo / currentMRR
+avgOutreach/sem   = count(contactHistory entries last 30d) / 4.3
+closingRate       = (Signé + Client actif) / (all contacted statuses)
+
+isPlateau =
+  currentMRR ≥ 500 AND
+  retainerCount ≥ 2 AND
+  growthRate < 5% AND
+  (avgOutreach < 5/sem OR closingRate < 10%)
+```
+
+### Scenarios (projection 90 jours)
+
+| Scénario | Formule |
+|---|---|
+| **Trajectoire actuelle** | `currentMRR + (newMRR/mo × 3)` |
+| **Avec actions** | `currentMRR + (newMRR/mo × 3 × 2.4)` (2x outreach × 1.2x closing = 2.4x uplift) |
+
+### Widget "Trajectoire"
+
+3 variants selon l'état :
+
+- **Pas assez de données** (< 2 retainers ou < $500 MRR) → message sobre "Pas assez de données pour projeter"
+- **Croissance saine** (pas de plateau) → bandeau vert + 2 scénarios + ligne italique *"Tu ajoutes X retainers/mois en moyenne. Tiens le rythme."* (aucun LLM call)
+- **Plateau détecté** → bandeau amber + Sonnet brief (diagnostic + 3 actions + scénarios prose)
+
+### Cache 24h
+
+`qg_plateau_brief_v1` en localStorage avec fingerprint `{currentMRR|retainerCount|newRate|outreach|closingRate}`. Si les données changent → invalidation automatique → re-génération. Sinon pas de re-call Sonnet pendant 24h.
+
+### Ton strict (Naval/Hormozi blend)
+
+Banned phrasings (prompt + regex post-gen) :
+- *"Tu peux y arriver"*, *"Crois en toi"*, *"You got this"*
+- *"N'abandonne pas"*, *"Garde le cap"*, *"Stay the course"*
+- *"C'est normal d'avoir des plateaux"* (minimise)
+- *"Attention"*, *"Warning"*, *"Alerte"*
+- *"Travaille plus fort"*, *"Work harder"*, *"Stay focused"*
+- Emojis
+
+Structure imposée :
+- `headline` : ≤ 80 chars, chiffrée
+- `diagnostic` : 2 phrases, explique WHAT stagne et WHY les chiffres le disent
+- `actions` : 3 items avec `title` (verbe + objet concret), `rationale` (pourquoi cette action vs bottleneck), `impact` ($ ou %)
+- `scenarioCurrent` + `scenarioWithActions` : 1 phrase chacun avec chiffres
+
+### Fichiers
+
+- `src/utils/plateauForecaster.js` (**NEW**)
+  - `computeForecast({retainers, prospects, followupCount30d, now})` — pure function
+  - `makeForecastFingerprint(forecast)` — cache invalidation
+  - `THRESHOLDS` constants centralisés pour tuning
+
+- `src/api.js` — `generatePlateauBrief(forecast, lang)` — Sonnet JSON `{ headline, diagnostic, actions[], scenarioCurrent, scenarioWithActions }` avec regex guardrail
+
+- `src/components/TrajectoryWidget.jsx` (**NEW**)
+  - 3 variants : pas-assez-data / croissance-saine / plateau
+  - Cache 24h avec fingerprint check
+  - Scenarios strip partagé entre variants (left: actuel, arrow, right: avec actions)
+  - Plateau variant : diagnostic + 3 action cards numérotées + scenarios prose
+
+- `src/components/DashboardScreen.jsx`
+  - Import + render `<TrajectoryWidget>` après `<RevenueBreakdown>`
+  - Lit `hq_prospects` localStorage pour calculer closingRate + contactHistory count
+
+### Exemple brief Sonnet cible (plateau détecté)
+
+```json
+{
+  "headline": "$2,400 MRR depuis 3 mois, 2% de croissance. Le moteur cale.",
+  "diagnostic": "Ton closing rate est à 8% et tu fais 3 outreach/semaine. Les deux sont sous le seuil — tu n'alimentes plus le haut du funnel et ce qui entre ne convertit pas.",
+  "actions": [
+    {
+      "title": "Bloque 90 min/jour × 5 pour dialer — 10 calls/jour = 50/semaine",
+      "rationale": "Triple ton volume sans changer le reste. Ton bottleneck #1 est le manque d'inputs.",
+      "impact": "+$1,800 MRR sur 90j si closing tient 8%"
+    },
+    {
+      "title": "Structure tes Démo : checklist 5 objections + slide prix fixe",
+      "rationale": "Closing rate de 8% = problème de cadre, pas de volume. Enlève le live-quote.",
+      "impact": "Closing 8% → 15% minimum"
+    },
+    {
+      "title": "Cap prochain client à $750/mo minimum, pas $400",
+      "rationale": "Ton MRR moyen tire vers le bas. Plus haut = moins de clients à trouver pour atteindre $5K.",
+      "impact": "+$350/mo par nouveau retainer"
+    }
+  ],
+  "scenarioCurrent": "Rythme actuel : $2,400 → ~$2,650 dans 90 jours (~10%).",
+  "scenarioWithActions": "Avec les 3 moves : $2,400 → $3,800 sur 90 jours (+58%)."
+}
+```
+
+### Coût
+- Math local : $0
+- Sonnet brief : **uniquement si plateau détecté**, ≤ 900 tokens = ~$0.003
+- Cache 24h → max 1 call/jour même si user ouvre Dashboard 10x
+
+### Known limitations
+- **newMRR calculation** basé sur `retainers.startedAt` — si aucun retainer dans les 90 derniers jours, growthRate = 0 (peut faussement déclencher plateau si user vient de commencer)
+- **Closing rate** dérivé de la distribution actuelle des prospects (pas un historique) — biaisé si le CRM est mal maintenu
+- **followupCount30d** lu depuis `hq_prospects.contactHistory` local uniquement (pas Supabase `followup_log` dans ce patch — TODO futur)
+- **Uplift multiplier** hardcoded à 2.4x (2x outreach × 1.2x closing) — simpliste, pas personnalisé
+- **Pas de sensitivity analysis** : 1 scénario "with actions" uniquement, pas de "best/worst case"
+- Cache invalidation ne détecte pas les changements de `followupCount30d` (seulement retainers) — peut rester stale si Samuel envoie des follow-ups sans toucher aux retainers
+
 ### Added — Phase 3 — Anomaly alerts (baisse > 40% semaine)
 Détection automatique de baisses semaine-sur-semaine sur 3 axes business. Si drop ≥ 40% avec baseline meaningful → l'agent owner ouvre la session avec les chiffres + diagnostic + move concret. Ton direct, jamais alarmiste.
 

@@ -4,6 +4,7 @@ import { generateDashboardAction } from '../api.js';
 import GmailInbox from './GmailInbox.jsx';
 import MemoryViewer from './MemoryViewer.jsx';
 import RevenueBreakdown from './RevenueBreakdown.jsx';
+import TrajectoryWidget from './TrajectoryWidget.jsx';
 import { isMem0Enabled } from '../lib/mem0.js';
 import { t } from '../i18n.js';
 
@@ -1314,6 +1315,34 @@ export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr',
         <RevenueBreakdown
           retainers={retainers}
           oneTimeRevenues={oneTimeRevenues}
+          c={c}
+          lang={lang}
+        />
+
+        {/* ── Trajectoire — 90-day forecast + plateau detection ── */}
+        <TrajectoryWidget
+          retainers={retainers}
+          prospects={(() => {
+            try {
+              const list = JSON.parse(localStorage.getItem('hq_prospects') || '[]');
+              return Array.isArray(list) ? list : [];
+            } catch { return []; }
+          })()}
+          followupCount30d={(() => {
+            try {
+              const log = JSON.parse(localStorage.getItem('hq_focus_log') || '[]');
+              const cutoff = Date.now() - 30 * 86_400_000;
+              const fups = JSON.parse(localStorage.getItem('hq_prospects') || '[]');
+              const list = Array.isArray(fups) ? fups : [];
+              let count = 0;
+              for (const p of list) {
+                for (const h of (p?.contactHistory || [])) {
+                  if (Number(h?.date) >= cutoff) count++;
+                }
+              }
+              return count;
+            } catch { return 0; }
+          })()}
           c={c}
           lang={lang}
         />

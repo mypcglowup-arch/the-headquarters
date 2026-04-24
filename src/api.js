@@ -1639,6 +1639,139 @@ Output ONLY the JSON object.`;
   }
 }
 
+// ─── Plateau brief — diagnostic + 3 corrective actions ──────────────────────
+// Given a computed forecast (from plateauForecaster), generate a direct,
+// chiffré diagnostic in the voice of HORMOZI (numbers guy) blended with
+// NAVAL's systems angle. No pep talk. No "you got this". Just math + moves.
+export async function generatePlateauBrief(forecast, lang = 'fr') {
+  if (!forecast) return null;
+
+  const closingRatePct = Math.round((forecast.closingRate || 0) * 100);
+  const growthRatePct  = Math.round((forecast.growthRate  || 0) * 100);
+  const upliftPctRounded = Math.round((forecast.upliftPct || 0) * 100);
+
+  const bottleneckText = forecast.bottleneck === 'both'
+    ? (lang === 'fr' ? 'outreach ET taux de closing en dessous des seuils' : 'both outreach AND closing rate below thresholds')
+    : forecast.bottleneck === 'outreach'
+    ? (lang === 'fr' ? 'volume d\'outreach en dessous de 5/semaine' : 'outreach volume below 5/week')
+    : forecast.bottleneck === 'closing'
+    ? (lang === 'fr' ? 'taux de closing en dessous de 10%' : 'closing rate below 10%')
+    : (lang === 'fr' ? 'croissance stagnante' : 'stalled growth');
+
+  const system = `You write a PLATEAU DIAGNOSTIC for Samuel (NT Solutions consultant). Tone = HORMOZI (numbers-first) meets NAVAL (systems thinking). Zero motivational talk. Reply STRICT JSON only.
+
+Samuel's forecast (real numbers):
+  Current MRR:         $${forecast.currentMRR}/mo
+  Active retainers:    ${forecast.retainerCount}
+  New retainers / mo:  ${forecast.newRetainersPerMonth}
+  New MRR / mo:        $${forecast.newMrrPerMonth}
+  Growth rate:         ${growthRatePct}% / mo
+  Outreach / week:     ${forecast.avgOutreachPerWeek}
+  Closing rate:        ${closingRatePct}%
+  90-day MRR (current trajectory):  $${forecast.mrr90Current}
+  90-day MRR (with corrective actions): $${forecast.mrr90Improved} (+${upliftPctRounded}%)
+  Primary bottleneck: ${bottleneckText}
+
+Schema:
+{
+  "headline":   string,   // ≤ 80 chars. Direct. Number-driven. No fluff.
+  "diagnostic": string,   // 2 sentences. Explains WHAT is stalling and WHY the numbers say so. Chiffré.
+  "actions": [
+    {
+      "title":     string,   // ≤ 60 chars. Imperative verb + concrete object (ex: "Double l'outreach: 10 dials/jour 5 jours/semaine")
+      "rationale": string,   // 1 sentence. Why this specific action shifts the bottleneck.
+      "impact":    string    // ≤ 60 chars. Estimated $ or % impact on 90-day MRR.
+    },
+    // EXACTLY 3 actions
+  ],
+  "scenarioCurrent":     string,  // 1 sentence. Paints the current trajectory in plain language + $.
+  "scenarioWithActions": string   // 1 sentence. Paints improved trajectory + $ delta.
+}
+
+HARD RULES (violations → garbage):
+
+NEVER write any of these:
+  - "Tu peux y arriver" / "Crois en toi" / "You got this"
+  - "N'abandonne pas" / "Garde le cap" / "Stay the course"
+  - "C'est normal d'avoir des plateaux" (minimises)
+  - "Attention" / "Warning" / "Alerte"
+  - "Il faut" / "Tu dois" (orders without justification)
+  - Motivational closings / pep talk
+  - Generic "build systems" / "stay focused" advice
+  - Vague "work harder"
+  - Emojis
+
+DO write:
+  - Numbers in the FIRST sentence of everything (headline, diagnostic, scenarios)
+  - Actions that have a DEADLINE or a CADENCE (per week, per day, by Friday)
+  - Rationale tied to the SPECIFIC bottleneck identified
+  - Impact expressed as $ or % delta
+  - Cold, deliberate tone — like a senior ops partner reading the P&L
+
+Good action examples (tone target):
+  - "Bloque 90 min/jour × 5 pour dialer — 10 calls/jour = 50/semaine" → double ton outreach, targets bottleneck
+  - "Monte ton retainer moyen: cap prochain client à $750/mo, pas $400" → +$3K MRR sur 10 closes
+  - "Structure Démo: checklist 5 objections + slide prix fixe. Closing rate peut monter à 20%."
+
+Language: ${lang === 'fr' ? 'FRANÇAIS québécois, tutoiement, direct' : 'ENGLISH, you, direct'}.
+
+Output ONLY the JSON. No prose outside it.`;
+
+  try {
+    const text = await callClaude(
+      system,
+      [{ role: 'user', content: 'Generate the plateau brief.' }],
+      900, false, null, false, false, 'HORMOZI', 'claude-sonnet-4-5'
+    );
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+
+    // Validate shape
+    if (!parsed.headline || !parsed.diagnostic || !Array.isArray(parsed.actions) || parsed.actions.length < 2) {
+      console.warn('[generatePlateauBrief] invalid shape');
+      return null;
+    }
+    const actions = parsed.actions.slice(0, 3).map((a) => ({
+      title:     String(a.title || '').slice(0, 120).trim(),
+      rationale: String(a.rationale || '').slice(0, 220).trim(),
+      impact:    String(a.impact || '').slice(0, 120).trim(),
+    })).filter((a) => a.title);
+    if (actions.length < 2) return null;
+
+    const brief = {
+      headline:             String(parsed.headline).slice(0, 140).trim(),
+      diagnostic:           String(parsed.diagnostic).slice(0, 400).trim(),
+      actions,
+      scenarioCurrent:      String(parsed.scenarioCurrent || '').slice(0, 220).trim(),
+      scenarioWithActions:  String(parsed.scenarioWithActions || '').slice(0, 220).trim(),
+    };
+
+    // Regex guardrail — reject if banned motivational phrasings slipped in
+    const banned = [
+      /\btu peux y arriver\b/i, /\bcrois en toi\b/i, /\byou got this\b/i,
+      /\bn[''']abandonne pas\b/i, /\bdon[''']t give up\b/i,
+      /\bgarde le cap\b/i, /\bstay the course\b/i,
+      /\bc[''']est normal d[''']avoir\b/i, /\bit[''']s normal to\b/i,
+      /\battention\b/i, /\bwarning\b/i, /\balerte\b/i,
+      /\btravaille plus fort\b/i, /\bwork harder\b/i,
+      /\brest[ae] focus\b/i, /\bstay focused\b/i,
+    ];
+    const joined = [brief.headline, brief.diagnostic, brief.scenarioCurrent, brief.scenarioWithActions, ...actions.flatMap((a) => [a.title, a.rationale, a.impact])].join(' | ');
+    for (const re of banned) {
+      if (re.test(joined)) {
+        console.warn('[generatePlateauBrief] rejected — banned phrase:', re);
+        return null;
+      }
+    }
+
+    return brief;
+  } catch (err) {
+    console.warn('[generatePlateauBrief] failed:', err.message);
+    return null;
+  }
+}
+
 // ─── Anomaly alert — week-over-week drop notification ───────────────────────
 // Given a detected anomaly (current < previous by ≥ 40% on an axis), generate
 // a short direct message in the voice of the owner agent. Numbers FIRST,
