@@ -54,15 +54,54 @@ export async function syncDecisions(decisions, sessionId) {
   if (!isSupabaseEnabled() || !decisions?.length) return;
   try {
     const rows = decisions.map((d) => ({
+      id:          typeof d === 'object' ? (d.id || null) : null,
       session_id:  sessionId || null,
       decision:    typeof d === 'string' ? d : d.decision,
       agent:       typeof d === 'string' ? 'GENERAL' : (d.agent || 'GENERAL'),
       decided_at:  typeof d === 'string' ? new Date().toISOString() : (d.date || new Date().toISOString()),
+      outcome:     typeof d === 'object' ? (d.outcome || null) : null,
+      outcome_comment: typeof d === 'object' ? (d.outcomeComment || null) : null,
+      outcome_recorded_at: typeof d === 'object' && d.outcomeDate
+        ? new Date(d.outcomeDate).toISOString()
+        : null,
     }));
-    await supabase.from('decisions').insert(rows);
+    // Upsert by id so outcome updates don't duplicate the row
+    await supabase.from('decisions').upsert(rows, { onConflict: 'id', ignoreDuplicates: false });
   } catch (e) {
     console.warn('[Sync] syncDecisions failed:', e.message);
   }
+}
+
+// Update a single decision's outcome without re-writing the whole record.
+export async function syncDecisionOutcome(id, outcome, comment) {
+  if (!isSupabaseEnabled() || !id) return;
+  try {
+    await supabase.from('decisions').update({
+      outcome:              outcome || null,
+      outcome_comment:      comment || null,
+      outcome_recorded_at:  new Date().toISOString(),
+    }).eq('id', id);
+  } catch (e) {
+    console.warn('[Sync] syncDecisionOutcome failed:', e.message);
+  }
+}
+
+// Fetch decisions still awaiting an outcome (≥ daysOld old). Used at session
+// start to build the reminder card. Fire-and-forget — returns [] on error.
+export async function fetchDecisionsAwaitingOutcome(daysOld = 30) {
+  if (!isSupabaseEnabled()) return [];
+  try {
+    const cutoff = new Date(Date.now() - daysOld * 86_400_000).toISOString();
+    const { data, error } = await supabase
+      .from('decisions')
+      .select('id, decision, agent, decided_at, outcome')
+      .is('outcome', null)
+      .lte('decided_at', cutoff)
+      .order('decided_at', { ascending: true })
+      .limit(20);
+    if (error) { console.warn('[Sync] fetchDecisionsAwaitingOutcome:', error.message); return []; }
+    return Array.isArray(data) ? data : [];
+  } catch (e) { console.warn('[Sync] fetchDecisionsAwaitingOutcome failed:', e.message); return []; }
 }
 
 // ─── Feedback ─────────────────────────────────────────────────────────────────

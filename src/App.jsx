@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { runSession, archiveSession, callConsensus, getDailyQuote, getMomentumMirror, generateMondayReport, callClaudeStream, draftEmailReply, analyzeEmail, extractCalendarEvent, extractPipelineAction, extractDashboardUpdate, generateMemoryRecap, generateMorningBriefing, extractBatchFollowupIntent, generateFollowupMessage, detectMeetingPatterns, generateAgentOpening, generateFilRouge, analyzeInterjection, generateAnomalyAlert } from './api.js';
+import { runSession, archiveSession, callConsensus, getDailyQuote, getMomentumMirror, generateMondayReport, callClaudeStream, draftEmailReply, analyzeEmail, extractCalendarEvent, extractPipelineAction, extractDashboardUpdate, generateMemoryRecap, generateMorningBriefing, extractBatchFollowupIntent, generateFollowupMessage, detectMeetingPatterns, generateAgentOpening, generateFilRouge, analyzeInterjection, generateAnomalyAlert, extractActionableDecision, formatTrackRecord } from './api.js';
 import { getMaturityPhase, pickBestPattern, markPatternFired, pruneCooldowns } from './utils/meetingRoom.js';
 import { updateTopicTracker, getStaleTopics } from './utils/topicTracker.js';
 import { pickTopAnomaly, markAxisFired, getWeekWindows } from './utils/anomalyDetector.js';
@@ -10,7 +10,7 @@ import { updateStreak } from './utils/streak.js';
 import { logAppOpen, logSessionStart } from './utils/momentum.js';
 import { saveSession, formatHistoryContext, loadHistory } from './utils/sessionHistory.js';
 import { useAutoSave, mergeSaveStatus } from './hooks/useAutoSave.js';
-import { syncSession, syncDecisions, syncImprovementItem, syncImprovementStatus, syncFeedback, syncMomentum, syncAgentNames, syncExpense, syncOneTimeRevenue, syncRetainer, syncRetainerDelete, syncDashboardState, fetchDashboardState, syncFollowupLog, fetchWeeklyFollowups, fetchWeeklyOneTimeRevenues, fetchWeeklyRetainerChanges } from './lib/sync.js';
+import { syncSession, syncDecisions, syncImprovementItem, syncImprovementStatus, syncFeedback, syncMomentum, syncAgentNames, syncExpense, syncOneTimeRevenue, syncRetainer, syncRetainerDelete, syncDashboardState, fetchDashboardState, syncFollowupLog, fetchWeeklyFollowups, fetchWeeklyOneTimeRevenues, fetchWeeklyRetainerChanges, syncDecisionOutcome } from './lib/sync.js';
 import { searchMemories, addSessionMemory, addArchivistMemory, fetchMemoriesForRecap, isMem0Enabled } from './lib/mem0.js';
 import { getDayGreeting } from './utils/greeting.js';
 import {
@@ -645,6 +645,47 @@ export default function App() {
 
     if (!alreadyFired && sessionCount > 0) {
       recapFiredForSessionRef.current = thisSessionId;
+
+      // ── Priority 0: Decision outcome reminder ──────────────────────────
+      // If there's a decision 30+ days old still awaiting outcome → prompt
+      // for it before anything else. Cooldown 7d per reminder (stored in LS).
+      (async () => {
+        try {
+          if (briefingLockedRef.current) return;
+          const LS_REMIND_COOLDOWNS = 'qg_decision_reminder_cooldowns_v1';
+          const cooldowns = (() => {
+            try { return JSON.parse(localStorage.getItem(LS_REMIND_COOLDOWNS) || '{}'); } catch { return {}; }
+          })();
+          const cutoff = Date.now() - 30 * 86_400_000;
+          // Find the OLDEST decision without outcome that isn't in cooldown
+          const pending = (decisions || [])
+            .filter((d) => d && d.id && !d.outcome)
+            .filter((d) => Number(d.date) <= cutoff)
+            .filter((d) => {
+              const last = cooldowns[d.id];
+              return !last || (Date.now() - last) > 7 * 86_400_000;
+            })
+            .sort((a, b) => Number(a.date) - Number(b.date));
+          if (pending.length === 0) return;
+          const pick = pending[0];
+          if (briefingLockedRef.current) return;
+          setMessages((prev) => [...prev, {
+            id:        `decision-reminder-${thisSessionId}-${pick.id}`,
+            type:      'decision-reminder',
+            decisionId: pick.id,
+            decision:  pick.decision,
+            agent:     pick.agent,
+            date:      pick.date,
+            timestamp: new Date(),
+          }]);
+          cooldowns[pick.id] = Date.now();
+          try { localStorage.setItem(LS_REMIND_COOLDOWNS, JSON.stringify(cooldowns)); } catch { /* ignore */ }
+          briefingLockedRef.current = true; // suppress lower layers when a reminder fires
+          console.log('[Decision reminder] fired:', pick.id);
+        } catch (err) {
+          console.warn('[Decision reminder] failed:', err.message);
+        }
+      })();
 
       // ── Priority 1: Anomaly alert ────────────────────────────────────
       // Checks week-over-week drops on outreach / pipeline / MRR. If a drop
@@ -1425,7 +1466,11 @@ export default function App() {
 
       const combinedContext = [gmailCtxBlock, dateCtx, pulseCtx, checkInCtx, emotionCtx, winsCtx, financialContext, historyContext, memContext, calendarContext].filter(Boolean).join('\n\n') || null;
       // Meeting Room: maturity suffix tells agents how directive/reactive to be this session
+      // Also inject the lead-agent's track record (past decisions + outcomes) so
+      // their advice is calibrated on what's actually worked for Samuel.
       const maturityCtx = getMaturityPhase(sessionCount);
+      const trackRecordSuffix = activeFocus ? formatTrackRecord(decisions, activeFocus) : '';
+      const combinedSuffix = [maturityCtx?.behaviorSuffix || '', trackRecordSuffix].filter(Boolean).join('\n\n');
       const result = await runSession(
         text.trim() || (attachment?.type === 'image' ? `Analyze this image and give me strategic advice.` : `Analyze the attached file: ${attachment?.name}`),
         messages.filter((m) => m.type === 'user' || m.type === 'agent'),
@@ -1440,7 +1485,7 @@ export default function App() {
         thinkingMode,
         conversationState,
         lang,
-        maturityCtx?.behaviorSuffix || ''
+        combinedSuffix
       );
 
       // Flush any pending RAF token update
@@ -1529,6 +1574,49 @@ export default function App() {
           const allAgentText = (result.responses || []).map((r) => r.content).join('\n');
           updateTopicTracker(allAgentText);
         } catch { /* ignore */ }
+
+        // ── Decision detection — extract actionable decisions from the lead response
+        // Runs async in background, non-blocking. If Haiku identifies an
+        // actionable decision, we log it + push an inline mini-card.
+        (async () => {
+          try {
+            const leadAgent = result.activeAgent;
+            const leadContent = result.responses?.find((r) => r.agent === leadAgent)?.content || '';
+            if (!leadAgent || !leadContent || leadContent.length < 80) return;
+            const extracted = await extractActionableDecision(leadContent, lang);
+            if (!extracted) return;
+            const decisionId = `dec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const newDecision = {
+              id:       decisionId,
+              decision: extracted.decision,
+              agent:    leadAgent,
+              date:     Date.now(),
+              outcome:  null,
+              outcomeComment: null,
+              outcomeDate: null,
+              sessionId: sessionIdRef.current,
+            };
+            setDecisions((prev) => {
+              const next = [newDecision, ...prev];
+              // Fire-and-forget sync (upsert by id)
+              syncDecisions([newDecision], sessionIdRef.current);
+              return next;
+            });
+            // Push an inline confirmation card right after the lead response
+            setMessages((prev) => [...prev, {
+              id:        `decision-logged-${decisionId}`,
+              type:      'decision-logged',
+              decisionId,
+              decision:  extracted.decision,
+              agent:     leadAgent,
+              date:      Date.now(),
+              timestamp: new Date(),
+            }]);
+            console.log('[Decision] logged from', leadAgent, '—', extracted.decision);
+          } catch (err) {
+            console.warn('[Decision detection] failed:', err.message);
+          }
+        })();
 
         // ── Layer 1 + 3: Interjection pass ──────────────────────────────
         // Only 1 interjection per turn. Cooldown handled by interjectCooldownRef.
@@ -2073,6 +2161,27 @@ export default function App() {
 
   function updateDecisionOutcome(id, outcome) {
     setDecisions((prev) => prev.map((d) => d.id === id ? { ...d, outcome } : d));
+    syncDecisionOutcome(id, outcome, null);
+  }
+
+  // Full outcome record — used by decision-reminder card. Writes outcome +
+  // comment + timestamp. Also transforms the reminder message into a
+  // confirmation message in-place so the user sees their input landed.
+  function handleRecordDecisionOutcome(msgId, decisionId, outcome, comment) {
+    const nowTs = Date.now();
+    setDecisions((prev) => prev.map((d) => d.id === decisionId
+      ? { ...d, outcome, outcomeComment: comment || null, outcomeDate: nowTs }
+      : d
+    ));
+    syncDecisionOutcome(decisionId, outcome, comment || null);
+    setMessages((prev) => prev.map((m) => m.id === msgId
+      ? { ...m, type: 'decision-outcome-recorded', applied: true, outcome, comment: comment || null, recordedAt: nowTs }
+      : m
+    ));
+    toast(
+      lang === 'fr' ? 'Résultat enregistré ✓' : 'Outcome recorded ✓',
+      { type: 'success', duration: 2500 }
+    );
   }
 
   function updateImprovementStatus(id, status) {
@@ -2207,6 +2316,7 @@ export default function App() {
             onApplyPipelineUpdate={handleApplyPipelineUpdate}
             onApplyDashboardUpdate={handleApplyDashboardUpdate}
             onBatchFollowupSend={handleBatchFollowupSend}
+            onRecordDecisionOutcome={handleRecordDecisionOutcome}
             onToast={toast}
           />
         )}

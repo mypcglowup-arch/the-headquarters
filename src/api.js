@@ -1639,6 +1639,97 @@ Output ONLY the JSON object.`;
   }
 }
 
+// ─── Decision outcome tracking ──────────────────────────────────────────────
+// After an agent responds, detect if their advice contains a concrete
+// actionable decision Samuel could execute on. If yes → returns the decision
+// text (concise, imperative form). 30 days later, the app asks him how it
+// went — and that outcome flows back into the agent's context.
+export async function extractActionableDecision(agentResponse, lang = 'fr') {
+  if (!agentResponse || typeof agentResponse !== 'string') return null;
+  if (agentResponse.length < 80) return null; // too short to carry a real decision
+
+  const system = `You decide if an agent's message contains a CONCRETE ACTIONABLE DECISION that the user (Samuel) could execute on. Reply STRICT JSON only.
+
+Schema:
+{
+  "isDecision": boolean,
+  "decision":   string,   // imperative form, ≤ 140 chars. Ex: "Cap next retainer at $750/mo minimum"
+  "confidence": number    // 0 to 1
+}
+
+IS a decision (qualifies):
+  - "Cap your next retainer at $750/mo"
+  - "Stack the onboarding + 2 calls + priority support bundle"
+  - "Call 10 prospects per day, 5 days a week"
+  - "Cut your offer from 3 tiers to 1"
+  - "Send the proposal to Dubé by Thursday"
+  - "Block 90 min mornings for dialing"
+
+NOT a decision (skip):
+  - Questions ("Tu as réfléchi à...?")
+  - Observations ("Ton pipeline est faible")
+  - General principles ("Le prix est signal de valeur")
+  - Reformulations of the user's question
+  - Motivational statements
+  - "You should think about..." (thinking ≠ doing)
+  - Multi-step plans (we track ONE concrete action; skip if the response is a full multi-step plan)
+
+HARD RULES:
+- confidence < 0.75 → isDecision=false. Better to miss than log noise.
+- decision must be ONE imperative sentence. Pick the MOST concrete single action if there are many.
+- Language of the decision field: ${lang === 'fr' ? 'FRANÇAIS (query language the agent used)' : 'ENGLISH'}. Match the agent's original language.
+- Imperative form, not "you should..." — "Cap next retainer at $750".
+- Output ONLY the JSON.
+
+Agent response:
+"""
+${agentResponse.slice(0, 1500)}
+"""`;
+
+  try {
+    const text = await callClaude(system, [{ role: 'user', content: 'Extract the actionable decision, if any.' }], 200, false, null, false, false, 'COORDINATOR', HAIKU_MODEL);
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    if (!parsed.isDecision) return null;
+    if (typeof parsed.confidence !== 'number' || parsed.confidence < 0.75) return null;
+    const decision = String(parsed.decision || '').trim().replace(/^["']|["']$/g, '');
+    if (!decision || decision.length < 10 || decision.length > 180) return null;
+    return { decision, confidence: parsed.confidence };
+  } catch (err) {
+    console.warn('[extractActionableDecision] failed:', err.message);
+    return null;
+  }
+}
+
+// Format recent decisions-with-outcomes for injection into an agent's system
+// prompt. Each agent sees ONLY their own past track record — no cross-agent
+// contamination. Returns empty string if nothing to show.
+export function formatTrackRecord(decisions, targetAgent) {
+  if (!Array.isArray(decisions) || !targetAgent) return '';
+  const relevant = decisions
+    .filter((d) => d && d.agent === targetAgent && d.outcome)
+    .slice(-8);                    // last 8 with outcomes
+  if (relevant.length === 0) return '';
+
+  const lines = relevant.map((d) => {
+    const dateStr = d.date ? new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '?';
+    const icon = d.outcome === 'positive' ? '✓'
+               : d.outcome === 'negative' ? '✗'
+               : '~';
+    const comment = d.outcomeComment ? ` — "${String(d.outcomeComment).slice(0, 100)}"` : '';
+    return `  ${icon} ${dateStr}: "${d.decision}"${comment}`;
+  }).join('\n');
+
+  return `YOUR TRACK RECORD WITH SAMUEL (your past advice + what actually happened — calibrate accordingly):
+${lines}
+
+Rules for using this:
+- If a past recommendation led to ✗ (negative outcome), don't blindly repeat it — acknowledge what didn't work and adjust.
+- If ✓ patterns emerge, lean into what's been validated.
+- Never mention this track record directly to Samuel. Just let it shape your judgment silently.`;
+}
+
 // ─── Plateau brief — diagnostic + 3 corrective actions ──────────────────────
 // Given a computed forecast (from plateauForecaster), generate a direct,
 // chiffré diagnostic in the voice of HORMOZI (numbers guy) blended with

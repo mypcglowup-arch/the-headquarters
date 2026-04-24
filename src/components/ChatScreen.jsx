@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Volume2, VolumeX, CheckSquare, Square, ScrollText, Crosshair, Layers, AlertTriangle, Mail, Send, Edit3, X, CheckCircle, Calendar, ExternalLink, TrendingUp, ArrowRight, DollarSign, Minus, Zap, Brain, Trophy, AlertCircle, ArrowUpRight, UserX, Sunrise, UserCheck, Lock, Users, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Volume2, VolumeX, CheckSquare, Square, ScrollText, Crosshair, Layers, AlertTriangle, Mail, Send, Edit3, X, CheckCircle, Calendar, ExternalLink, TrendingUp, ArrowRight, DollarSign, Minus, Zap, Brain, Trophy, AlertCircle, ArrowUpRight, UserX, Sunrise, UserCheck, Lock, Users, Loader2, ChevronDown, ChevronUp, Flag, Target } from 'lucide-react';
 import MessageBubble from './MessageBubble.jsx';
 import ChatInput from './ChatInput.jsx';
 import HistoryPanel from './HistoryPanel.jsx';
@@ -46,6 +46,7 @@ export default function ChatScreen({
   onApplyPipelineUpdate,
   onApplyDashboardUpdate,
   onBatchFollowupSend,
+  onRecordDecisionOutcome,
   onToast,
 }) {
   const bottomRef = useRef(null);
@@ -450,6 +451,39 @@ export default function ChatScreen({
                 darkMode={darkMode}
                 lang={lang}
                 onSend={onBatchFollowupSend}
+              />
+            );
+          }
+
+          // ── Decision cards (logged / reminder / outcome-recorded) ──────────
+          if (msg.type === 'decision-logged') {
+            return (
+              <DecisionLoggedCard
+                key={msg.id}
+                message={msg}
+                darkMode={darkMode}
+                lang={lang}
+              />
+            );
+          }
+          if (msg.type === 'decision-reminder') {
+            return (
+              <DecisionReminderCard
+                key={msg.id}
+                message={msg}
+                darkMode={darkMode}
+                lang={lang}
+                onRecord={onRecordDecisionOutcome}
+              />
+            );
+          }
+          if (msg.type === 'decision-outcome-recorded') {
+            return (
+              <DecisionOutcomeRecordedCard
+                key={msg.id}
+                message={msg}
+                darkMode={darkMode}
+                lang={lang}
               />
             );
           }
@@ -2105,4 +2139,194 @@ function BatchFollowupCard({ message, darkMode, lang, onSend }) {
   );
 }
 
+// ── Decision cards (logged / reminder / outcome-recorded) ────────────────────
+
+const AGENT_COLOR_BY_KEY = {
+  HORMOZI: '59,130,246',
+  CARDONE: '239,68,68',
+  ROBBINS: '139,92,246',
+  GARYV:   '249,115,22',
+  NAVAL:   '16,185,129',
+  VOSS:    '71,107,175',
+  SYNTHESIZER: '212,175,55',
+  COORDINATOR: '148,163,184',
+};
+
+function formatDateShort(ts, lang) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', { month: 'short', day: 'numeric' });
+}
+
+function DecisionLoggedCard({ message, darkMode, lang }) {
+  const rgb = AGENT_COLOR_BY_KEY[message.agent] || '99,102,241';
+  return (
+    <div className="flex justify-start mb-3 px-1">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
+        style={{
+          background:    `rgba(${rgb},0.06)`,
+          border:        `1px solid rgba(${rgb},0.2)`,
+          color:         darkMode ? 'rgba(203,213,225,0.85)' : 'rgba(51,65,85,0.85)',
+          maxWidth:      '88%',
+        }}>
+        <Flag size={11} style={{ color: `rgba(${rgb},0.9)`, flexShrink: 0 }} />
+        <span className="font-semibold" style={{ color: `rgba(${rgb},0.95)` }}>
+          {lang === 'fr' ? 'Décision enregistrée' : 'Decision logged'} · {formatDateShort(message.date, lang)}
+        </span>
+        <span className="truncate" style={{ opacity: 0.75 }}>— {message.decision}</span>
+      </div>
+    </div>
+  );
+}
+
+function DecisionReminderCard({ message, darkMode, lang, onRecord }) {
+  const [selectedOutcome, setSelectedOutcome] = useState(null); // 'positive' | 'neutral' | 'negative'
+  const [comment, setComment] = useState('');
+  const [dismissed, setDismissed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  if (dismissed) return null;
+
+  const rgb = AGENT_COLOR_BY_KEY[message.agent] || '99,102,241';
+  const daysSince = Math.floor((Date.now() - Number(message.date || 0)) / 86_400_000);
+
+  const outcomeOptions = [
+    { key: 'positive', label: lang === 'fr' ? 'Positif' : 'Positive', color: '16,185,129', icon: CheckCircle },
+    { key: 'neutral',  label: lang === 'fr' ? 'Neutre'  : 'Neutral',  color: '148,163,184', icon: Minus },
+    { key: 'negative', label: lang === 'fr' ? 'Négatif' : 'Negative', color: '239,68,68',  icon: X },
+  ];
+
+  const handleSubmit = async () => {
+    if (!selectedOutcome || submitting) return;
+    setSubmitting(true);
+    try {
+      await onRecord?.(message.id, message.decisionId, selectedOutcome, comment.trim());
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex justify-start mb-4 px-1">
+      <div className="w-full max-w-[88%] rounded-2xl overflow-hidden"
+        style={{ background: darkMode ? 'rgba(8,12,22,0.9)' : 'rgba(248,250,252,0.95)', border: `1px solid rgba(${rgb},0.28)` }}>
+        <div className="flex items-center justify-between px-4 py-2.5 border-b"
+          style={{ borderColor: `rgba(${rgb},0.16)`, background: `rgba(${rgb},0.06)` }}>
+          <div className="flex items-center gap-2">
+            <Target size={12} style={{ color: `rgba(${rgb},0.95)` }} />
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: `rgba(${rgb},0.95)` }}>
+              {lang === 'fr' ? `Résultat — ${daysSince}j après` : `Outcome — ${daysSince}d later`}
+            </span>
+          </div>
+          <button onClick={() => setDismissed(true)}
+            aria-label={lang === 'fr' ? 'Fermer' : 'Dismiss'}
+            className="opacity-40 hover:opacity-80 transition-opacity">
+            <X size={11} style={{ color: darkMode ? 'rgba(148,163,184,0.6)' : 'rgba(100,116,139,0.7)' }} />
+          </button>
+        </div>
+
+        <div className="px-4 py-3 space-y-3">
+          <p className="text-sm leading-snug" style={{ color: darkMode ? '#e2e8f0' : '#1e293b' }}>
+            {lang === 'fr' ? 'T\'avais décidé :' : 'You decided:'}
+            <span className="block mt-1 italic" style={{ color: darkMode ? 'rgba(203,213,225,0.9)' : 'rgba(71,85,105,0.95)' }}>
+              "{message.decision}"
+            </span>
+          </p>
+          <p className="text-xs" style={{ color: darkMode ? 'rgba(148,163,184,0.65)' : 'rgba(100,116,139,0.75)' }}>
+            {lang === 'fr' ? 'Alors, résultat ?' : 'So, what happened?'}
+          </p>
+
+          <div className="flex gap-2">
+            {outcomeOptions.map(({ key, label, color, icon: Icon }) => {
+              const selected = selectedOutcome === key;
+              return (
+                <button key={key}
+                  onClick={() => setSelectedOutcome(key)}
+                  style={{
+                    flex: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    padding: '8px 10px', borderRadius: 10,
+                    background: selected ? `rgba(${color},0.15)` : 'transparent',
+                    border:     `1px solid rgba(${color},${selected ? 0.45 : 0.2})`,
+                    color:      selected ? `rgba(${color},0.98)` : (darkMode ? 'rgba(148,163,184,0.75)' : 'rgba(71,85,105,0.9)'),
+                    fontSize: 11, fontWeight: 700,
+                    cursor: 'pointer', transition: 'all 150ms',
+                  }}>
+                  <Icon size={11} />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedOutcome && (
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder={lang === 'fr' ? 'Commentaire (optionnel) — ce qui a marché, ce qui a foiré…' : 'Comment (optional) — what worked, what failed…'}
+              rows={2}
+              className="w-full text-xs rounded-md px-2.5 py-1.5 outline-none resize-none"
+              style={{
+                background: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                border: darkMode ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)',
+                color: darkMode ? '#e2e8f0' : '#1e293b',
+                fontFamily: 'inherit',
+              }} />
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 px-4 pb-3">
+          <button
+            onClick={handleSubmit}
+            disabled={!selectedOutcome || submitting}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+            style={{
+              background: selectedOutcome ? `rgba(${rgb},0.9)` : 'transparent',
+              color:      selectedOutcome ? '#fff' : (darkMode ? 'rgba(148,163,184,0.4)' : 'rgba(100,116,139,0.5)'),
+              border:     selectedOutcome ? 'none' : `1px solid rgba(${rgb},0.2)`,
+              boxShadow:  selectedOutcome ? `0 0 16px rgba(${rgb},0.2)` : 'none',
+              cursor:     selectedOutcome && !submitting ? 'pointer' : 'not-allowed',
+            }}>
+            {submitting
+              ? (lang === 'fr' ? 'Enregistrement…' : 'Saving…')
+              : (lang === 'fr' ? 'Enregistrer' : 'Record')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DecisionOutcomeRecordedCard({ message, darkMode, lang }) {
+  const OUTCOME_RGB = {
+    positive: '16,185,129',
+    neutral:  '148,163,184',
+    negative: '239,68,68',
+  };
+  const rgb = OUTCOME_RGB[message.outcome] || '148,163,184';
+  const label = message.outcome === 'positive' ? (lang === 'fr' ? 'Positif' : 'Positive')
+              : message.outcome === 'negative' ? (lang === 'fr' ? 'Négatif' : 'Negative')
+              : (lang === 'fr' ? 'Neutre' : 'Neutral');
+
+  return (
+    <div className="flex justify-start mb-3 px-1">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
+        style={{
+          background: `rgba(${rgb},0.08)`,
+          border:     `1px solid rgba(${rgb},0.28)`,
+          color:      `rgba(${rgb},0.95)`,
+          maxWidth:   '88%',
+        }}>
+        <CheckCircle size={12} />
+        <span className="font-semibold">
+          {lang === 'fr' ? `Résultat enregistré : ${label}` : `Outcome recorded: ${label}`}
+        </span>
+        {message.comment && (
+          <span style={{ opacity: 0.85, fontStyle: 'italic', color: darkMode ? 'rgba(203,213,225,0.8)' : 'rgba(51,65,85,0.8)' }}>
+            — "{message.comment}"
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 

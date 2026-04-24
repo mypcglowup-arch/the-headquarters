@@ -2,6 +2,116 @@
 
 ## [Unreleased]
 
+### Added — Phase 3 — Decision outcome tracking (boucle de calibrage)
+Chaque fois qu'un agent donne un conseil actionnable, c'est automatiquement **loggé comme "décision"**. 30 jours plus tard, QG demande *"Tu avais décidé X. Résultat ?"* L'outcome (positif/neutre/négatif + commentaire) alimente ensuite le contexte de cet agent pour toutes ses réponses futures — ses conseils sont calibrés sur ce qui a réellement fonctionné.
+
+### Les 5 couches
+
+| # | Couche | Fire quand | Effet |
+|---|---|---|---|
+| A | **Détection** | Après chaque lead response ≥ 80 chars | Haiku extrait la décision actionnable si présente (confidence ≥ 0.75) |
+| B | **Log inline** | Détection positive | Mini-card *"Décision enregistrée · 24 avril · [decision]"* après la réponse |
+| C | **Reminder** | Session start, décision 30j+ sans outcome | Card avec *"T'avais décidé X. Résultat ?"* + 3 boutons + textarea |
+| D | **Outcome input** | Clic sur reminder | 3 boutons (positif/neutre/négatif) + textarea optionnelle → submit |
+| E | **Track record** | Chaque response agent | `formatTrackRecord` injecte les 8 dernières décisions de l'agent avec outcomes dans son prompt |
+
+### Data model étendu
+
+```js
+{
+  id: 'dec-1714000000-x7k3',
+  decision: 'Cap next retainer at $750/mo minimum',
+  agent: 'HORMOZI',
+  date: 1714000000000,
+  outcome: null | 'positive' | 'neutral' | 'negative',
+  outcomeComment: 'Closed Dubé at $750/mo',  // optionnel
+  outcomeDate: 1716600000000,
+  sessionId: 12345,
+}
+```
+
+### ⚠ SQL migration pour la table decisions existante
+
+```sql
+ALTER TABLE decisions
+  ADD COLUMN IF NOT EXISTS id text,
+  ADD COLUMN IF NOT EXISTS outcome text,
+  ADD COLUMN IF NOT EXISTS outcome_comment text,
+  ADD COLUMN IF NOT EXISTS outcome_recorded_at timestamptz;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_id ON decisions (id) WHERE id IS NOT NULL;
+```
+
+Sans ce SQL : detection + logging + reminder + outcome input fonctionnent 100% en localStorage. Seul le sync cloud échouera silencieusement (aucun impact UX).
+
+### Fichiers
+
+- `src/api.js`
+  - `extractActionableDecision(agentResponse, lang)` — Haiku JSON, returns `{ decision, confidence }` ou `null`. Règles strictes : imperative form, ≤ 180 chars, confidence ≥ 0.75. Bannis : questions, observations, principles, motivational.
+  - `formatTrackRecord(decisions, targetAgent)` — format des 8 dernières décisions avec outcomes pour injection dans prompt. "Never mention this directly to Samuel" règle dans le texte.
+
+- `src/lib/sync.js`
+  - `syncDecisions` étendu : inclut `id`, upsert par `id` (plus d'insert duplicates)
+  - Nouveau `syncDecisionOutcome(id, outcome, comment)` — UPDATE by id
+  - Nouveau `fetchDecisionsAwaitingOutcome(daysOld)` — query Supabase pour décisions pending
+
+- `src/App.jsx`
+  - Post-response : async `extractActionableDecision` → push `decision-logged` card inline + add to state + sync
+  - Session start, Priority 0 : check `decisions` pour pending 30j+ → push `decision-reminder` card (cooldown 7j par décision)
+  - `handleRecordDecisionOutcome(msgId, decisionId, outcome, comment)` handler : transforme reminder → confirmation in-place + sync cloud + toast
+  - `runSession` reçoit maintenant `combinedSuffix` = maturity + track record (par focus agent). Agents voient leur propre historique.
+
+- `src/components/ChatScreen.jsx` — 3 nouveaux composants :
+  - `DecisionLoggedCard` — mini-card inline, 1 ligne compacte avec icon Flag
+  - `DecisionReminderCard` — card avec 3 boutons colorés (positive emerald / neutral grey / negative red) + textarea contextuelle qui apparait après sélection
+  - `DecisionOutcomeRecordedCard` — confirmation compact avec outcome + commentaire
+
+### Cooldowns
+
+- **Reminder cooldown** : `qg_decision_reminder_cooldowns_v1` localStorage, 7 jours par `decisionId` (si l'user ignore un reminder, il revient pas avant 7j)
+- **Détection** : pas de cooldown — chaque turn peut logger une décision (mais Haiku confidence bar protège du over-logging)
+
+### Le track record ciblé par agent
+
+Chaque agent voit UNIQUEMENT ses OWN décisions passées. HORMOZI ne voit pas ce que CARDONE a suggéré. Pas de cross-contamination.
+
+Exemple d'injection pour HORMOZI au turn 50 :
+```
+YOUR TRACK RECORD WITH SAMUEL (your past advice + what actually happened — calibrate accordingly):
+  ✓ Feb 12: "Stack value bundle onboarding + 2 calls" — "Closed Dubé at 500/mo"
+  ✗ Feb 28: "Launch $1500 tier above existing" — "Zero buyers in 30 days, abandoned"
+  ~ Mar 15: "Shift to annual contracts only" — "2 closed, 3 pushed back, net neutral"
+  ✓ Apr 02: "Add priority support tier $200/mo" — "3 current clients upgraded"
+
+Rules for using this:
+- If a past recommendation led to ✗ (negative outcome), don't blindly repeat it — acknowledge what didn't work and adjust.
+- If ✓ patterns emerge, lean into what's been validated.
+- Never mention this track record directly to Samuel. Just let it shape your judgment silently.
+```
+
+HORMOZI va maintenant éviter de re-suggérer "launch $1500 tier above existing" et va plus probablement suggérer des tiers de support (pattern ✓).
+
+### Coût
+
+- Détection post-response : **1 Haiku call par lead response ≥ 80 chars**, ~200 tokens → ~$0.00006 par call. 30 turns/jour × 30j = **~$0.05/mois**
+- Reminder : 0$ (pure local check)
+- Outcome submit : 0$
+- Track record : 0$ (concaténation locale, juste du texte dans le prompt)
+
+### Garde-fous anti-bruit
+
+- Haiku confidence ≥ 0.75 pour logger
+- Skip si response < 80 chars (too short for a real decision)
+- Skip questions, observations, principles (liste explicite dans prompt)
+- Skip multi-step plans (on track UNE décision, pas un plan)
+- `decision-logged` cards sont mini (pas visuellement bruyantes)
+
+### Known limitations
+- Si Samuel ignore les reminders systématiquement, le track record stays empty — agents reviennent au mode générique
+- Detection manque les décisions qui émergent d'un **dialogue** (ex: décision finale après 3 tours — chaque tour peut logger partiellement)
+- Cross-agent insight absent : si HORMOZI et NAVAL ont des patterns complémentaires, ça reste silos
+- Pas d'UI pour retirer une décision mal-detectée (User doit ignorer le reminder)
+- Track record limité aux 8 dernières décisions avec outcomes — pas de poids temporel
+
 ### Added — Phase 3 — Plateau prediction (widget Trajectoire)
 Nouveau widget Dashboard qui projette le MRR sur 90 jours selon 2 scénarios (trajectoire actuelle vs avec actions correctives) et détecte un plateau. Quand plateau détecté → Sonnet génère un diagnostic chiffré + 3 actions concrètes, ton Naval/Hormozi, zéro motivational.
 
