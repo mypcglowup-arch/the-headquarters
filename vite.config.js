@@ -65,6 +65,19 @@ export default defineConfig(({ mode }) => {
             })
           },
         },
+        // Proxy /api/whisper → https://api.openai.com/v1/audio/transcriptions
+        // Client sends multipart/form-data; proxy injects Authorization only.
+        '/api/whisper': {
+          target: 'https://api.openai.com',
+          changeOrigin: true,
+          rewrite: () => '/v1/audio/transcriptions',
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              proxyReq.setHeader('Authorization', `Bearer ${env.OPENAI_API_KEY}`)
+              // Do NOT touch Content-Type — preserve multipart boundary
+            })
+          },
+        },
       },
     },
   }

@@ -278,7 +278,8 @@ export default function HomeScreen({
                   data-tour={key === 'roleplay' ? 'roleplay-mode' : undefined}
                   className="flex flex-col justify-between p-4 rounded-2xl text-left w-full"
                   style={{
-                    minHeight: 130,
+                    height: 140,                 // fixed (not min) — every card matches
+                    overflow: 'hidden',           // clamp any overflow from long descriptions
                     background: selected
                       ? `rgba(${tint}, 0.05)`
                       : darkMode ? 'rgba(255,255,255,0.04)' : '#ECEAE4',
@@ -325,6 +326,10 @@ export default function HomeScreen({
                     <span style={{
                       fontSize: 11, fontWeight: 400, marginTop: 3, lineHeight: 1.3,
                       color: darkMode ? 'rgba(148,163,184,0.45)' : '#A09B96',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
                     }}>
                       {t(`mode.${key}.desc`, lang)}
                     </span>

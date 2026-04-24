@@ -18,6 +18,8 @@ import {
 import { isGmailConnected, getGmailTokens, clearGmailTokens, connectGmail } from './utils/gmailAuth.js';
 import { gmailService } from './utils/gmailService.js';
 import { startGmailWatcher, clearSeenIds } from './utils/gmailWatcher.js';
+import { registerServiceWorker, showLocalNotification, requestNotificationPermission } from './utils/pwa.js';
+import { speak as ttsSpeak, cancelSpeech, isTTSSupported } from './utils/voice.js';
 import { computePulseScore, formatPulseContext } from './utils/pulseScore.js';
 import { loadWins, saveWin, formatWinsContext } from './utils/wins.js';
 import { loadAgentDepth, updateAgentDepth } from './utils/agentDepth.js';
@@ -32,6 +34,7 @@ import DashboardScreen from './components/DashboardScreen.jsx';
 import ProspectsScreen from './components/ProspectsScreen.jsx';
 import ReplayScreen from './components/ReplayScreen.jsx';
 import LibraryScreen from './components/LibraryScreen.jsx';
+import WorkflowBuilder from './components/WorkflowBuilder.jsx';
 import PulseScoreCard from './components/PulseScoreCard.jsx';
 import DailyCheckIn, { hasCheckedInToday } from './components/DailyCheckIn.jsx';
 import ScenarioPicker from './components/ScenarioPicker.jsx';
@@ -43,6 +46,7 @@ import MilestoneCelebration, { checkMilestone } from './components/MilestoneCele
 import GuidedTour, { TourLauncher, hasTourBeenCompleted, markTourDone } from './components/GuidedTour.jsx';
 import GlobalFloatingInput from './components/GlobalFloatingInput.jsx';
 import ToastStack from './components/ToastStack.jsx';
+import InstallPrompt from './components/InstallPrompt.jsx';
 import { useToast } from './hooks/useToast.js';
 
 const SESSION_MODE_LABELS = {
@@ -64,7 +68,7 @@ function BackToChatBar({ darkMode, onBack }) {
       className={`flex items-center gap-2 px-4 py-2 text-xs font-medium border-b transition-colors ${
         darkMode
           ? 'bg-gray-900 border-gray-800 text-gray-500 hover:text-gray-200 hover:bg-gray-800'
-          : 'bg-white border-gray-200 text-gray-400 hover:text-gray-700 hover:bg-gray-50'
+          : 'bg-[#F5F4F0] border-[#E8E6E0] text-gray-400 hover:text-gray-700 hover:bg-[#ECEAE4]'
       }`}
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -93,6 +97,7 @@ const LS_PHOTOS    = 'qg_agent_photos_v1';
 const LS_NAMES     = 'qg_agent_names_v1';
 const LS_COUNT     = 'qg_session_count_v1';
 const LS_SOUND     = 'qg_sound_enabled_v1';
+const LS_VOICE     = 'qg_voice_mode_v1';
 const LS_LAST_SPOKE = 'qg_agent_last_spoke_v1';
 const LS_DECISIONS  = 'qg_decisions_v1';
 const LS_DASHBOARD  = 'qg_dashboard_v1';
@@ -234,6 +239,8 @@ export default function App() {
   const [isThinkingDeep, setIsThinkingDeep] = useState(false);
   const [sessionCount, setSessionCount] = useState(() => loadLS(LS_COUNT, 0));
   const [soundEnabled, setSoundEnabled] = useState(() => loadLS(LS_SOUND, true));
+  const [voiceMode,    setVoiceMode]    = useState(() => loadLS(LS_VOICE, false) === true);
+  const lastSpokenMsgIdRef = useRef(null);
   const [agentLastSpoke, setAgentLastSpoke] = useState(() => loadLS(LS_LAST_SPOKE, {}));
   const [dashboard, setDashboard] = useState(() => {
     const saved = loadLS(LS_DASHBOARD, null);
@@ -315,6 +322,8 @@ export default function App() {
 
   // On mount: update streak, log open, fetch daily quote + mirror, refresh calendar
   useEffect(() => {
+    // Register the service worker (no-op if unsupported)
+    registerServiceWorker();
     logAppOpen();
     trackFirstOpen();
     // Auto-trigger tour on very first open
@@ -359,6 +368,43 @@ export default function App() {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
+  // Persist voice mode
+  useEffect(() => {
+    try { localStorage.setItem(LS_VOICE, JSON.stringify(voiceMode)); } catch { /* ignore */ }
+    if (!voiceMode) cancelSpeech();
+  }, [voiceMode]);
+
+  // ── Auto-TTS on new completed agent messages ────────────────────────────
+  // Speaks each newly-completed agent message (streaming done) using the
+  // agent-specific voice profile. Guards against double-speaking via a ref.
+  useEffect(() => {
+    if (!voiceMode || !isTTSSupported()) return;
+    // Find the latest agent message that is NOT streaming, different from the last spoken
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.type !== 'agent') continue;
+      if (m.streaming) return; // wait until streaming completes
+      if (m.id === lastSpokenMsgIdRef.current) return; // already spoken
+      lastSpokenMsgIdRef.current = m.id;
+      ttsSpeak(m.content, { agent: m.agent, lang });
+      return;
+    }
+  }, [messages, voiceMode, lang]);
+
+  // Cancel speech if user sends a new message (interrupt the current one)
+  useEffect(() => {
+    if (!voiceMode) return;
+    if (messages.length === 0) return;
+    const lastUser = [...messages].reverse().find((m) => m.type === 'user');
+    if (lastUser && lastUser.id !== lastUser._lastCancelId) {
+      cancelSpeech();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.filter((m) => m.type === 'user').length, voiceMode]);
+
+  // Cancel any ongoing speech on session end
+  useEffect(() => { if (sessionEnded) cancelSpeech(); }, [sessionEnded]);
+
   // ── Gmail background watcher — polls every 5 min for urgent business emails ──
   // Toast on each urgent email + increment badge. Only runs when Gmail is
   // connected; cleans up on disconnect or unmount.
@@ -374,13 +420,26 @@ export default function App() {
                    : classification.category === 'prospect_reply' ? '🎯'
                    : classification.category === 'opportunity'    ? '✨'
                    : '📧';
+        // In-app toast (always)
         toast(
-          lang === 'fr'
-            ? `${icon} ${from} — ${oneLine}`
-            : `${icon} ${from} — ${oneLine}`,
+          `${icon} ${from} — ${oneLine}`,
           { type: 'info', duration: 6000 }
         );
         setUrgentEmailCount((n) => n + 1);
+        // Ask for notification permission lazily, then fire a native one.
+        // This lights up the home-screen PWA badge / lock-screen banner when
+        // the app is active (browser limitation: SW can't receive pushes
+        // without a backend, so this only fires while the tab/PWA is alive).
+        requestNotificationPermission().then((perm) => {
+          if (perm === 'granted') {
+            showLocalNotification({
+              title: `${icon} ${from}`,
+              body:  oneLine,
+              tag:   `email-${email.id || Date.now()}`,
+              data:  { emailId: email.id, category: classification.category },
+            });
+          }
+        });
       },
       onUnauthorized: () => {
         setGmailConnected(false);
@@ -1595,6 +1654,7 @@ export default function App() {
         darkMode={darkMode}        onToggleDark={() => setDarkMode((d) => !d)}
         deepMode={deepMode}        onToggleDeep={() => setDeepMode((d) => !d)}
         thinkingMode={thinkingMode} onToggleThinking={() => setThinkingMode((t) => !t)}
+        voiceMode={voiceMode}       onToggleVoice={() => setVoiceMode((v) => !v)}
         lang={lang}                onToggleLang={toggleLang}
         saveStatus={saveStatus}
         screen={screen}
@@ -1604,6 +1664,7 @@ export default function App() {
         onGoDashboard={() => setScreen(screen === 'dashboard' ? (sessionStarted ? 'chat' : 'home') : 'dashboard')}
         onGoProspects={() => setScreen(screen === 'prospects' ? (sessionStarted ? 'chat' : 'home') : 'prospects')}
         onGoLibrary={() => setScreen(screen === 'library' ? (sessionStarted ? 'chat' : 'home') : 'library')}
+        onGoWorkflow={() => setScreen(screen === 'workflow' ? (sessionStarted ? 'chat' : 'home') : 'workflow')}
         onGoEmail={() => { setUrgentEmailCount(0); setScreen(screen === 'dashboard' ? (sessionStarted ? 'chat' : 'home') : 'dashboard'); }}
         urgentEmailCount={urgentEmailCount}
         sessionEnded={sessionEnded}
@@ -1763,6 +1824,13 @@ export default function App() {
             <LibraryScreen darkMode={darkMode} lang={lang} />
           </div>
         )}
+
+        {screen === 'workflow' && (
+          <div className={`${sessionStarted ? 'absolute inset-0 z-20 animate-panel-in' : 'flex-1 animate-screen-in'} flex flex-col overflow-auto ${darkMode ? 'bg-gray-950' : ''}`} style={!darkMode ? { background: '#F5F4F0' } : {}}>
+            {sessionStarted && <BackToChatBar darkMode={darkMode} onBack={() => setScreen('chat')} />}
+            <WorkflowBuilder darkMode={darkMode} lang={lang} />
+          </div>
+        )}
       </main>
 
       {/* Smart Notification Agent Ping */}
@@ -1845,6 +1913,7 @@ export default function App() {
 
       {/* Toast notifications */}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      <InstallPrompt darkMode={darkMode} lang={lang} />
 
       {/* Tour Launcher — floating bottom-right button */}
       <TourLauncher onStart={() => setShowTour(true)} isActive={showTour} />

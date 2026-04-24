@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, X, Linkedin, PenLine, MessageSquareText, ChevronDown, ImagePlus } from 'lucide-react';
+import { Send, Paperclip, X, Linkedin, PenLine, MessageSquareText, ChevronDown, ImagePlus, Mic, MicOff, Loader2 } from 'lucide-react';
 import { parseUploadedFile } from '../utils/parseFile.js';
 import { AGENT_CONFIG } from '../prompts.js';
+import { createAudioRecorder, isMicSupported } from '../utils/voice.js';
 
 const MENTION_AGENTS = Object.entries(AGENT_CONFIG).filter(
   ([key]) => key !== 'SYNTHESIZER' && key !== 'COORDINATOR'
@@ -37,6 +38,48 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
+
+  // ── Voice (STT via Whisper) ──────────────────────────────────────────
+  const micSupported = isMicSupported();
+  const [micState, setMicState] = useState('idle'); // 'idle' | 'recording' | 'transcribing'
+  const recRef = useRef(null);
+  const preRecordingTextRef = useRef('');
+
+  function toggleRecording() {
+    if (!micSupported || isLoading || disabled) return;
+    if (micState === 'recording') { recRef.current?.stop(); return; }
+    if (micState === 'transcribing') return; // wait — Whisper is processing
+    preRecordingTextRef.current = text;
+    const rec = createAudioRecorder({
+      lang: lang === 'fr' ? 'fr-CA' : 'en-US',
+      onStart: () => setMicState('recording'),
+      onStop: () => { /* state handed off to transcribing below */ },
+      onTranscribing: () => setMicState('transcribing'),
+      onFinal: (transcript) => {
+        const base = preRecordingTextRef.current;
+        const joined = base ? `${base} ${transcript}`.trim() : transcript;
+        setText(joined);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+          textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px';
+          setTimeout(() => textareaRef.current?.focus(), 50);
+        }
+        setMicState('idle');
+      },
+      onError: (err) => {
+        console.warn('[Voice] Whisper error:', err);
+        setMicState('idle');
+      },
+    });
+    if (!rec) return;
+    recRef.current = rec;
+    rec.start();
+  }
+
+  // Cancel recording if component disables mid-session
+  useEffect(() => {
+    if ((isLoading || disabled) && micState !== 'idle') recRef.current?.cancel();
+  }, [isLoading, disabled, micState]);
 
   // Pre-fill from Focus Timer debrief
   useEffect(() => {
@@ -183,7 +226,7 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
   const canSend = (text.trim() || attachment) && !isLoading && !disabled;
 
   return (
-    <div className={`border-t ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+    <div className={`border-t ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-[#F5F4F0] border-[#E8E6E0]'}`}>
 
       {/* Quick actions bar */}
       {showActions && (
@@ -271,7 +314,7 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
         if (filtered.length === 0) return null;
         return (
           <div
-            className={`mx-4 mb-1 border overflow-hidden shadow-lg ${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}
+            className={`mx-4 mb-1 border overflow-hidden shadow-lg ${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-[#F5F4F0] border-[#E8E6E0]'}`}
             style={{
               width: '260px',
               borderRadius: '10px',
@@ -456,6 +499,47 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
             e.currentTarget.style.boxShadow = 'none';
           }}
         />
+
+        <button
+          type="button"
+          onClick={toggleRecording}
+          disabled={!micSupported || isLoading || disabled || micState === 'transcribing'}
+          title={!micSupported
+            ? (lang === 'fr' ? 'Micro non supporté' : 'Mic not supported')
+            : micState === 'recording'
+            ? (lang === 'fr' ? 'Arrêter — transcrire' : 'Stop — transcribe')
+            : micState === 'transcribing'
+            ? (lang === 'fr' ? 'Transcription Whisper…' : 'Whisper transcribing…')
+            : (lang === 'fr' ? 'Parler (Whisper)' : 'Speak (Whisper)')}
+          aria-label={
+            micState === 'recording' ? 'Stop voice recording' :
+            micState === 'transcribing' ? 'Transcribing' : 'Start voice recording'
+          }
+          aria-pressed={micState === 'recording'}
+          className={`flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
+            !micSupported
+              ? (darkMode ? 'bg-gray-900 text-gray-700 cursor-not-allowed' : 'bg-gray-100 text-gray-400 cursor-not-allowed')
+              : micState === 'recording'
+              ? 'bg-red-500 text-white'
+              : micState === 'transcribing'
+              ? 'bg-indigo-500 text-white'
+              : (darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')
+          }`}
+          style={
+            micState === 'recording' ? {
+              boxShadow: '0 0 0 4px rgba(239,68,68,0.2), 0 0 16px rgba(239,68,68,0.35)',
+              animation: 'pulse 1.4s ease-in-out infinite',
+            } : micState === 'transcribing' ? {
+              boxShadow: '0 0 0 4px rgba(99,102,241,0.2), 0 0 16px rgba(99,102,241,0.35)',
+            } : undefined
+          }
+        >
+          {!micSupported
+            ? <MicOff size={16} />
+            : micState === 'transcribing'
+            ? <Loader2 size={16} className="animate-spin" />
+            : <Mic size={16} />}
+        </button>
 
         <button
           type="submit"

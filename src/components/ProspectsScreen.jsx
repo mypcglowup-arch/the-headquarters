@@ -132,7 +132,7 @@ const STATUS_CONFIG = {
   'Répondu':      { bg: '#E1F5EE', color: '#0F6E56' },  // vert   — ils ont répondu
   'Chaud':        { bg: '#FAEEDA', color: '#854F0B' },  // orange — intérêt exprimé
   'Démo':         { bg: '#E6F1FB', color: '#185FA5' },  // bleu   — démo planifiée
-  'Signé':        { bg: '#0F172A', color: '#FFFFFF' },  // noir   — deal fermé
+  'Signé':        { bg: '#0F172A', color: '#F5F4F0' },  // noir   — deal fermé
   'Client actif': { bg: '#F0FDF4', color: '#15803D' },  // vert   — client en cours
   'Perdu':        { bg: '#F1EFE8', color: '#888780' },  // gris   — perdu
 };
@@ -225,8 +225,8 @@ function calculateIntelligenceScore(prospect) {
 }
 
 const TIER_STYLE = {
-  S: { bg: '#1A1917', color: '#FFFFFF', label: 'Élite'    },
-  A: { bg: '#6366F1', color: '#FFFFFF', label: 'Solide'   },
+  S: { bg: '#1A1917', color: '#F5F4F0', label: 'Élite'    },
+  A: { bg: '#6366F1', color: '#F5F4F0', label: 'Solide'   },
   B: { bg: '#FAEEDA', color: '#854F0B', label: 'Potentiel'},
   C: { bg: '#F1EFE8', color: '#888780', label: 'Froid'    },
 };
@@ -609,7 +609,7 @@ function ProspectRow({ prospect, onClick, onArchive, onEnrich, isNew, isEnrichin
       onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: 12,
-        background: hovered ? '#FAFAF8' : '#FFFFFF',
+        background: hovered ? '#FAFAF8' : '#F5F4F0',
         border: `1px solid ${isNew ? 'rgba(99,102,241,0.35)' : '#E8E6E0'}`, borderRadius: 12,
         padding: '14px 16px', marginBottom: 8, cursor: 'pointer',
         transform: hovered ? 'translateY(-1px)' : 'none',
@@ -624,7 +624,7 @@ function ProspectRow({ prospect, onClick, onArchive, onEnrich, isNew, isEnrichin
         <div style={{
           width: 40, height: 40, borderRadius: '50%',
           background: statusCfg.bg === '#0F172A' ? '#E8E6E0' : statusCfg.bg,
-          color: statusCfg.color === '#FFFFFF' ? '#0F172A' : statusCfg.color,
+          color: statusCfg.color === '#F5F4F0' ? '#0F172A' : statusCfg.color,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 13, fontWeight: 600, position: 'relative',
         }}>
@@ -782,7 +782,7 @@ function ProspectRow({ prospect, onClick, onArchive, onEnrich, isNew, isEnrichin
         const tierCfg = TIER_STYLE[intel.tier] || TIER_STYLE.C;
         return (
           <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 44 }} title={label}>
-            <div style={{ fontSize: 20, fontWeight: 600, lineHeight: 1, color: tierCfg.color !== '#FFFFFF' ? tierCfg.bg === '#1A1917' ? '#1A1917' : tierCfg.color : '#6366F1' }}>
+            <div style={{ fontSize: 20, fontWeight: 600, lineHeight: 1, color: tierCfg.color !== '#F5F4F0' ? tierCfg.bg === '#1A1917' ? '#1A1917' : tierCfg.color : '#6366F1' }}>
               {rank}
             </div>
             <div style={{ fontSize: 9, color: '#9B9890', lineHeight: 1.2, maxWidth: 60, textAlign: 'right' }}>{label}</div>
@@ -1165,7 +1165,7 @@ function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.06)', zIndex: 40 }} />
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, width: 440,
-        background: '#FFFFFF', borderLeft: '1px solid #E8E6E0',
+        background: '#F5F4F0', borderLeft: '1px solid #E8E6E0',
         zIndex: 50, overflowY: 'auto', padding: 24,
         boxShadow: '-4px 0 32px rgba(0,0,0,0.08)',
         animation: 'panelSlideIn 280ms cubic-bezier(0.16,1,0.3,1) forwards',
@@ -1308,7 +1308,7 @@ function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
                   {(competitorData.competitors || []).filter((c) => c.name).map((comp, i) => {
                     const gap = (competitorData.subject?.reviews || 0) - (comp.reviews || 0);
                     return (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: '#FFFFFF', borderRadius: 8, border: '1px solid #E8E6E0' }}>
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: '#F5F4F0', borderRadius: 8, border: '1px solid #E8E6E0' }}>
                         <span style={{ fontSize: 12, color: '#3D3D3A', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {comp.name}
                         </span>
@@ -1489,7 +1489,7 @@ function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
             <button
               onClick={() => displayMsg && navigator.clipboard.writeText(displayMsg)}
               disabled={!displayMsg || generatingMsg}
-              style={{ height: 36, borderRadius: 8, border: '1px solid #E8E6E0', background: '#FFFFFF', color: '#3D3D3A', fontSize: 11, fontWeight: 500, cursor: displayMsg ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: !displayMsg ? 0.4 : 1 }}>
+              style={{ height: 36, borderRadius: 8, border: '1px solid #E8E6E0', background: '#F5F4F0', color: '#3D3D3A', fontSize: 11, fontWeight: 500, cursor: displayMsg ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: !displayMsg ? 0.4 : 1 }}>
               Copier
             </button>
 
@@ -1646,7 +1646,7 @@ function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
               <input value={noteInput} onChange={(e) => setNoteInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') addNote(); }}
                 placeholder="Ajouter une note…"
-                style={{ flex: 1, background: '#FFFFFF', border: '1px solid #E8E6E0', borderRadius: 8, padding: '7px 10px', fontSize: 12, outline: 'none', color: '#1A1917' }}
+                style={{ flex: 1, background: '#F5F4F0', border: '1px solid #E8E6E0', borderRadius: 8, padding: '7px 10px', fontSize: 12, outline: 'none', color: '#1A1917' }}
               />
               <button onClick={addNote} style={{ background: '#6366F1', color: '#fff', border: 'none', borderRadius: 8, padding: '0 14px', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>+</button>
             </div>
@@ -1660,7 +1660,7 @@ function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
               disabled={nextStatuses.length === 0}
               style={{
                 width: '100%', height: 40, borderRadius: 10, border: '1px solid #E8E6E0',
-                background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: '#F5F4F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '0 14px', fontSize: 13, color: '#3D3D3A', cursor: nextStatuses.length > 0 ? 'pointer' : 'default',
                 fontWeight: 500, opacity: nextStatuses.length === 0 ? 0.5 : 1,
               }}>
@@ -1668,7 +1668,7 @@ function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
               {nextStatuses.length > 0 && <ChevronDown size={13} />}
             </button>
             {showStatusMenu && (
-              <div style={{ position: 'absolute', bottom: '110%', left: 0, right: 0, background: '#FFFFFF', border: '1px solid #E8E6E0', borderRadius: 10, overflow: 'hidden', zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+              <div style={{ position: 'absolute', bottom: '110%', left: 0, right: 0, background: '#F5F4F0', border: '1px solid #E8E6E0', borderRadius: 10, overflow: 'hidden', zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
                 <div style={{ padding: '8px 14px 4px', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9B9890' }}>
                   Avancer vers
                 </div>
@@ -1679,14 +1679,14 @@ function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
                       onClick={() => handleStatusSelect(s)}
                       style={{
                         width: '100%', padding: '10px 14px', textAlign: 'left',
-                        background: '#FFFFFF', border: 'none', cursor: 'pointer',
+                        background: '#F5F4F0', border: 'none', cursor: 'pointer',
                         fontSize: 13, color: '#1A1917',
                         display: 'flex', alignItems: 'center', gap: 8,
                       }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = '#F5F4F0'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = '#FFFFFF'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = '#F5F4F0'; }}
                     >
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: cfg.color === '#FFFFFF' ? '#0F172A' : (cfg.color || '#9B9890'), flexShrink: 0 }} />
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: cfg.color === '#F5F4F0' ? '#0F172A' : (cfg.color || '#9B9890'), flexShrink: 0 }} />
                       {s}
                       {s === 'Signé'  && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#9B9890' }}>🎉 + retainer</span>}
                       {s === 'Perdu'  && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#9B9890' }}>raison requise</span>}
@@ -1709,7 +1709,7 @@ function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
       {showSignModal && (
         <>
           <div onClick={() => setShowSignModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 80 }} />
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 380, background: '#FFFFFF', borderRadius: 16, zIndex: 90, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', textAlign: 'center' }}>
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 380, background: '#F5F4F0', borderRadius: 16, zIndex: 90, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>🎉</div>
             <h3 style={{ fontSize: 18, fontWeight: 500, color: '#1A1917', margin: '0 0 8px' }}>Confirmer la signature</h3>
             <p style={{ fontSize: 13, color: '#9B9890', margin: '0 0 20px', lineHeight: 1.6 }}>
@@ -1717,11 +1717,11 @@ function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setShowSignModal(false)}
-                style={{ flex: 1, height: 44, borderRadius: 10, border: '1px solid #E8E6E0', background: '#FFFFFF', color: '#5F5E5A', fontSize: 13, cursor: 'pointer' }}>
+                style={{ flex: 1, height: 44, borderRadius: 10, border: '1px solid #E8E6E0', background: '#F5F4F0', color: '#5F5E5A', fontSize: 13, cursor: 'pointer' }}>
                 Annuler
               </button>
               <button onClick={confirmSignature}
-                style={{ flex: 2, height: 44, borderRadius: 10, border: 'none', background: '#0F172A', color: '#FFFFFF', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                style={{ flex: 2, height: 44, borderRadius: 10, border: 'none', background: '#0F172A', color: '#F5F4F0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 ✓ Confirmer la signature
               </button>
             </div>
@@ -1733,7 +1733,7 @@ function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
       {showLostModal && (
         <>
           <div onClick={() => setShowLostModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 80 }} />
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 380, background: '#FFFFFF', borderRadius: 16, zIndex: 90, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 380, background: '#F5F4F0', borderRadius: 16, zIndex: 90, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <h3 style={{ fontSize: 18, fontWeight: 500, color: '#1A1917', margin: '0 0 6px' }}>Pourquoi ce prospect est perdu ?</h3>
             <p style={{ fontSize: 13, color: '#9B9890', margin: '0 0 16px', lineHeight: 1.5 }}>
               Cette info aide à améliorer ta stratégie.
@@ -1746,11 +1746,11 @@ function ProspectPanel({ prospect, onClose, onUpdate, onDelete }) {
             />
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => { setShowLostModal(false); setLostReason(''); }}
-                style={{ flex: 1, height: 44, borderRadius: 10, border: '1px solid #E8E6E0', background: '#FFFFFF', color: '#5F5E5A', fontSize: 13, cursor: 'pointer' }}>
+                style={{ flex: 1, height: 44, borderRadius: 10, border: '1px solid #E8E6E0', background: '#F5F4F0', color: '#5F5E5A', fontSize: 13, cursor: 'pointer' }}>
                 Annuler
               </button>
               <button onClick={confirmLost} disabled={!lostReason.trim()}
-                style={{ flex: 2, height: 44, borderRadius: 10, border: 'none', background: lostReason.trim() ? '#E74C3C' : '#E8E6E0', color: lostReason.trim() ? '#FFFFFF' : '#9B9890', fontSize: 13, fontWeight: 600, cursor: lostReason.trim() ? 'pointer' : 'not-allowed', transition: 'all 0.15s' }}>
+                style={{ flex: 2, height: 44, borderRadius: 10, border: 'none', background: lostReason.trim() ? '#E74C3C' : '#E8E6E0', color: lostReason.trim() ? '#F5F4F0' : '#9B9890', fontSize: 13, fontWeight: 600, cursor: lostReason.trim() ? 'pointer' : 'not-allowed', transition: 'all 0.15s' }}>
                 Marquer comme perdu
               </button>
             </div>
@@ -1912,7 +1912,7 @@ function SearchModal({ onClose, onStartSearch }) {
     padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500,
     border: `1px solid ${active ? '#6366F1' : '#E8E6E0'}`,
     background: active ? '#6366F1' : '#F5F4F0',
-    color: active ? '#FFFFFF' : '#5F5E5A',
+    color: active ? '#F5F4F0' : '#5F5E5A',
     cursor: 'pointer', transition: 'all 0.15s ease',
     whiteSpace: 'nowrap', lineHeight: 1,
   });
@@ -1932,7 +1932,7 @@ function SearchModal({ onClose, onStartSearch }) {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', zIndex: 60 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: '#FFFFFF', borderRadius: 20, zIndex: 70, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 560, maxHeight: 'calc(100vh - 200px - env(safe-area-inset-bottom, 0px))', display: 'flex', flexDirection: 'column', background: '#F5F4F0', borderRadius: 20, zIndex: 70, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
 
         {/* ── Header ── */}
         <div style={{ padding: '22px 24px 18px', borderBottom: '1px solid #E8E6E0', flexShrink: 0 }}>
@@ -1952,7 +1952,7 @@ function SearchModal({ onClose, onStartSearch }) {
         </div>
 
         {/* ── Scrollable body ── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 32px' }}>
 
           {/* ── Conversion insights — shown after 5+ conversions ── */}
           {(() => {
@@ -1970,7 +1970,7 @@ function SearchModal({ onClose, onStartSearch }) {
                     { label: 'Agent le plus efficace', value: insights.topAgentLabel },
                     { label: 'Délai moyen closing', value: insights.avgDays != null ? `${insights.avgDays} jours` : '—' },
                   ].map(({ label, value }) => (
-                    <div key={label} style={{ background: '#FFFFFF', borderRadius: 8, padding: '8px 10px' }}>
+                    <div key={label} style={{ background: '#F5F4F0', borderRadius: 8, padding: '8px 10px' }}>
                       <div style={{ fontSize: 9, fontWeight: 600, color: '#9B9890', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{label}</div>
                       <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1917' }}>{value}</div>
                     </div>
@@ -2155,7 +2155,7 @@ function SearchModal({ onClose, onStartSearch }) {
                     <div style={{
                       width: 16, height: 16, borderRadius: 4, flexShrink: 0,
                       border: `2px solid ${on ? '#6366F1' : '#D1D5DB'}`,
-                      background: on ? '#6366F1' : '#FFFFFF',
+                      background: on ? '#6366F1' : '#F5F4F0',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       transition: 'all 0.12s',
                     }}>
@@ -2245,7 +2245,7 @@ function SearchModal({ onClose, onStartSearch }) {
             >
               <div style={{
                 position: 'absolute', top: 3, left: autoEnrich ? 21 : 3,
-                width: 18, height: 18, borderRadius: '50%', background: '#FFFFFF',
+                width: 18, height: 18, borderRadius: '50%', background: '#F5F4F0',
                 transition: 'left 0.18s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
               }} />
             </button>
@@ -2271,13 +2271,13 @@ function SearchModal({ onClose, onStartSearch }) {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={() => setShowMaximaleConfirm(false)}
-                style={{ flex: 1, height: 44, borderRadius: 10, border: '1px solid #E8E6E0', background: '#FFFFFF', color: '#5F5E5A', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+                style={{ flex: 1, height: 44, borderRadius: 10, border: '1px solid #E8E6E0', background: '#F5F4F0', color: '#5F5E5A', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
               >
                 Annuler
               </button>
               <button
                 onClick={() => canSearch && onStartSearch(buildSearchParams())}
-                style={{ flex: 2, height: 44, borderRadius: 10, border: 'none', background: '#993C1D', color: '#FFFFFF', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                style={{ flex: 2, height: 44, borderRadius: 10, border: 'none', background: '#993C1D', color: '#F5F4F0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
               >
                 Continuer quand même
               </button>
@@ -2293,7 +2293,7 @@ function SearchModal({ onClose, onStartSearch }) {
               style={{
                 width: '100%', height: 48, borderRadius: 12, border: 'none',
                 background: canSearch ? '#6366F1' : '#E8E6E0',
-                color: canSearch ? '#FFFFFF' : '#9B9890',
+                color: canSearch ? '#F5F4F0' : '#9B9890',
                 fontSize: 14, fontWeight: 600,
                 cursor: canSearch ? 'pointer' : 'not-allowed',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -2335,7 +2335,7 @@ function AddModal({ onClose, onAdd }) {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.15)', zIndex: 60 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 480, maxHeight: '90vh', overflowY: 'auto', background: '#FFFFFF', borderRadius: 16, zIndex: 70, boxShadow: '0 16px 48px rgba(0,0,0,0.14)', padding: 28 }}>
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 480, maxHeight: '90vh', overflowY: 'auto', background: '#F5F4F0', borderRadius: 16, zIndex: 70, boxShadow: '0 16px 48px rgba(0,0,0,0.14)', padding: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h2 style={{ fontSize: 18, fontWeight: 500, color: '#1A1917', margin: 0 }}>Nouveau prospect</h2>
           <button onClick={onClose} style={{ background: '#F5F4F0', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9B9890' }}><X size={14} /></button>
@@ -2363,8 +2363,8 @@ function AddModal({ onClose, onAdd }) {
             </div>
           )}
           <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-            <button type="button" onClick={onClose} style={{ flex: 1, height: 44, borderRadius: 10, border: '1px solid #E8E6E0', background: '#FFFFFF', color: '#5F5E5A', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Annuler</button>
-            <button type="submit" style={{ flex: 2, height: 44, borderRadius: 10, border: 'none', background: '#6366F1', color: '#FFFFFF', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Ajouter le prospect</button>
+            <button type="button" onClick={onClose} style={{ flex: 1, height: 44, borderRadius: 10, border: '1px solid #E8E6E0', background: '#F5F4F0', color: '#5F5E5A', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Annuler</button>
+            <button type="submit" style={{ flex: 2, height: 44, borderRadius: 10, border: 'none', background: '#6366F1', color: '#F5F4F0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Ajouter le prospect</button>
           </div>
         </form>
       </div>
@@ -2389,7 +2389,7 @@ function EmptyState({ onAdd, onSearch }) {
         <button onClick={onAdd} style={{ height: 42, padding: '0 18px', borderRadius: 10, border: '1px solid #6366F1', background: 'transparent', color: '#6366F1', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
           <Plus size={13} /> Manuel
         </button>
-        <button onClick={onSearch} style={{ height: 42, padding: '0 18px', borderRadius: 10, border: 'none', background: '#6366F1', color: '#FFFFFF', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button onClick={onSearch} style={{ height: 42, padding: '0 18px', borderRadius: 10, border: 'none', background: '#6366F1', color: '#F5F4F0', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
           <Sparkles size={13} /> Chercher des prospects
         </button>
       </div>
@@ -2780,9 +2780,9 @@ export default function ProspectsScreen({ darkMode }) {
             <div style={{ display: 'flex', gap: 8 }}>
               {filtered.length > 0 && (
                 <button onClick={() => setShowExportModal(true)}
-                  style={{ height: 38, padding: '0 14px', borderRadius: 10, border: '1px solid #E8E6E0', background: '#FFFFFF', color: '#5F5E5A', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                  style={{ height: 38, padding: '0 14px', borderRadius: 10, border: '1px solid #E8E6E0', background: '#F5F4F0', color: '#5F5E5A', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = '#F5F4F0'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = '#FFFFFF'; }}>
+                  onMouseLeave={(e) => { e.currentTarget.style.background = '#F5F4F0'; }}>
                   ↓ Exporter
                 </button>
               )}
@@ -2793,7 +2793,7 @@ export default function ProspectsScreen({ darkMode }) {
                 <Plus size={13} /> Ajouter manuellement
               </button>
               <button data-tour="prospect-search" onClick={() => setShowSearchModal(true)}
-                style={{ height: 38, padding: '0 16px', borderRadius: 10, border: 'none', background: '#6366F1', color: '#FFFFFF', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                style={{ height: 38, padding: '0 16px', borderRadius: 10, border: 'none', background: '#6366F1', color: '#F5F4F0', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                 onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.88'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}>
                 <Sparkles size={13} /> Chercher des prospects
@@ -2809,7 +2809,7 @@ export default function ProspectsScreen({ darkMode }) {
               { label: 'À relancer',    value: stats.toFollowUp, sub: '5+ jours sans réponse',                     accent: stats.toFollowUp > 0 ? '#854F0B' : null },
               { label: 'Incomplets',    value: stats.incomplets, sub: 'manque info de contact',                    accent: stats.incomplets > 0 ? '#92400E' : null },
             ].map(({ label, value, sub, accent }) => (
-              <div key={label} style={{ background: darkMode ? 'rgba(255,255,255,0.04)' : '#FFFFFF', border: `1px solid ${accent ? `${accent}33` : (darkMode ? 'rgba(255,255,255,0.06)' : '#E8E6E0')}`, borderRadius: 12, padding: '12px 16px' }}>
+              <div key={label} style={{ background: darkMode ? 'rgba(255,255,255,0.04)' : '#F5F4F0', border: `1px solid ${accent ? `${accent}33` : (darkMode ? 'rgba(255,255,255,0.06)' : '#E8E6E0')}`, borderRadius: 12, padding: '12px 16px' }}>
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9B9890', marginBottom: 4 }}>{label}</div>
                 <div style={{ fontSize: 24, fontWeight: 600, color: accent || (darkMode ? '#f8fafc' : '#1A1917'), lineHeight: 1.1 }}>{value}</div>
                 <div style={{ fontSize: 11, color: '#9B9890', marginTop: 2 }}>{sub}</div>
@@ -2822,7 +2822,7 @@ export default function ProspectsScreen({ darkMode }) {
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {FILTERS.map((f) => (
                 <button key={f} onClick={() => setActiveFilter(f)}
-                  style={{ padding: '5px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', background: activeFilter === f ? '#6366F1' : (darkMode ? 'rgba(255,255,255,0.06)' : '#F5F4F0'), color: activeFilter === f ? '#FFFFFF' : '#5F5E5A', fontSize: 12, fontWeight: 500, transition: 'all 0.15s' }}>
+                  style={{ padding: '5px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', background: activeFilter === f ? '#6366F1' : (darkMode ? 'rgba(255,255,255,0.06)' : '#F5F4F0'), color: activeFilter === f ? '#F5F4F0' : '#5F5E5A', fontSize: 12, fontWeight: 500, transition: 'all 0.15s' }}>
                   {f}
                 </button>
               ))}
@@ -2830,7 +2830,7 @@ export default function ProspectsScreen({ darkMode }) {
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#9B9890', pointerEvents: 'none' }} />
               <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Rechercher un prospect…"
-                style={{ width: 220, border: `1px solid ${darkMode ? 'rgba(255,255,255,0.1)' : '#E8E6E0'}`, borderRadius: 10, padding: '8px 12px 8px 30px', fontSize: 13, background: darkMode ? 'rgba(255,255,255,0.04)' : '#FFFFFF', color: darkMode ? '#e2e8f0' : '#1A1917', outline: 'none' }}
+                style={{ width: 220, border: `1px solid ${darkMode ? 'rgba(255,255,255,0.1)' : '#E8E6E0'}`, borderRadius: 10, padding: '8px 12px 8px 30px', fontSize: 13, background: darkMode ? 'rgba(255,255,255,0.04)' : '#F5F4F0', color: darkMode ? '#e2e8f0' : '#1A1917', outline: 'none' }}
               />
             </div>
           </div>
@@ -2874,7 +2874,7 @@ export default function ProspectsScreen({ darkMode }) {
                 onClick={retrySkippedBiz}
                 style={{
                   padding: '5px 14px', borderRadius: 8, border: 'none',
-                  background: '#6366F1', color: '#FFFFFF',
+                  background: '#6366F1', color: '#F5F4F0',
                   fontSize: 12, fontWeight: 600, cursor: 'pointer',
                   transition: 'opacity 0.15s',
                 }}
@@ -2909,7 +2909,7 @@ export default function ProspectsScreen({ darkMode }) {
       {/* ── Export modal ── */}
       {showExportModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#FFFFFF', borderRadius: 18, padding: 28, width: 380, boxShadow: '0 24px 60px rgba(0,0,0,0.18)' }}>
+          <div style={{ background: '#F5F4F0', borderRadius: 18, padding: 28, width: 380, boxShadow: '0 24px 60px rgba(0,0,0,0.18)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 16, fontWeight: 600, color: '#1A1917' }}>Exporter les prospects</div>
               <button onClick={() => setShowExportModal(false)} style={{ background: '#F5F4F0', border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9B9890' }}>
@@ -2962,7 +2962,7 @@ export default function ProspectsScreen({ darkMode }) {
         return (
           <div style={{
             position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-            background: barBg, color: '#FFFFFF', borderRadius: 14,
+            background: barBg, color: '#F5F4F0', borderRadius: 14,
             padding: '12px 16px 12px 18px',
             display: 'flex', alignItems: 'center', gap: 14,
             boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
@@ -3032,7 +3032,7 @@ export default function ProspectsScreen({ darkMode }) {
       {discoveryRateLimit && !isSearching && (
         <div style={{
           position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#7c2d12', color: '#FFFFFF', borderRadius: 14,
+          background: '#7c2d12', color: '#F5F4F0', borderRadius: 14,
           padding: '12px 16px 12px 18px',
           display: 'flex', alignItems: 'center', gap: 14,
           boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
@@ -3075,7 +3075,7 @@ export default function ProspectsScreen({ darkMode }) {
       {toast && (
         <div style={{
           position: 'fixed', bottom: (isSearching || discoveryRateLimit) ? 92 : 32, left: '50%', transform: 'translateX(-50%)',
-          background: '#0F172A', color: '#FFFFFF', borderRadius: 10,
+          background: '#0F172A', color: '#F5F4F0', borderRadius: 10,
           padding: '10px 20px', fontSize: 13, fontWeight: 500,
           boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
           animation: 'fadeIn 0.2s ease',

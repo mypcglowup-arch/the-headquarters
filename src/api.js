@@ -1658,32 +1658,32 @@ export async function generateMemoryRecap({ memories = [], lastSession = null },
       ].filter(Boolean).join('\n')
     : '  (none)';
 
-  const system = `You generate a SHORT recap for Samuel at the start of a new advisory session. He runs NT Solutions (AI agency, Quebec) + PC Glow Up. You're the coordinator — you brief him on what you remember before the session starts. Reply with STRICT JSON only.
+  const system = `You generate an ULTRA-SHORT session-start recap for Samuel. He runs NT Solutions (AI agency, Quebec) + PC Glow Up. Reply with STRICT JSON only.
 
-Stored memories (long-term, from Mem0):
+Stored memories (long-term):
 ${memoryBlock}
 
-Last session (local history):
+Last session (local):
 ${lastBlock}
 
 Schema:
 {
-  "welcomeLine": string,   // 1 short opening line, ≤ 80 chars, warm but not syrupy
-  "lastWin":     string,   // ≤ 100 chars, last notable win/signature/progress — empty string if none clear
-  "lastBlocker": string,   // ≤ 100 chars, last blocker/concern/stuck point — empty string if none clear
-  "nextMove":    string,   // ≤ 100 chars, next committed move / action Samuel owes himself — empty string if none clear
-  "confidence":  number    // 0 to 1 — how much of this is actually grounded in the sources above
+  "welcomeLine": string,   // 1 line, ≤ 60 chars. Warm, dry, never syrupy.
+  "lastWin":     string,   // ≤ 80 chars (fits 2 lines mobile). Concrete win — name, number, or specific progress. Empty if nothing solid.
+  "lastBlocker": string,   // ≤ 80 chars. Concrete blocker. Empty if nothing solid.
+  "nextMove":    string,   // ≤ 80 chars. One concrete next move owed. Empty if nothing solid.
+  "confidence":  number    // 0 to 1
 }
 
-Rules:
+HARD RULES:
 - Language: ${lang === 'fr' ? 'FRANÇAIS' : 'ENGLISH'}
-- Be specific — use real names, numbers, dates when they're in the sources. Never invent.
-- If a field has nothing concrete to say, set it to "" (empty). Do not fill with filler.
-- confidence < 0.5 when you had to guess or nothing was specific — caller will drop the recap.
-- Never reference "Mem0" or "your memory system" — speak as QG, not as an AI tool.
-- welcomeLine examples (FR): "Prêt à reprendre là où on s'est quittés.", "On avait laissé un plan ouvert — on finit ?"
-- welcomeLine examples (EN): "Picking up where we left off.", "Still one move open from last time — let's close it."
-- Output ONLY the JSON object.`;
+- Max 80 chars per point. NEVER exceed. If it doesn't fit in 80 chars, cut ruthlessly.
+- MAX 3 meaningful fields (lastWin, lastBlocker, nextMove). Leave welcomeLine empty if no natural one-liner.
+- Be specific or be empty. Never pad with filler like "on continue sur la lancée" or "prochaine étape importante".
+- Use real names, numbers, dates verbatim from sources. Never invent.
+- confidence < 0.5 → caller drops the recap. Don't ship weak recaps.
+- Never reference "Mem0" or "memory system". Speak as QG.
+- Output ONLY the JSON.`;
 
   try {
     console.log('[generateMemoryRecap] sources — memories:', memories.length, 'lastSession:', !!lastSession);
@@ -1705,10 +1705,10 @@ Rules:
       console.warn('[generateMemoryRecap] dropped — confidence=', parsed.confidence);
       return null;
     }
-    const welcomeLine = String(parsed.welcomeLine || '').slice(0, 120).trim();
-    const lastWin     = String(parsed.lastWin || '').slice(0, 120).trim();
-    const lastBlocker = String(parsed.lastBlocker || '').slice(0, 120).trim();
-    const nextMove    = String(parsed.nextMove || '').slice(0, 120).trim();
+    const welcomeLine = String(parsed.welcomeLine || '').slice(0, 80).trim();
+    const lastWin     = String(parsed.lastWin || '').slice(0, 80).trim();
+    const lastBlocker = String(parsed.lastBlocker || '').slice(0, 80).trim();
+    const nextMove    = String(parsed.nextMove || '').slice(0, 80).trim();
 
     // Need at least ONE of the three substantive fields to be worth showing
     if (!lastWin && !lastBlocker && !nextMove) {
@@ -1780,6 +1780,275 @@ Body: ${body}`;
     console.warn('[classifyEmailUrgency] failed:', err.message);
     return null;
   }
+}
+
+// ─── Workflow Builder (Make.com package generation) ─────────────────────────
+// Given user answers + a template skeleton, produce 3 deliverables:
+//   1. Filled Make.com JSON (placeholders replaced — structure untouched)
+//   2. Install guide (markdown, step by step)
+//   3. Sales script (NT Solutions tone, with suggested pricing)
+// Runs the 3 LLM calls in parallel via Promise.all.
+export async function generateWorkflowPackage({ answers, template, pricing, lang = 'fr' }) {
+  if (!answers || !template) return null;
+
+  const skeletonStr = JSON.stringify(template.makeJsonSkeleton, null, 2);
+  const answersStr  = JSON.stringify(answers, null, 2);
+  const toolsList   = Array.isArray(answers.tools) ? answers.tools.join(', ') : (answers.tools || 'Aucun');
+
+  // ── 1) Fill the Make.com JSON ───────────────────────────────────────────
+  // Haiku is enough — it's a mechanical fill-the-blanks task. We only ask for
+  // placeholder replacement; the LLM is forbidden from altering module types
+  // / versions / flow order.
+  const jsonSystem = `CONTEXT FRAME (unbreakable — do not deviate):
+Samuel runs NT Solutions, an AI automation agency. He is BUILDING this workflow FOR HIS CLIENT — he is NOT the end user. Every template value you fill (emails, prompts, SMS, invoice descriptions, etc.) must speak as if it belongs to the CLIENT's business, using the CLIENT's name, tone, and audience. Never write copy that assumes Samuel is the operator or the customer.
+
+TASK: fill {{PLACEHOLDERS}} in a Make.com scenario skeleton.
+
+STRICT RULES:
+- Do NOT change any "module", "version", "id" or structure — only replace {{PLACEHOLDERS}} and inject reasonable strings into parameters.
+- Never remove or add modules.
+- For placeholders like {{CLIENT_NAME}} use the client's business name directly (from answers.clientName).
+- For {{SYSTEM_PROMPT}} / {{SYSTEM_EMAIL_X}} / {{WELCOME_EMAIL_BODY}} / {{SMS_CALLBACK_TEMPLATE}} / {{INVOICE_DESCRIPTION}} / {{SUBJECT_X}} write concrete French-Canadian (or English if lang=en) copy that the CLIENT'S business would actually send — the client's voice, talking to the client's own audience. Keep strings under 600 chars.
+- For placeholders that look like IDs (GBP_LOCATION_ID, SHEET_ID, NOTION_DB_ID, TWILIO_PHONE, APPROVAL_EMAIL, NOTIFY_EMAIL) leave them as the literal placeholder with REPLACE_ME_ prefix so Samuel knows to configure them with the client's real values during setup. Example: "REPLACE_ME_GBP_LOCATION_ID".
+- Double-curly Make.com references like {{\`{{1.name}}\`}} MUST stay intact — those are Make's variable refs, not placeholders.
+- Return ONLY the raw JSON — no prose, no markdown, no \`\`\` fences.
+
+User answers (describe THE CLIENT, not Samuel):
+${answersStr}
+
+Skeleton to fill:
+${skeletonStr}`;
+
+  const jsonPromise = callClaude(
+    jsonSystem,
+    [{ role: 'user', content: 'Fill the skeleton and return the JSON.' }],
+    2500, false, null, false, false, 'COORDINATOR',
+    HAIKU_MODEL
+  ).then((text) => {
+    // Strip code fences if Haiku added any
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace  = cleaned.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1) return null;
+    const slice = cleaned.slice(firstBrace, lastBrace + 1);
+    try { return JSON.parse(slice); } catch (e) {
+      console.warn('[Workflow] JSON parse failed:', e.message);
+      return null;
+    }
+  }).catch((e) => { console.warn('[Workflow] JSON gen error:', e.message); return null; });
+
+  // ── 2) Install guide (markdown) ─────────────────────────────────────────
+  const guideSystem = `CONTEXT FRAME (unbreakable — do not deviate):
+You are writing an installation guide that Samuel (NT Solutions consultant) will follow himself to implement this workflow FOR HIS CLIENT "${answers.clientName}". The guide speaks TO Samuel the consultant. It references the CLIENT's tools/accounts, not Samuel's. Samuel is the operator doing the delivery.
+
+TASK: crystal-clear installation guide for the Make.com scenario.
+
+Output: MARKDOWN only. Language: ${lang === 'fr' ? 'FRANÇAIS (québécois simple, direct — tutoiement de Samuel)' : 'ENGLISH (US, direct, plain)'}.
+
+Structure (use these exact H2 headings):
+# Guide d'installation — ${template.name} (pour ${answers.clientName})
+
+## Ce que ce workflow fait pour ton client (1 paragraphe, max 3 phrases)
+## Ce dont tu as besoin avant de commencer (liste)
+  Inclus : accès au Make.com (le tien ou celui du client, précise quelle option est recommandée), les credentials des outils du client (ex: accès Google Business Profile de ton client, Sheet ID, etc.).
+## Installation étape par étape (numérotée)
+  Chaque étape mentionne explicitement :
+  - l'app/outil concerné (Make.com, Stripe, Twilio, Google Business, etc.)
+  - ce que TOI tu dois copier/coller ou configurer
+  - où récupérer auprès du client les IDs à remplacer (location_id, sheet_id, numéro Twilio, adresse d'approbation, etc.)
+## Premier test (comment valider avec ton client)
+## Problèmes courants (2-3 troubleshooting tips)
+
+Contexte :
+Client: ${answers.clientName}
+Industrie du client: ${answers.industry}
+Outils déjà utilisés par le client: ${toolsList}
+Volume chez le client: ${answers.volume}
+
+Keep it under 900 words. Be concrete, specific to the template. Everywhere you might be tempted to write "tu" referring to the end user, remember "tu" = Samuel the consultant. The client is "ton client" / "le client".`;
+
+  const guidePromise = callClaude(
+    guideSystem,
+    [{ role: 'user', content: 'Write the install guide.' }],
+    1800, false, null, false, false, 'COORDINATOR',
+    'claude-sonnet-4-5'
+  ).catch((e) => { console.warn('[Workflow] guide error:', e.message); return null; });
+
+  // ── 3) Sales script NT Solutions ────────────────────────────────────────
+  const pricingSummary = pricing
+    ? `Suggested tier: ${pricing.tier}. Setup: $${pricing.setupMin}-${pricing.setupMax}. Retainer: $${pricing.retainerMin}-${pricing.retainerMax}/mo. Complexity score: ${pricing.score}/15 (industry mult ${pricing.industryMultiplier}).`
+    : 'Pricing not computed.';
+
+  const scriptSystem = `CONTEXT FRAME (unbreakable — do not deviate):
+Samuel (consultant NT Solutions, Québec) va utiliser ce script POUR PITCHER ce workflow à "${answers.clientName}" (un prospect / client externe). Samuel = le consultant qui vend. "${answers.clientName}" = le client qui achète. Tout le script parle AU CLIENT, dans la voix de Samuel qui s'adresse au client. Le "tu" du script = le client (pas Samuel).
+
+TASK: Script de vente court et direct que Samuel lit/adapte au téléphone ou en meeting.
+
+Language: ${lang === 'fr' ? 'FRANÇAIS québécois direct' : 'ENGLISH direct'}.
+Tone: Samuel's voice — direct, concret, orienté ROI. Pas de bullshit marketing. Tutoiement du client. Chiffré.
+
+Structure (markdown) :
+# Script de vente — ${answers.clientName}
+
+## Hook (2-3 phrases que Samuel dit AU client)
+Accroche spécifique à l'industrie du client (${answers.industry}). Samuel nomme le problème concret que le client vit au quotidien et que ce workflow résout.
+
+## Démo en une phrase (Samuel parle au client)
+"Concrètement [nom du client], ça fait X pour que TU (le client) gagnes Y par semaine."
+
+## Pricing proposé (Samuel annonce le prix au client)
+Tier ${pricing?.tier || 'Pro'} — chiffres exacts :
+- **Setup** : $${pricing?.setupMin || 1500} - $${pricing?.setupMax || 3000}
+- **Retainer mensuel** : $${pricing?.retainerMin || 400} - $${pricing?.retainerMax || 800}/mo
+
+Justifie le prix en 2 phrases chiffrées (ROI client, temps économisé chez le client, etc.).
+
+## Objection prévisible + réponse
+Anticipe la résistance #1 du client (ex : "on peut le faire nous-mêmes", "c'est trop cher", "on a pas le temps") et la réponse de Samuel en 2 phrases.
+
+## Close
+La phrase exacte que Samuel dit pour proposer l'étape suivante (appel de 15 min, démo live, proposition écrite, etc.).
+
+Contexte sur le client (pas sur Samuel) :
+Client: ${answers.clientName}
+Industrie du client: ${answers.industry}
+Outils actuels du client: ${toolsList}
+Volume chez le client: ${answers.volume}
+Budget déclaré par le client: ${answers.budget}
+Pricing computed: ${pricingSummary}
+
+Keep it under 400 words. Samuel utilise ce script EN DIRECT au téléphone avec le client, pas une présentation PowerPoint. Écris comme Samuel parlerait au client.`;
+
+  const scriptPromise = callClaude(
+    scriptSystem,
+    [{ role: 'user', content: 'Write the sales script.' }],
+    1200, false, null, false, false, 'CARDONE',
+    'claude-sonnet-4-5'
+  ).catch((e) => { console.warn('[Workflow] script error:', e.message); return null; });
+
+  // ── 4) Problem summary (what pain this workflow fixes for the client) ──
+  const problemSystem = `CONTEXT FRAME (unbreakable): Samuel (consultant NT Solutions) is BUILDING this workflow FOR HIS CLIENT "${answers.clientName}". This document speaks ABOUT the client's pain, as if Samuel handed a diagnostic report to the client.
+
+TASK: Write a CLIENT PROBLEM SUMMARY — a diagnostic of the pain this workflow solves.
+
+Output: MARKDOWN only. Language: ${lang === 'fr' ? 'FRANÇAIS québécois professionnel direct' : 'ENGLISH direct professional'}.
+
+Structure (strict, no deviation):
+# Diagnostic — ${answers.clientName}
+
+## Le problème actuel
+2-3 paragraphes concrets. Nomme les frictions quotidiennes typiques d'un ${answers.industry} avec ${answers.volume} unités/mois. Chiffre le temps perdu (estimation réaliste).
+
+## Ce qui se passe si rien ne change
+1 paragraphe. Coût cumulatif mensuel en heures + $ équivalent (salaire minimum $15/h × heures).
+
+## Opportunité
+1 paragraphe. Ce que ce workflow débloque concrètement. Focus sur TIME + QUALITY + SCALE.
+
+Contexte:
+Client: ${answers.clientName}
+Industrie: ${answers.industry}
+Volume: ${answers.volume}
+Outils actuels: ${toolsList}
+
+Keep under 400 words. Zero bullshit marketing. Chiffré, concret, sobre.`;
+
+  const problemPromise = callClaude(
+    problemSystem,
+    [{ role: 'user', content: 'Write the client problem diagnostic.' }],
+    800, false, null, false, false, 'HORMOZI', 'claude-sonnet-4-5'
+  ).catch((e) => { console.warn('[Workflow] problem error:', e.message); return null; });
+
+  // ── 5) Workflow explainer (what it does, in plain language for the client) ──
+  const explainerSystem = `CONTEXT FRAME (unbreakable): Samuel (consultant NT Solutions) is delivering this workflow TO HIS CLIENT "${answers.clientName}". This section explains what the workflow DOES in plain non-technical language — the client will read this to understand the system they're buying.
+
+TASK: Write a WORKFLOW EXPLAINER.
+
+Output: MARKDOWN only. Language: ${lang === 'fr' ? 'FRANÇAIS québécois simple (zéro jargon tech)' : 'ENGLISH simple (zero tech jargon)'}.
+
+Structure:
+# Comment ça fonctionne
+
+## Ce que le système fait (en une phrase)
+Une ligne claire. Pas "leverage AI to optimize" — plutôt "quand X arrive, le système fait Y automatiquement."
+
+## Le flux, étape par étape
+Numérotée. 4-7 étapes. Chaque étape : quoi se passe + en combien de temps + qui voit quoi (client, ton équipe, le système).
+
+## Ce que le client VOIT au quotidien
+2-3 phrases concrètes. Expérience client, pas architecture technique.
+
+## Ce que le client NE voit PAS (et c'est bien)
+1 paragraphe. Ce qui tourne en arrière-plan invisible, pour rassurer sur la simplicité.
+
+## Limites connues
+2-3 points honnêtes sur ce que le système ne fait PAS (gère l'attente).
+
+Contexte:
+Template: ${template.name} — ${template.description}
+Client: ${answers.clientName}
+Industrie: ${answers.industry}
+
+Keep under 500 words. Zéro jargon (pas de "webhook", "API", "trigger" sauf si vraiment nécessaire et expliqué).`;
+
+  const explainerPromise = callClaude(
+    explainerSystem,
+    [{ role: 'user', content: 'Write the plain-language workflow explainer.' }],
+    1000, false, null, false, false, 'COORDINATOR', 'claude-sonnet-4-5'
+  ).catch((e) => { console.warn('[Workflow] explainer error:', e.message); return null; });
+
+  // ── 6) FAQ / Objections (so Samuel has reactive answers in his pocket) ──
+  const faqSystem = `CONTEXT FRAME (unbreakable): Samuel (consultant NT Solutions) pitches ce workflow à "${answers.clientName}". Cette FAQ anticipe les objections que le client va poser et donne à Samuel des réponses prêtes.
+
+TASK: Generate 5-6 realistic client objections with direct Samuel-voice answers.
+
+Output: MARKDOWN only. Language: ${lang === 'fr' ? 'FRANÇAIS québécois direct (tutoiement du client)' : 'ENGLISH direct (client addressed as "you")'}.
+
+Structure:
+# FAQ — Objections anticipées
+
+### Q: [objection typique en 1 phrase courte]
+**R:** Réponse de Samuel. 2-3 phrases max. Chiffrée si possible. Respectueuse mais ferme. Jamais défensive.
+
+(répète pour 5-6 objections)
+
+Objections obligatoires à couvrir (adapte au template/industrie):
+1. "On peut le faire nous-mêmes" OU "On a déjà quelqu'un qui s'en occupe"
+2. "C'est trop cher" OU "Budget serré"
+3. "C'est trop compliqué à installer" OU "On a pas le temps de gérer ça"
+4. "Qu'est-ce qui se passe si ça brise / si tu disparaîtes"
+5. "Est-ce que ça marche vraiment avec ${answers.industry} spécifiquement ?"
+6. Une objection spécifique à l'outil principal du template (optionnelle)
+
+Contexte:
+Client: ${answers.clientName}
+Industrie: ${answers.industry}
+Outils actuels du client: ${toolsList}
+Pricing: ${pricingSummary}
+
+Keep under 500 words. Pas de réponses vagues. Chaque réponse = un contre-argument concret.`;
+
+  const faqPromise = callClaude(
+    faqSystem,
+    [{ role: 'user', content: 'Write the FAQ/objections.' }],
+    1000, false, null, false, false, 'VOSS', 'claude-sonnet-4-5'
+  ).catch((e) => { console.warn('[Workflow] FAQ error:', e.message); return null; });
+
+  const [makeJson, guide, script, problemSummary, workflowExplainer, faq] = await Promise.all([
+    jsonPromise, guidePromise, scriptPromise,
+    problemPromise, explainerPromise, faqPromise,
+  ]);
+
+  return {
+    makeJson,                // parsed JSON object or null on failure
+    guide,                   // markdown string
+    script,                  // markdown string
+    problemSummary,          // markdown string — client pain diagnostic
+    workflowExplainer,       // markdown string — plain-language explainer
+    faq,                     // markdown string — objection bank
+    pricing,                 // pass-through so UI can display it
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 // ─── Session runner ───────────────────────────────────────────────────────────

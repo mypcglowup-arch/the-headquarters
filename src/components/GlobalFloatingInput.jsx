@@ -3,7 +3,9 @@
 // On submit → starts a Quick Advice session with the message pre-sent.
 
 import { useState, useRef, useEffect } from 'react';
+import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { AGENT_CONFIG } from '../prompts.js';
+import { createAudioRecorder, isMicSupported } from '../utils/voice.js';
 
 // ── Step 3 — keyword-based agent prediction (instant, zero latency) ──────────
 const KEYWORD_MAP = [
@@ -98,6 +100,37 @@ export default function GlobalFloatingInput({
   const [showChips,     setShowChips]     = useState(false);
   const inputRef    = useRef(null);
   const classifyRef = useRef(null);
+
+  // ── Voice (STT via Whisper) ────────────────────────────────────────────
+  const micSupported = isMicSupported();
+  const [micState, setMicState] = useState('idle'); // 'idle' | 'recording' | 'transcribing'
+  const recRef = useRef(null);
+  const preRecordingTextRef = useRef('');
+
+  function toggleRecording() {
+    if (!micSupported) return;
+    if (micState === 'recording') { recRef.current?.stop(); return; }
+    if (micState === 'transcribing') return;
+    preRecordingTextRef.current = text;
+    const rec = createAudioRecorder({
+      lang: lang === 'fr' ? 'fr-CA' : 'en-US',
+      onStart: () => setMicState('recording'),
+      onTranscribing: () => setMicState('transcribing'),
+      onFinal: (transcript) => {
+        const base = preRecordingTextRef.current;
+        setText(base ? `${base} ${transcript}`.trim() : transcript);
+        setMicState('idle');
+        setTimeout(() => inputRef.current?.focus(), 50);
+      },
+      onError: (err) => {
+        console.warn('[Voice] Whisper error:', err);
+        setMicState('idle');
+      },
+    });
+    if (!rec) return;
+    recRef.current = rec;
+    rec.start();
+  }
 
   // Rotate placeholder every 4 s
   useEffect(() => {
@@ -339,6 +372,50 @@ export default function GlobalFloatingInput({
               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
             </svg>
+          </button>
+
+          {/* Mic — Whisper STT (3 states) */}
+          <button
+            onClick={toggleRecording}
+            disabled={!micSupported || micState === 'transcribing'}
+            title={!micSupported
+              ? (lang === 'fr' ? 'Micro non supporté' : 'Mic not supported')
+              : micState === 'recording'
+              ? (lang === 'fr' ? 'Arrêter — transcrire' : 'Stop — transcribe')
+              : micState === 'transcribing'
+              ? (lang === 'fr' ? 'Transcription Whisper…' : 'Whisper transcribing…')
+              : (lang === 'fr' ? 'Parler (Whisper)' : 'Speak (Whisper)')}
+            aria-label={micState === 'recording' ? 'Stop recording' : 'Start voice recording'}
+            aria-pressed={micState === 'recording'}
+            style={{
+              width: 28, height: 28,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background:
+                micState === 'recording'    ? 'rgba(239,68,68,0.9)' :
+                micState === 'transcribing' ? 'rgba(99,102,241,0.9)' :
+                'transparent',
+              border:
+                micState === 'idle' ? '1px solid rgba(148,163,184,0.14)' : 'none',
+              cursor:       micSupported && micState !== 'transcribing' ? 'pointer' : 'not-allowed',
+              borderRadius: 6,
+              color:
+                micState === 'idle'
+                  ? (micSupported ? 'rgba(148,163,184,0.7)' : 'rgba(148,163,184,0.2)')
+                  : '#fff',
+              transition:   'all 200ms ease',
+              boxShadow:
+                micState === 'recording'    ? '0 0 0 3px rgba(239,68,68,0.2), 0 0 12px rgba(239,68,68,0.35)' :
+                micState === 'transcribing' ? '0 0 0 3px rgba(99,102,241,0.2), 0 0 12px rgba(99,102,241,0.35)' :
+                'none',
+              animation:
+                micState === 'recording' ? 'pulse 1.4s ease-in-out infinite' : 'none',
+            }}
+          >
+            {!micSupported
+              ? <MicOff size={13} />
+              : micState === 'transcribing'
+              ? <Loader2 size={13} className="animate-spin" />
+              : <Mic size={13} />}
           </button>
 
           {/* Send button — filled accent when input has text */}

@@ -55,7 +55,7 @@ export default function JournalScreen({
               onClick={() => setFilter(f)}
               className={`px-4 py-1.5 rounded-md text-xs font-medium capitalize transition-all ${
                 filter === f
-                  ? darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900 shadow-sm'
+                  ? darkMode ? 'bg-gray-700 text-white' : 'bg-[#F5F4F0] text-gray-900 shadow-sm'
                   : darkMode ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'
               }`}
             >
@@ -88,7 +88,7 @@ export default function JournalScreen({
                       : 'border-gray-100 bg-gray-50 opacity-50'
                     : darkMode
                     ? 'border-gray-800 bg-gray-900'
-                    : 'border-gray-200 bg-white'
+                    : 'border-[#E8E6E0] bg-[#F5F4F0]'
                 }`}
               >
                 {/* Checkbox + confetti */}

@@ -720,10 +720,11 @@ function renderMarkdownHtml(text, rgb) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+  // Using [\s\S] instead of `.` so bold/italic tags survive across newlines
   return safe
-    .replace(/\*\*(.*?)\*\*/g, `<strong style="color:rgb(${rgb});font-weight:700">$1</strong>`)
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, `<code style="padding:2px 6px;border-radius:4px;font-size:0.75rem;font-family:monospace;background:rgba(${rgb},0.15);color:rgb(${rgb})">$1</code>`)
+    .replace(/\*\*([\s\S]+?)\*\*/g, `<strong style="color:rgb(${rgb});font-weight:700">$1</strong>`)
+    .replace(/(^|[^*])\*([^*\n][\s\S]*?[^*\n])\*(?!\*)/g, '$1<em>$2</em>')
+    .replace(/`([^`]+?)`/g, `<code style="padding:2px 6px;border-radius:4px;font-size:0.75rem;font-family:monospace;background:rgba(${rgb},0.15);color:rgb(${rgb})">$1</code>`)
     .replace(/(\$[\d,k.]+|\d[\d,.]*%)/g, `<span style="font-weight:600;color:rgb(${rgb})">$1</span>`)
     .replace(/^### (.+)$/gm, `<strong style="font-size:0.875rem;font-weight:700;color:rgb(${rgb})">$1</strong>`)
     .replace(/^## (.+)$/gm, `<strong style="font-size:0.875rem;font-weight:700;color:rgb(${rgb})">$1</strong>`);

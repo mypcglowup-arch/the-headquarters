@@ -86,7 +86,7 @@ function DecisionCard({ decision: d, darkMode, lang = 'fr', onUpdateOutcome }) {
 
   return (
     <div
-      className={`p-4 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}
+      className={`p-4 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-[#F5F4F0] border-[#E8E6E0]'}`}
       style={config ? { borderLeftColor: `rgba(${config.glowRgb}, 0.6)`, borderLeftWidth: 3 } : {}}
     >
       <p className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{d.decision}</p>

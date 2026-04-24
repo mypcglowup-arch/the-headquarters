@@ -45,7 +45,7 @@ export default function LibraryScreen({ darkMode, lang = 'fr' }) {
         </div>
 
         {/* Search */}
-        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-[#F5F4F0] border-[#E8E6E0]'}`}>
           <Search size={13} style={{ color: darkMode ? '#4b5563' : '#9ca3af', flexShrink: 0 }} />
           <input
             type="text"

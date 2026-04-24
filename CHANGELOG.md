@@ -2,6 +2,257 @@
 
 ## [Unreleased]
 
+### Added — Phase 3 — Workflow Builder V1
+Nouvelle section accessible depuis la nav (icon Wrench). Samuel pick un template → répond à 5 questions → QG génère un package complet en parallèle : **JSON Make.com prêt à importer + guide d'installation + sales script NT Solutions avec pricing auto**. Export PDF brandé.
+
+**Pourquoi cette approche :** les skeletons Make.com sont pré-validés en dur (module types, versions, connections). Le LLM **ne remplit que les {{PLACEHOLDERS}}** — jamais la structure. Résultat : JSON toujours importable dans Make.com, zéro risque d'hallucination structurelle.
+
+### 4 templates V1
+| Template | Description | Complexité base |
+|---|---|---|
+| ⭐ Réponses avis Google | Webhook GBP → Claude rédige → Gmail d'approbation | 3 |
+| 🎯 Relance prospects auto | Sheets trigger → séquence 2 emails + Claude perso | 5 |
+| 💸 Facturation auto | Stripe → invoice + welcome email + Notion ledger | 4 |
+| 📞 Répondeur intelligent | Twilio missed call → Whisper → Claude → SMS + notif | 7 |
+
+### Pricing automatique (local, pas de LLM)
+Score de complexité = `template_base + volume_score + tools_count`, multiplié par `industry_weight` (Restaurant 1.0, Pro services 1.4, E-commerce 1.5, SaaS 1.6).
+
+4 tiers :
+- **Starter** (score < 5) : $600-1200 setup · $150-300/mo retainer
+- **Pro** (score < 9) : $1500-3000 setup · $400-800/mo
+- **Enterprise** (score < 13) : $3500-6500 setup · $900-1800/mo
+- **Custom** (score ≥ 13) : $6500-12000+ setup · $1800-3500+/mo
+
+Budget alignment check : alerte amber/rouge si le budget déclaré est en-dessous du tier calculé. Samuel voit *"Budget serré — vends le ROI en priorité"* avant de pitch.
+
+### Fichiers
+
+- `src/data/workflowTemplates.js` (**NEW**) — 4 templates avec skeletons Make.com valides (double-curly Make refs préservés)
+- `src/utils/workflowPricing.js` (**NEW**) — `computePricing()`, `budgetAlignment()`, multiplicateurs industrie
+- `src/utils/workflowPdf.js` (**NEW**) — export jsPDF avec cover page brandée + 3 sections (guide / script / JSON en courier)
+- `src/api.js`
+  - `generateWorkflowPackage({answers, template, pricing, lang})` — 3 calls parallèles via `Promise.all`
+  - **Haiku** pour le JSON fill (mécanique, strict rules pour ne pas muter la structure)
+  - **Sonnet** pour le guide d'installation markdown (étape par étape, non-dev friendly)
+  - **Sonnet** pour le sales script (tone CARDONE — direct, chiffré, ROI)
+- `src/components/WorkflowBuilder.jsx` (**NEW**)
+  - State machine : `picker` → `questioning` → `generating` → `results`
+  - Picker : 4 cards templates (hover scale 1.015 comme mode cards)
+  - Q&A : 5 questions séquentielles, inputs typés (`text` / `number` / `select` / `multi`), progress bar en haut, back entre questions
+  - Generating : spinner + message "3 documents en parallèle"
+  - Results : pricing card gold + 3 tabs (JSON / Guide / Script) avec copy buttons + bouton Export PDF principal
+- `src/components/Header.jsx`
+  - Icon `Wrench` ajoutée conditionnellement sur `onGoWorkflow` prop
+- `src/App.jsx`
+  - Routing `screen === 'workflow'` avec scroll overflow
+  - Handler `onGoWorkflow` qui toggle depuis n'importe quel écran
+
+### Export PDF
+- Cover page sur fond navy brand avec emoji template + nom client + industrie + tier + pricing chiffré
+- Section 1 : Guide d'installation (Helvetica, paragraphes)
+- Section 2 : Script de vente + pricing appendix
+- Section 3 : JSON Make.com en **Courier** monospace pour lisibilité
+- Pagination + footer "NT Solutions · Workflow package · page X"
+- Nom fichier : `NTSolutions_{template_id}_{client_name}.pdf`
+
+### Known limitations V1
+- Pas de workflow "Custom" (free-form) — seulement les 4 templates (à venir V2)
+- Pas de validation live du JSON contre l'API Make.com — trust du skeleton pré-validé
+- Pas de sauvegarde cloud des workflows générés (pas de table Supabase pour ça encore)
+- Pas d'historique — re-générer à chaque fois
+- Pricing basé sur heuristiques locales, pas sur données marché réelles
+- JSON placeholders type `REPLACE_ME_GBP_LOCATION_ID` sont laissés en literal pour que l'user les configure manuellement dans Make.com
+
+### Changed — Voice STT : Web Speech API → OpenAI Whisper
+La transcription vocale passe de l'API browser native à **OpenAI Whisper** — qualité de transcription niveau ChatGPT, support **Firefox natif** (fini le gap browser), et excellent français canadien.
+
+**Pourquoi le changement :**
+- ❌ Web Speech API ne fonctionnait pas sur Firefox
+- ❌ Qualité variable sur noms propres (Dubé, ElevenLabs, NT Solutions)
+- ❌ Dépendait des moteurs vocaux OS (inconsistant cross-device)
+- ✅ Whisper : qualité uniforme partout, FR-CA natif, prompt hint bias vocabulaire brand
+
+**Flow :**
+```
+Click mic
+  → MediaRecorder (audio/webm opus)
+  → Click mic stop
+  → Blob POST /api/whisper (multipart form-data)
+  → Proxy injecte Authorization: Bearer $OPENAI_API_KEY
+  → Whisper répond texte précis
+  → Insertion dans input
+```
+
+**Coût :** $0.006/minute de Whisper. Une phrase typique de 10s = ~$0.001. Budget mensuel typique < $1.
+
+- `api/whisper.js` (**NEW**) — Vercel serverless proxy
+  - Buffer le body multipart (≤ 25 MB), forward à OpenAI avec Auth server-side
+  - `bodyParser: false` pour preserve le multipart boundary
+  - CORS activé pour l'app déployée
+- `vite.config.js`
+  - Nouvelle route `/api/whisper` → `https://api.openai.com/v1/audio/transcriptions`
+  - Injecte `Authorization: Bearer ${OPENAI_API_KEY}` server-side (pas de touch au Content-Type)
+- `.env.example`
+  - Ajout `OPENAI_API_KEY` (**sans** préfixe `VITE_` — server-side uniquement)
+  - Documentation sécurité explicite : la clé n'atteint jamais le browser
+- `src/utils/voice.js`
+  - **Supprimé** : `createRecognition`, `isSTTSupported` (Web Speech)
+  - **Ajouté** : `isMicSupported`, `createAudioRecorder({lang, onStart, onTranscribing, onFinal, onError, onStop})`
+  - Pick automatique du meilleur codec : `audio/webm;codecs=opus` préféré, fallbacks mp4/ogg
+  - Whisper prompt hint bilingue avec brand words (NT Solutions, Bouclier 5 Étoiles, noms agents, etc.) pour biaiser la transcription des mots spécifiques
+  - Config Whisper : `model=whisper-1`, `temperature=0`, `response_format=json`, `language=fr|en`
+  - **TTS intacte** (speechSynthesis natif, profils agents, cleanForSpeech) — zéro changement
+- `src/components/ChatInput.jsx` + `GlobalFloatingInput.jsx`
+  - Micro passe de 2 à **3 états** : `idle` (grey) → `recording` (red pulse) → `transcribing` (indigo spinner)
+  - Bouton disabled pendant transcription pour éviter double-click
+  - Focus textarea restauré après insertion du texte final
+
+### Trade-offs vs Web Speech API
+
+| | Web Speech | Whisper |
+|---|---|---|
+| Qualité FR-CA | Variable (OS-dependent) | Excellente |
+| Firefox | ❌ | ✅ |
+| Latence | ~instant (streaming) | 1-3s (post-enregistrement) |
+| Live interim transcript | ✅ | ❌ (pas de streaming) |
+| Coût | Gratuit | $0.006/min |
+| Précision noms propres | Faible | Haute (prompt hint) |
+| Privacy | Cloud du browser (Google/Apple) | OpenAI (via ton API key) |
+
+### ⚠ Setup obligatoire
+Ajouter dans `.env` :
+```
+OPENAI_API_KEY=sk-proj-your-key-here
+```
+**PAS** de préfixe `VITE_` — cette clé est strictement server-side. Le proxy Vite + Vercel serverless la lit via `process.env`. Le browser ne la voit jamais.
+
+Restart `npm run dev` pour que Vite charge la nouvelle config de proxy.
+
+### Known limitations
+- Latence 1-3s vs instant — OK pour transcription précise, pas streaming
+- Besoin d'une connexion réseau (sinon Web Speech aurait fonctionné offline sur Chrome)
+- 25 MB max par requête (~100 min de parole — irréaliste d'atteindre)
+- Permission micro requise à chaque session navigateur si l'user l'a refusée
+
+### Added — Phase 3 — Voice mode (STT + TTS par agent)
+Tu peux maintenant parler à QG et le laisser te répondre à voix haute. Mic dans le ChatInput et le GlobalFloatingInput. Toggle "Voix" dans le header active le TTS sur chaque réponse d'agent — **chaque agent a sa propre voix** (rate + pitch distincts pour respecter leur personnalité).
+
+**Stack :** Web Speech API native du browser — zéro dépendance, zéro coût API, tout tourne côté client.
+
+- `src/utils/voice.js` (**NEW**)
+  - `isSTTSupported()` / `isTTSSupported()` — feature detection
+  - `createRecognition({lang, onInterim, onFinal, onError, onEnd})` — STT controller
+  - `speak(text, {agent, lang})` / `cancelSpeech()` / `isSpeaking()` — TTS
+  - `getVoices()` — async fetch de la liste de voix système (voiceschanged event)
+  - `AGENT_VOICE_PROFILES` :
+    | Agent | Rate | Pitch | Feel |
+    |---|---|---|---|
+    | HORMOZI | 0.98 | 0.85 | calme + précis |
+    | CARDONE | 1.15 | 1.05 | rapide + énergique |
+    | ROBBINS | 0.92 | 0.90 | lent + grave |
+    | GARYV | 1.20 | 1.00 | rapide haute énergie |
+    | NAVAL | 0.88 | 0.82 | lent + philosophique |
+    | VOSS | 0.90 | 0.78 | lent + grave (calm) |
+    | SYNTHESIZER | 1.00 | 1.00 | neutre |
+    | COORDINATOR | 1.05 | 0.95 | neutre-calme |
+  - `cleanForSpeech()` strip markdown + emojis + code blocks avant TTS (évite que la voix lise "astérisque astérisque")
+  - Voice picking : filtre par locale (fr/en), match par `voiceHints` (substring sur voice.name), fallback `localService` puis `pool[0]`
+
+- `src/components/ChatInput.jsx`
+  - Import icons `Mic` + `MicOff`
+  - State `recording` + `recRef`, `preRecordingTextRef` pour reprendre depuis le texte déjà tapé
+  - Pendant capture : interim results fill le textarea en live, final remplace
+  - Silence auto-stop natif browser ; user peut re-cliquer pour force-stop
+  - Bouton : red pulse + boxShadow ring quand recording, disabled si unsupported (Firefox) ou isLoading
+
+- `src/components/GlobalFloatingInput.jsx`
+  - Même pattern mic, bouton 28×28 à côté du send button
+  - Red pulse identique
+
+- `src/components/Header.jsx`
+  - Import `Volume2` + `VolumeX`
+  - Nouveau toggle "Voix" (props `voiceMode` + `onToggleVoice`), accent indigo
+  - Glow box-shadow quand ON
+
+- `src/App.jsx`
+  - State `voiceMode` + persistance `qg_voice_mode_v1`
+  - `lastSpokenMsgIdRef` évite double-speak sur re-render
+  - Effet watch `messages` : pour chaque nouveau agent message `streaming: false` != ref, `speak()` avec profil de l'agent
+  - Cancel automatique : nouveau message user, session end, voiceMode OFF
+  - Prop drill `voiceMode` + `onToggleVoice` vers Header
+
+### Browser support
+
+| Browser | STT | TTS | Notes |
+|---|---|---|---|
+| Chrome desktop | ✅ | ✅ | Requires HTTPS (localhost OK) |
+| Edge | ✅ | ✅ | idem |
+| Safari iOS 14.5+ | ✅ | ✅ | Requires HTTPS, PWA friendly |
+| Safari macOS | ✅ | ✅ | |
+| Firefox | ❌ STT | ✅ TTS | Mic button disabled with tooltip |
+| Android Chrome | ✅ | ✅ | |
+
+### Known limitations
+- **Firefox** : pas de STT → bouton mic désactivé (icon MicOff + tooltip)
+- **Langue fixe** : STT utilise la langue active de l'app (`lang`). Switch lang en pleine capture ne prend effet qu'au prochain démarrage
+- **Voix système** : profils agents réussissent si l'OS a des voix FR/EN de qualité installées (macOS/iOS ont Daniel, Thomas, Samantha ; Windows a Paul, Hortense, Julie ; Linux dépend du TTS engine)
+- **Fallback voix** : si aucune voix du hint match, utilise la première voix locale de la bonne locale — le pitch/rate distingue quand même les agents
+- **Long responses** : 500 tokens agent peut prendre ~60s à parler ; user peut tout interrompre en tapant/parlant
+
+### Added — Phase 3 — PWA installable + notifications natives
+QG est maintenant installable comme une app native sur iOS, Android et Desktop. Prompt d'installation automatique sur Android, hint "Ajouter à l'écran d'accueil" sur iOS. Les emails urgents déclenchent une **notification native du système** (pas juste le toast in-app) avec icon + badge + action click → ouvre l'app.
+
+**Ce qui est réellement livré (et ce qui ne l'est pas) :**
+
+| Feature demandée | Statut | Notes |
+|---|---|---|
+| Installable iOS/Android/Desktop | ✅ | manifest + icons + SW |
+| Cache offline (app shell) | ✅ | network-first nav, cache-first static |
+| Notifications natives emails urgents | ✅ *quand app ouverte / PWA active* | Via `registration.showNotification()` |
+| **Polling Gmail quand tab fermé** | ❌ **impossible dans le browser** | Pas de vrai Web Push sans backend VAPID. Periodic Background Sync = Chrome uniquement, ≥12h interval, PWA installée uniquement — non fiable pour 5min |
+
+Les browsers ne permettent pas le polling en continu d'un tiers (Gmail) quand l'onglet est fermé. Le vrai background polling nécessite un **cron serveur** (Vercel scheduled functions) qui push au device via VAPID. C'est la prochaine étape si tu veux vraiment du surveillance-when-closed.
+
+- `public/manifest.json` (**NEW**) — name "The Headquarters", short_name "QG", theme `#6366f1`, background `#0a0f1c`, standalone display, 3 icons (192/512 PNG + SVG maskable)
+- `public/icon-192.png`, `icon-512.png`, `apple-touch-icon.png` (180), `icon.svg` (**NEW**) — générés via `scripts/gen-icons.js` (Node, zéro dépendance — reconstitue le logo two-square brand)
+- `scripts/gen-icons.js` (**NEW**) — générateur PNG from scratch via zlib + PNG chunks. Run : `node scripts/gen-icons.js`
+- `public/sw.js` (**NEW**) — service worker
+  - Install : prefetch de l'app shell (critical)
+  - Fetch : network-first pour navigations, cache-first pour assets, bypass complet pour les hosts API (Anthropic / Mem0 / Supabase / Google)
+  - Notification click : focus le window existant ou ouvre `/`
+  - Message bridge : la page peut déléguer `showNotification` au SW via `postMessage({type:'SHOW_NOTIFICATION'})`
+- `index.html` — ajout manifest link, theme-color, viewport fit=cover, iOS apple-* meta tags, icon links multi-formats
+- `src/utils/pwa.js` (**NEW**) —
+  - `registerServiceWorker()` safe no-op si unsupported
+  - `requestNotificationPermission()` lazy
+  - `showLocalNotification()` via SW ready
+  - `isIOS()`, `isStandalone()`, `isInstallAvailable()`, `onInstallAvailabilityChange()`, `promptInstall()`
+- `src/components/InstallPrompt.jsx` (**NEW**) — banner discret bas centré
+  - Android : bouton "Installer" direct
+  - iOS : instructions manuelles (Partager → Ajouter à l'écran d'accueil)
+  - Dismissible pour 30 jours (LS `qg_install_prompt_dismissed_v1`)
+  - Masqué si déjà `standalone`
+- `src/App.jsx` —
+  - `registerServiceWorker()` au mount
+  - `<InstallPrompt />` monté au niveau racine
+  - Extension du Gmail watcher : en + du toast, fire `showLocalNotification` si permission granted (lazy request au premier urgent)
+
+### Known limitations (honest)
+- **Polling Gmail en background tab fermé = impossible** sans backend. Le watcher ne tourne que tant que le tab/PWA est ouvert ou en fond proche (pas killé par l'OS)
+- **Notifications en verrouillage** : sur iOS, les notifications system arrivent uniquement si la PWA est installée (pas en Safari tab) ET si l'app a été ouverte récemment
+- **iOS < 16.4** : pas de Web Push du tout
+- **Firefox Android** : `beforeinstallprompt` non fiable — tombe sur le path "iOS" qui demande install manuel
+- **Premier run PWA sans HTTPS** : le SW ne s'enregistrera pas. Localhost = ok en dev, prod requiert HTTPS (Vercel = auto)
+
+### Next (Phase 3 continue — pour vraiment background)
+Créer une Vercel scheduled function (cron 5min) qui :
+1. Fetch Gmail via refresh token stocké cloud
+2. Classifie via Haiku
+3. Envoie web-push au device (nécessite VAPID keys + push subscription stockée)
+
+~6h de travail, exige auth refresh token Gmail (Authorization Code flow au lieu d'implicit).
+
 ### Added — Phase 2 — Focus Timer par client + taux horaire réel
 Le Focus Timer capture maintenant le **client associé** à chaque session Pomodoro. Ça déverrouille la métrique la plus importante pour un consultant solo : **le taux horaire réel par client** (MRR ÷ heures investies ce mois). Visible directement dans le Dashboard section "Revenus par client" — chaque retainer affiche ses heures de la semaine et son $/h réel.
 

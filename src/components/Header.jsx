@@ -1,13 +1,14 @@
-import { Sun, Moon, Zap, Brain, Home, Square, BookOpen, Compass, Map, BarChart2, Users, Check, AlertCircle, Bookmark, Mail } from 'lucide-react';
+import { Sun, Moon, Zap, Brain, Home, Square, BookOpen, Compass, Map, BarChart2, Users, Check, AlertCircle, Bookmark, Mail, Volume2, VolumeX, Wrench } from 'lucide-react';
 import { t } from '../i18n.js';
 
 export default function Header({
   darkMode, onToggleDark,
   deepMode, onToggleDeep,
   thinkingMode, onToggleThinking,
+  voiceMode = false, onToggleVoice,
   lang, onToggleLang,
   saveStatus, screen, onGoHome,
-  onGoJournal, onGoDecisions, onGoDashboard, onGoProspects, onGoLibrary,
+  onGoJournal, onGoDecisions, onGoDashboard, onGoProspects, onGoLibrary, onGoWorkflow,
   onGoEmail, urgentEmailCount = 0,
   sessionEnded, onEndSession, isLoading,
   improvementCount, decisionsCount,
@@ -103,6 +104,28 @@ export default function Header({
           <span>{t('header.deepMode', lang)}</span>
         </button>
 
+        {/* Voice Mode (TTS on agent replies) */}
+        {onToggleVoice && (
+          <button
+            onClick={onToggleVoice}
+            title={voiceMode
+              ? (lang === 'fr' ? 'Mode vocal ON — les agents parlent' : 'Voice mode ON — agents speak')
+              : (lang === 'fr' ? 'Mode vocal OFF' : 'Voice mode OFF')}
+            aria-label="Toggle voice mode"
+            aria-pressed={voiceMode}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+            style={{
+              background: voiceMode ? 'rgba(99,102,241,0.15)' : 'rgba(148,163,184,0.07)',
+              border: `1px solid ${voiceMode ? 'rgba(99,102,241,0.4)' : 'rgba(148,163,184,0.1)'}`,
+              color: voiceMode ? '#a5b4fc' : 'rgba(148,163,184,0.7)',
+              boxShadow: voiceMode ? '0 0 12px rgba(99,102,241,0.15)' : 'none',
+            }}
+          >
+            {voiceMode ? <Volume2 size={11} /> : <VolumeX size={11} />}
+            <span>{lang === 'fr' ? 'Voix' : 'Voice'}</span>
+          </button>
+        )}
+
         {/* End session */}
         {screen === 'chat' && !sessionEnded && (
           <button
@@ -135,6 +158,7 @@ export default function Header({
           { onClick: onGoDecisions,  title: t('header.decisions', lang), icon: <Compass size={15} />, active: screen === 'decisions', badge: decisionsCount > 0 ? (decisionsCount > 9 ? '9+' : decisionsCount) : null, badgeColor: '#3b82f6' },
           { onClick: onGoJournal,    title: t('header.journal', lang),   icon: <BookOpen size={15} />, active: screen === 'journal',   badge: improvementCount > 0 ? (improvementCount > 9 ? '9+' : improvementCount) : null, badgeColor: '#10b981' },
           { onClick: onGoLibrary,    title: lang === 'fr' ? 'Bibliothèque' : 'Library', icon: <Bookmark size={15} />, active: screen === 'library' },
+          ...(onGoWorkflow ? [{ onClick: onGoWorkflow, title: lang === 'fr' ? 'Workflow Builder' : 'Workflow Builder', icon: <Wrench size={15} />, active: screen === 'workflow' }] : []),
         ].map(({ onClick, title, icon, active, badge, badgeColor }) => (
           <button
             key={title}

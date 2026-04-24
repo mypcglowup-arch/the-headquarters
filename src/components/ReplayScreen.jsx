@@ -18,11 +18,11 @@ export default function ReplayScreen({ session, agentNames, agentPhotos, darkMod
   }
 
   return (
-    <div className={`flex-1 flex flex-col min-h-0 ${darkMode ? 'bg-gray-950 text-gray-100' : 'bg-white text-gray-900'}`}
+    <div className={`flex-1 flex flex-col min-h-0 ${darkMode ? 'bg-gray-950 text-gray-100' : 'bg-[#F5F4F0] text-gray-900'}`}
       ref={printRef}
     >
       {/* ── Top bar ── */}
-      <div className={`flex items-center justify-between px-4 py-3 border-b sticky top-0 z-10 ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+      <div className={`flex items-center justify-between px-4 py-3 border-b sticky top-0 z-10 ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-[#F5F4F0] border-[#E8E6E0]'}`}>
         <button
           onClick={onBack}
           className={`flex items-center gap-2 text-sm font-medium transition-colors ${darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
