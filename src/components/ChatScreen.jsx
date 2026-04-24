@@ -34,6 +34,7 @@ export default function ChatScreen({
   onReplay,
   onGetVerdict,
   onLogWin,
+  onEngagement,
   onShowContentGen,
   onShowProspectAnalyzer,
   lang = 'fr',
@@ -81,6 +82,7 @@ export default function ChatScreen({
     if (pinnedMessages.length < 3) {
       savePinned([...pinnedMessages, { id: message.id, content: message.content, agent: message.agent }]);
       onToast?.(lang === 'fr' ? 'Message épinglé 📌' : 'Message pinned 📌', { type: 'success', duration: 2200 });
+      onEngagement?.();
     } else {
       setReplacingPinFor(message);
     }
@@ -558,6 +560,7 @@ export default function ChatScreen({
             onQuote={msg.type === 'agent' ? (text, agent) => setQuoteContext({ text, agent }) : undefined}
             isLast={isLastAgent}
             onSecondOpinion={msg.type === 'agent' && onSecondOpinion ? onSecondOpinion : undefined}
+            onEngagement={msg.type === 'agent' ? onEngagement : undefined}
             lang={lang}
           />
           );

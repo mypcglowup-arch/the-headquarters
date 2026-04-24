@@ -2,6 +2,85 @@
 
 ## [Unreleased]
 
+### Changed — Salle de réunion : compteur d'interactions (remplace sessionCount)
+La maturité des agents (phase fondationnelle → dialogue → partenariat → réactive) est maintenant calculée sur le nombre d'**interactions réelles** avec les agents, pas sur le nombre de sessions ouvertes. Une session ouverte et bouncée ne fait plus "mûrir" la relation.
+
+**Définition "interaction"** : message envoyé + réponse agent reçue + signal d'engagement (l'utilisateur a fait *au moins une* de ces actions) :
+- Envoyé un message de suivi
+- Cliqué un bouton de réaction (Approfondir, Plan d'action, Simplifier, Exemple concret, Désaccord)
+- Cliqué **Log as Win**
+- Pinné le message
+- Sauvegardé dans la Library
+- Donné une note étoiles (1-5)
+
+**Exclus** (passifs, ne confirment pas l'engagement) : copy-to-clipboard, ouvrir/fermer la session, sélectionner un mode.
+
+**Nouveaux seuils (maturity phases)** :
+
+| Phase | Intervalle | Minimum severity pour intervenir |
+|---|---|---|
+| foundational | 0-5 interactions | medium |
+| dialogue | 6-15 interactions | medium |
+| partnership | 16-30 interactions | medium |
+| reactive | 31+ interactions | high |
+
+**Override permanent** : le pattern detection (Layer B du meeting room) reste actif peu importe le count — une crise détectée breaks la "phase reactive" silencieuse.
+
+### Implémentation
+
+**Nouveau state (App.jsx)** :
+```js
+const [interactionCount, setInteractionCount] = useState(() => loadLS(LS_INTERACTIONS, 0));
+const pendingInteractionRef = useRef(false); // true après réponse agent, attend un signal d'engagement
+
+function confirmInteraction() {
+  if (!pendingInteractionRef.current) return;
+  pendingInteractionRef.current = false;
+  setInteractionCount((c) => c + 1);
+}
+```
+
+**Triggers `confirmInteraction()`** :
+- `sendMessage()` — en tête (next user message)
+- `logWin()` — confirm après save
+- `handleSave()` dans MessageBubble (via prop `onEngagement`)
+- `handleRating()` dans MessageBubble (via prop `onEngagement`)
+- `handlePin()` dans ChatScreen (via prop `onEngagement`)
+- Les reactions passent par `sendMessage()` donc captées par le premier trigger
+
+**Marking pending** : `pendingInteractionRef.current = true` dès qu'un `result.responses` est finalisé dans sendMessage (juste avant `playDing`).
+
+**Call-sites maturity swapped** :
+- `getMaturityPhase(sessionCount)` → `getMaturityPhase(interactionCount)` × 2
+- `pruneCooldowns(sessionCount)` → `pruneCooldowns(interactionCount)`
+- `pickBestPattern(..., sessionCount, ...)` → `pickBestPattern(..., interactionCount, ...)`
+- `markPatternFired(type, sessionCount)` → `markPatternFired(type, interactionCount)`
+- Cooldowns de patterns sont maintenant mesurés en interactions (DEFAULT_COOLDOWN_INTERACTIONS = 3)
+
+**`sessionCount` reste intact** pour : compteur Header/empty state, FIL_ROUGE_UNLOCK_AT, locked teaser, milestone celebrations, weekly report, detectMeetingPatterns context param.
+
+### Storage
+- `localStorage['qg_interaction_count_v1']` — number, source de vérité
+- Column `momentum.interaction_count INTEGER` dans Supabase (fire-and-forget)
+
+### SQL migration Supabase
+```sql
+alter table public.momentum
+  add column if not exists interaction_count integer default 0;
+```
+
+### Fichiers modifiés
+- `src/utils/meetingRoom.js` — tous les params renommés, nouveaux seuils, docstring à jour
+- `src/App.jsx` — state, ref, helper, call-sites, syncMomentum signature
+- `src/components/ChatScreen.jsx` — prop `onEngagement`, handlePin wired
+- `src/components/MessageBubble.jsx` — prop `onEngagement`, handleSave/handleRating wired
+- `src/lib/sync.js` — `syncMomentum` accepte `interactionCount` optionnel
+
+### Migration existing users
+L'ancien `sessionCount` reste inchangé. `interactionCount` démarre à 0 pour tout le monde (y compris Samuel qui a déjà plein de sessions historiques). Ça veut dire : quelques sessions de "re-onboarding" douces avant de retrouver la phase reactive — conséquence acceptée, c'est cohérent avec l'intention (compter la vraie engagement).
+
+---
+
 ### Added — Phase 3 — Decision outcome tracking (boucle de calibrage)
 Chaque fois qu'un agent donne un conseil actionnable, c'est automatiquement **loggé comme "décision"**. 30 jours plus tard, QG demande *"Tu avais décidé X. Résultat ?"* L'outcome (positif/neutre/négatif + commentaire) alimente ensuite le contexte de cet agent pour toutes ses réponses futures — ses conseils sont calibrés sur ce qui a réellement fonctionné.
 

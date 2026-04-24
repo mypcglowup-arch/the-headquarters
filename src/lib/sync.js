@@ -126,14 +126,18 @@ export async function syncFeedback(sessionId, messageId, agent, value) {
 
 // ─── Momentum snapshot ────────────────────────────────────────────────────────
 
-export async function syncMomentum(streak, sessionsWeek, totalSessions) {
+export async function syncMomentum(streak, sessionsWeek, totalSessions, interactionCount = null) {
   if (!isSupabaseEnabled()) return;
   try {
-    await supabase.from('momentum').insert({
+    const row = {
       streak,
       sessions_week:  sessionsWeek,
       total_sessions: totalSessions,
-    });
+    };
+    if (interactionCount !== null && interactionCount !== undefined) {
+      row.interaction_count = interactionCount;
+    }
+    await supabase.from('momentum').insert(row);
   } catch (e) {
     console.warn('[Sync] syncMomentum failed:', e.message);
   }

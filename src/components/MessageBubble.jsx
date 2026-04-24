@@ -7,7 +7,7 @@ import AgentAvatar from './AgentAvatar.jsx';
 import { exportToPdf, getPdfBlobUrl } from '../utils/exportPdf.js';
 import { t } from '../i18n.js';
 
-export default function MessageBubble({ message, agentNames, agentPhotos, darkMode, feedback, onFeedback, onLogWin, onReaction, onPin, isPinned, onQuote, isLast, onSecondOpinion, lang = 'fr' }) {
+export default function MessageBubble({ message, agentNames, agentPhotos, darkMode, feedback, onFeedback, onLogWin, onReaction, onPin, isPinned, onQuote, isLast, onSecondOpinion, onEngagement, lang = 'fr' }) {
   if (message.type === 'system') {
     if (message.isConsensus) {
       return (
@@ -43,7 +43,7 @@ export default function MessageBubble({ message, agentNames, agentPhotos, darkMo
   }
 
   if (message.type === 'agent') {
-    return <AgentMessage message={message} agentNames={agentNames} agentPhotos={agentPhotos} darkMode={darkMode} feedback={feedback} onFeedback={onFeedback} onLogWin={onLogWin} onReaction={onReaction} onPin={onPin} isPinned={isPinned} onQuote={onQuote} isLast={isLast} onSecondOpinion={onSecondOpinion} lang={lang} />;
+    return <AgentMessage message={message} agentNames={agentNames} agentPhotos={agentPhotos} darkMode={darkMode} feedback={feedback} onFeedback={onFeedback} onLogWin={onLogWin} onReaction={onReaction} onPin={onPin} isPinned={isPinned} onQuote={onQuote} isLast={isLast} onSecondOpinion={onSecondOpinion} onEngagement={onEngagement} lang={lang} />;
   }
 
   return null;
@@ -78,7 +78,7 @@ const REACTIONS = [
   { label: '≠ Je ne suis pas d\'accord', text: 'Je ne suis pas d\'accord. Défends ta position avec des faits ou admets que t\'avais tort.' },
 ];
 
-function AgentMessage({ message, agentNames, agentPhotos, darkMode, feedback, onFeedback, onLogWin, onReaction, onPin, isPinned, onQuote, isLast, onSecondOpinion, lang = 'fr' }) {
+function AgentMessage({ message, agentNames, agentPhotos, darkMode, feedback, onFeedback, onLogWin, onReaction, onPin, isPinned, onQuote, isLast, onSecondOpinion, onEngagement, lang = 'fr' }) {
   const config      = AGENT_CONFIG[message.agent] || AGENT_CONFIG.SYNTHESIZER;
   const displayName = agentNames[message.agent] || message.agent;
   const photo       = agentPhotos?.[message.agent];
@@ -174,6 +174,7 @@ function AgentMessage({ message, agentNames, agentPhotos, darkMode, feedback, on
         timestamp: validDate.toISOString(),
       });
       setSaved(true);
+      onEngagement?.();
     }
   }
 
@@ -191,6 +192,7 @@ function AgentMessage({ message, agentNames, agentPhotos, darkMode, feedback, on
       all[message.id] = stars;
       localStorage.setItem('hq_ratings', JSON.stringify(all));
     } catch {}
+    onEngagement?.();
   }
 
   function handleExportPdf(e) {

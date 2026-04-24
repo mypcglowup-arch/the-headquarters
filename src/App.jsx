@@ -99,6 +99,7 @@ const LS_JOURNAL   = 'qg_journal_v1';
 const LS_PHOTOS    = 'qg_agent_photos_v1';
 const LS_NAMES     = 'qg_agent_names_v1';
 const LS_COUNT     = 'qg_session_count_v1';
+const LS_INTERACTIONS = 'qg_interaction_count_v1';
 const LS_SOUND     = 'qg_sound_enabled_v1';
 const LS_VOICE     = 'qg_voice_mode_v1';
 const LS_LAST_SPOKE = 'qg_agent_last_spoke_v1';
@@ -241,6 +242,7 @@ export default function App() {
   const [isReadingImage, setIsReadingImage] = useState(false);
   const [isThinkingDeep, setIsThinkingDeep] = useState(false);
   const [sessionCount, setSessionCount] = useState(() => loadLS(LS_COUNT, 0));
+  const [interactionCount, setInteractionCount] = useState(() => loadLS(LS_INTERACTIONS, 0));
   const [soundEnabled, setSoundEnabled] = useState(() => loadLS(LS_SOUND, true));
   const [voiceMode,    setVoiceMode]    = useState(() => loadLS(LS_VOICE, false) === true);
   const lastSpokenMsgIdRef = useRef(null);
@@ -285,6 +287,7 @@ export default function App() {
   const recapFiredForSessionRef = useRef(null);  // Session id we already fired a recap for
   const briefingLockedRef       = useRef(false); // true once user has interacted — blocks late async briefings
   const interjectCooldownRef    = useRef(false); // true for 30s after an interjection fires — prevents back-to-back
+  const pendingInteractionRef   = useRef(false); // true after an agent response lands — becomes a confirmed interaction on next engagement signal
   const [streak, setStreak]           = useState(0);
   const [dailyQuote, setDailyQuote]   = useState(null);
   const [momentumMirror, setMomentumMirror] = useState(null);
@@ -518,6 +521,7 @@ export default function App() {
   const s2 = useAutoSave(LS_PHOTOS,     agentPhotos,          300);
   const s3 = useAutoSave(LS_JOURNAL,    improvementJournal,   300);
   const s4 = useAutoSave(LS_COUNT,      sessionCount,         300);
+  useAutoSave(LS_INTERACTIONS,          interactionCount,     300);
   const s5 = useAutoSave(LS_SOUND,      soundEnabled,         300);
   const s6 = useAutoSave(LS_LAST_SPOKE, agentLastSpoke,       300);
   const s7 = useAutoSave(LS_DECISIONS,  decisions,            300);
@@ -542,7 +546,7 @@ export default function App() {
     const pulse = computePulseScore(dashboard, streak, checkIn);
     setPulseScore(pulse);
     setShowPulse(true);
-    syncMomentum(streak, 0, sessionCount + 1);
+    syncMomentum(streak, 0, sessionCount + 1, interactionCount);
     const isFocus = effectiveMode === 'focus' && focusAgent;
     const modeLabel = isFocus
       ? t('modeLabel.focusPrefix', lang) + (agentNames[focusAgent] || focusAgent)
@@ -747,8 +751,10 @@ export default function App() {
       // ── Meeting Room: pattern-triggered proactive opening ────────────
       // Runs in parallel with briefing prep. If a pattern fires, we push the
       // agent's opening message AND skip the structured briefing.
-      const maturity = getMaturityPhase(sessionCount);
-      pruneCooldowns(sessionCount);
+      // Maturity + cooldowns are driven by interactionCount (real engagement),
+      // NOT sessionCount (could be 50 bounces with zero engagement).
+      const maturity = getMaturityPhase(interactionCount);
+      pruneCooldowns(interactionCount);
       let meetingRoomFired = false;
 
       (async () => {
@@ -773,7 +779,7 @@ export default function App() {
           });
           if (briefingLockedRef.current) return;
 
-          const chosen = pickBestPattern(patterns, sessionCount, maturity);
+          const chosen = pickBestPattern(patterns, interactionCount, maturity);
           if (!chosen) return; // nothing urgent enough
 
           const opening = await generateAgentOpening({
@@ -794,7 +800,7 @@ export default function App() {
             timestamp: new Date(),
             meta:      { source: 'meetingRoom', pattern: chosen.type },
           }]);
-          markPatternFired(chosen.type, sessionCount);
+          markPatternFired(chosen.type, interactionCount);
           meetingRoomFired = true;
           // Also trip the briefingLock so the briefing flow (below) skips
           briefingLockedRef.current = true;
@@ -860,6 +866,9 @@ export default function App() {
     if (!text.trim() && !attachment) return;
     if (isLoading) return;
     setError(null);
+
+    // A user sending another message after an agent response is proof of engagement.
+    confirmInteraction();
 
     // User is actively interacting — kill any briefing / memory-recap still
     // loading from the session start. Briefing is "at start" ONLY — the user
@@ -1468,7 +1477,7 @@ export default function App() {
       // Meeting Room: maturity suffix tells agents how directive/reactive to be this session
       // Also inject the lead-agent's track record (past decisions + outcomes) so
       // their advice is calibrated on what's actually worked for Samuel.
-      const maturityCtx = getMaturityPhase(sessionCount);
+      const maturityCtx = getMaturityPhase(interactionCount);
       const trackRecordSuffix = activeFocus ? formatTrackRecord(decisions, activeFocus) : '';
       const combinedSuffix = [maturityCtx?.behaviorSuffix || '', trackRecordSuffix].filter(Boolean).join('\n\n');
       const result = await runSession(
@@ -1534,6 +1543,9 @@ export default function App() {
         if (supportingMsgs.length > 0) {
           setMessages((prev) => [...prev, ...supportingMsgs]);
         }
+
+        // An agent response has landed — wait for an engagement signal to confirm this as a real interaction.
+        pendingInteractionRef.current = true;
 
         playDing(soundEnabled);
 
@@ -2193,6 +2205,16 @@ export default function App() {
   function logWin(winData) {
     const entry = saveWin({ ...winData, sessionId: sessionIdRef.current });
     setWins((prev) => [entry, ...prev].slice(0, 50));
+    confirmInteraction();
+  }
+
+  // Confirms a pending interaction (user engaged after an agent response).
+  // Called by: next user message, Log as Win, reactions, Pin, Save to Library, Star rating.
+  // NOT called by: copy-to-clipboard (passive), session end.
+  function confirmInteraction() {
+    if (!pendingInteractionRef.current) return;
+    pendingInteractionRef.current = false;
+    setInteractionCount((c) => c + 1);
   }
 
   function addFeedback(msgId, value) {
@@ -2300,6 +2322,7 @@ export default function App() {
             onReplay={sessionEnded ? openReplay : null}
             onGetVerdict={!sessionEnded ? () => sendMessage('Give me the verdict') : null}
             onLogWin={logWin}
+            onEngagement={confirmInteraction}
             onShowContentGen={() => setShowContentGen(true)}
             onShowProspectAnalyzer={() => setShowProspectAnalyzer(true)}
             activeAgent={conversationState.activeAgent}
