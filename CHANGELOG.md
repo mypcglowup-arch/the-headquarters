@@ -2,6 +2,116 @@
 
 ## [Unreleased]
 
+### Added — Flow de session équilibré (momentum infaillible)
+Refonte du flow conversationnel pour créer un arc structuré chaque session : initiative agent dès l'ouverture, une question par message, chips qui s'effacent à mesure que l'utilisateur mature, détection de dérive, clôture infaillible avec action 24-48h.
+
+### 1. Initiative agent au démarrage (universal)
+Nouvelle fonction `generateSessionOpening()` dans api.js — observation factuelle + question pointée basée sur l'heure + pipeline + MRR + retainers + dernière session + victoires. Sonnet, ≤ 50 mots, agent choisi par signal dominant.
+**Fire conditions** : 1500ms après `startSession`, skipped si `briefingLockedRef` tripped (user a déjà tapé) OU si meetingRoom/Monday/FilRouge a déjà populé. C'est le fallback qui garantit qu'**aucune session ne démarre vide**.
+Routing examples :
+- Pipeline vide + matin → CARDONE: "Ton pipeline est à zéro. C'est quoi qui t'a empêché de prospecter cette semaine ?"
+- Demo en cours + après-midi → VOSS: "T'as une démo en cours. Comment ça s'est passé ?"
+- MRR flat + retainers actifs → HORMOZI: "MRR à $X depuis 3 mois. Pourquoi tu pousses pas tes prix ?"
+
+### 2. Une question par message — règle absolue
+Nouvelle section `CONVERSATION FLOW RULES (UNBREAKABLE)` ajoutée au `BASE_CONTEXT` dans prompts.js. Tous les agents reçoivent automatiquement :
+```
+1. ONE QUESTION PER MESSAGE.
+2. INITIATIVE AT START — observation + ONE question, jamais "comment puis-je t'aider ?"
+3. CLOSURE PROTOCOL — ONE action 24-48h + ONE momentum line.
+4. ANTI-DRIFT — si 5+ exchanges sans nouvelle info, propose pivot.
+```
+Les agents tendaient à empiler 2-3 questions ; maintenant ils en posent UNE et attendent.
+
+### 3. Chips adaptatives par sessionCount
+Nouveau composant `<AdaptiveReactions>` dans MessageBubble :
+| Sessions | Comportement |
+|---|---|
+| 1-20 (onboarding) | Chips toujours visibles |
+| 21-50 (mature) | Chips visibles uniquement si la réponse agent finit par `?` (questions fermées) |
+| 51+ (fluide) | Chips cachés. Bouton discret `· · ·` pour les déployer à la demande |
+
+Pas de re-render brutal — l'utilisateur senior n'est plus assisté, juste équipé.
+
+### 4. Détection de dérive
+Nouvelle fonction `detectSessionDrift()` (Haiku, 150 tokens). Fires after every 4th exchange once total ≥ 10. Si drift détecté avec confidence ≥ 0.7 → push une carte agent `meta.source: 'drift-detection'` :
+> "On tourne en rond. Tu veux qu'on close sur une décision concrète, ou on reste en exploration ?"
+
+Cooldown : 1 fois par session via `driftFiredRef`. Reset à chaque `startSession`.
+
+### 5. Arc de session 4 phases (Diagnostic → Blocage → Plan → Engagement)
+Nouveau composant `SessionArc.jsx` avec helpers `arcVisibility(mode)`, `getCurrentPhase(exchangeCount)`, `arcPhaseSuffix(phaseId, lang)`.
+
+**Visibilité par mode** :
+- `quick` / `focus` / `prepCall` → **arc visible** (UI indicator au-dessus du chat, 4 chips colorées avec flèches qui s'illuminent)
+- `strategic` / `architect` → **arc interne** (pas d'UI, juste suffix dans le system prompt agent)
+- `silent` / `roleplay` / `debate` → **pas d'arc** (free-form)
+
+**Auto-advance** :
+| Exchanges | Phase |
+|---|---|
+| 1 | Diagnostic |
+| 2-3 | Blocage |
+| 4-5 | Plan |
+| 6+ | Engagement |
+
+**Suffix injecté dans le prompt agent** par phase :
+- Diagnostic → "Pose UNE question d'orientation. Pas de conseil prématuré."
+- Blocage → "Fais émerger le vrai blocage avec UNE question incisive. Pas de solution."
+- Plan → "Propose UN move concret 48h. Pas une liste — UN move."
+- Engagement → "Force l'engagement. Demande quand exactement il fera le move."
+
+L'agent suit ainsi un arc explicite même sans interface visible — l'utilisateur le ressent dans la conversation.
+
+### 6. Clôture infaillible — closure card
+Nouveau type message `closure-card`. Au `endSession`, on appelle `generateClosure()` (Sonnet) en parallèle de consensus + archive.
+
+Output JSON :
+```js
+{
+  action:          string,   // ≤ 140 chars, 24-48h scoped
+  momentum:        string,   // ≤ 80 chars, push line
+  calendarTitle:   string,   // ≤ 50 chars
+  calendarMinutes: 15..180,
+  confidence:      0..1
+}
+```
+
+Render : carte verte (border-left emerald) avec :
+- Label "Le move des prochaines 48h" (small caps)
+- L'action en bold
+- La momentum line en italique citation
+- Bouton inline `📅 Bloquer dans mon Calendar` qui appelle `onCreateCalendarEvent` avec la date demain 9h + durée calculée
+
+confidence < 0.5 → carte non rendue (caller fallback gracieux).
+
+### 7. Règle d'or de l'équilibre — déjà câblée
+La maturity (interactionCount) drive déjà le ton agent (foundational/dialogue/partnership/reactive via `meetingRoom.js`). Le flow équilibré ajoute :
+- chips qui s'effacent (UI moins directive)
+- arc visible uniquement pour les modes goal-driven (sessions stratégiques sont free-form)
+- session opening universel qui parle moins souvent quand patterns/Monday/FilRouge prennent déjà la main
+
+Plus l'utilisateur est mature → moins l'app est directive. Mature = sessions ≥ 50 ET interactions ≥ 31.
+
+### Fichiers créés
+- `src/components/SessionArc.jsx` — UI arc + helpers `arcVisibility`, `getCurrentPhase`, `arcPhaseSuffix`
+
+### Fichiers modifiés
+- `src/prompts.js` — `CONVERSATION FLOW RULES` section ajoutée à `BASE_CONTEXT`
+- `src/api.js` — `generateSessionOpening` + `detectSessionDrift` + `generateClosure` (~250 lignes ajoutées)
+- `src/App.jsx` — driftFiredRef, fire drift après chaque 4th exchange (≥ 10 total), generateSessionOpening fired en fallback à 1500ms après startSession, generateClosure fired en parallèle dans endSession, arcSuffix injecté dans combinedSuffix de runSession
+- `src/components/MessageBubble.jsx` — `AdaptiveReactions` component avec mode 'always'/'hidden'/'collapsed' selon sessionCount
+- `src/components/ChatScreen.jsx` — `<SessionArc>` rendu sous la session-info bar, `<ClosureCard>` rendu inline pour msg.type='closure-card', sessionCount passé à MessageBubble
+
+### Comportement utilisateur
+**Session 1-20** : assistance maximale. Opening agent. Chips toujours visibles. Arc visible si mode goal-driven. Drift fire après 10 exchanges. Closure card forte avec action concrète + bouton Calendar.
+
+**Session 21-50** : assistance graduée. Opening présent mais l'arc s'estompe. Chips uniquement sur questions fermées. Drift toujours actif. Closure toujours active.
+
+**Session 51+** : autonomie. Chips quasi invisibles (bouton "..." pour récupérer). L'arc reste interne pour les modes goal-driven mais discrète. L'app intervient seulement si vrai signal (drift, pattern critique). Le rythme est entre l'utilisateur et les agents — pas un formulaire guidé.
+
+---
+
 ### Added — Personnalisation sectorielle complète (15 secteurs + B2B/B2C)
 À partir de deux inputs simples (secteur + audience), tout l'app s'adapte : vocabulaire des agents, exemples spécifiques, étapes de pipeline, saisonnalité dans les briefings, scripts de bibliothèque filtrés par défaut, hints sectoriels dans les modals.
 

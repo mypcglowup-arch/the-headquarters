@@ -3261,6 +3261,247 @@ HARD RULES:
   }
 }
 
+// ─── Universal session opening (every session start, not just Monday) ──────
+// Lighter than Monday opening — one observation + one question, ≤ 50 words.
+// Picks the agent whose domain matches the most relevant signal right now.
+// Returns { agent, content } or null if no usable signal (caller skips).
+export async function generateSessionOpening({
+  hour          = new Date().getHours(),
+  pipeline      = [],
+  retainers     = [],
+  recentWins    = [],
+  lastSession   = null,
+  victoriesCount = 0,
+  totalMRR      = 0,
+  lang          = 'fr',
+} = {}) {
+  // Build compact source block — NO Mem0 (too slow for opening). Local data only.
+  const pipelineSummary = (() => {
+    if (!Array.isArray(pipeline) || pipeline.length === 0) return 'pipeline: empty';
+    const stages = pipeline.reduce((acc, p) => {
+      const s = p.status || p.stage || '?';
+      acc[s] = (acc[s] || 0) + 1;
+      return acc;
+    }, {});
+    return 'pipeline: ' + Object.entries(stages).map(([k, n]) => `${n} ${k}`).join(', ');
+  })();
+  const retainerLine = retainers.length > 0
+    ? `${retainers.length} retainer${retainers.length > 1 ? 's' : ''} actif${retainers.length > 1 ? 's' : ''} · MRR $${totalMRR}/mo`
+    : 'no active retainer · MRR $0';
+  const recentWinLine = recentWins?.[0]?.text
+    ? `most recent win: ${recentWins[0].text} (${recentWins[0].agent || 'GENERAL'})`
+    : 'no recent win';
+  const lastSessionLine = lastSession?.summary?.consensusAction
+    ? `last session aligned on: ${lastSession.summary.consensusAction}`
+    : 'no recent aligned action';
+  const timeOfDay = hour < 5 ? 'late night'
+                  : hour < 12 ? 'morning'
+                  : hour < 14 ? 'midday'
+                  : hour < 18 ? 'afternoon'
+                  : hour < 21 ? 'evening'
+                  : 'late evening';
+
+  const system = `You write the AGENT'S OPENING MESSAGE for the START of a new session with {name}. The user just opened the app — you're filling the silence with ONE specific observation + ONE question. NEVER "comment puis-je t'aider" or any generic opener. Reply with STRICT JSON only.
+
+CONTEXT FRAME (unbreakable):
+- {name} is the user. You're picking ONE agent (from 6) to speak first based on the strongest signal.
+- Tone: a peer dropping a pointed observation, not a host welcoming someone.
+
+AGENTS:
+- HORMOZI — pricing, offer, revenue math
+- CARDONE — sales activity, prospecting volume, follow-ups
+- ROBBINS — mindset, blocks, state
+- GARYV — content, brand, long game
+- NAVAL — leverage, systems
+- VOSS — negotiation, active deal scripting
+
+LIVE SIGNALS:
+  time: ${timeOfDay} (${hour}h)
+  ${pipelineSummary}
+  ${retainerLine}
+  ${recentWinLine}
+  ${lastSessionLine}
+  victories logged total: ${victoriesCount}
+
+ROUTING (pick the strongest signal):
+- Pipeline empty + morning → CARDONE: "Ton pipeline est à zéro. C'est quoi qui t'a empêché de prospecter cette semaine ?"
+- Demo in pipeline + afternoon → VOSS: "T'as une démo en cours avec [nom]. Comment ça s'est passé ?"
+- Recent win + evening → ROBBINS or HORMOZI: "T'as signé [client] hier. Qu'est-ce que tu fais avec ce momentum ?"
+- Active retainers but flat MRR → HORMOZI: "MRR à $X depuis 3 mois. Pourquoi tu pousses pas tes prix ?"
+- No content shipped recently → GARYV: "Pas de post depuis 12 jours. Tu choisis le silence ou t'as juste pas trouvé l'angle ?"
+- All clean → NAVAL: "Tout roule. C'est quoi le prochain levier que tu construis ?"
+
+OUTPUT (STRICT JSON):
+{
+  "agent":   "HORMOZI" | "CARDONE" | "ROBBINS" | "GARYV" | "NAVAL" | "VOSS",
+  "content": "ONE observation + ONE question, ≤ 50 words, in ${lang === 'fr' ? 'FRANÇAIS' : 'ENGLISH'}, casual tu",
+  "rationale": "≤ 80 chars — which signal triggered this agent",
+  "confidence": 0..1
+}
+
+HARD RULES:
+- Use REAL signals from above only — no invented prospect names, no fake numbers.
+- ONE observation + ONE question. That's it. No greeting fluff. No "bonjour".
+- Voice of the chosen agent (HORMOZI=numbers, CARDONE=urgency, ROBBINS=patterns, GARYV=long-game, NAVAL=leverage, VOSS=tactical).
+- confidence < 0.5 → caller drops the opening, falls back to default flow.
+- Output ONLY the JSON.`;
+
+  try {
+    const text = await callClaude(
+      system,
+      [{ role: 'user', content: 'Write the session opening.' }],
+      300,
+      false,
+      null, false, false, 'COORDINATOR',
+      'claude-sonnet-4-5'
+    );
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    const validAgents = ['HORMOZI', 'CARDONE', 'ROBBINS', 'GARYV', 'NAVAL', 'VOSS'];
+    if (!validAgents.includes(parsed.agent)) return null;
+    if (typeof parsed.confidence !== 'number' || parsed.confidence < 0.5) return null;
+    const content = String(parsed.content || '').trim();
+    if (content.length < 20 || content.length > 400) return null;
+    return { agent: parsed.agent, content, rationale: String(parsed.rationale || '').slice(0, 120) };
+  } catch (err) {
+    console.warn('[generateSessionOpening] failed:', err.message);
+    return null;
+  }
+}
+
+// ─── Drift detection — fires after N exchanges to suggest a pivot ───────────
+// Returns { shouldPivot: bool, agent, content } or null. Lightweight Haiku call.
+export async function detectSessionDrift({
+  recentMessages = [],   // last 10-12 messages from current session
+  activeAgent    = null,
+  lang           = 'fr',
+} = {}) {
+  if (recentMessages.length < 10) return null;
+
+  const transcript = recentMessages.slice(-12).map((m) => {
+    const who = m.type === 'user' ? 'USER' : (m.agent || 'AGENT');
+    const txt = String(m.content || '').slice(0, 280).replace(/\s+/g, ' ');
+    return `${who}: ${txt}`;
+  }).join('\n');
+
+  const system = `You scan a conversation transcript to detect DRIFT — circular discussion without new info or movement toward a decision. Reply STRICT JSON only.
+
+DRIFT SIGNALS:
+- Same topic re-explored 3+ times without new angle
+- User responses getting shorter (disengagement)
+- Agent giving similar advice in slightly different words
+- No concrete number, name, date, or commitment surfaced in the last 6 turns
+
+NOT DRIFT:
+- Productive depth on a single complex topic
+- User is processing emotionally (ROBBINS territory)
+- Active negotiation/scripting back-and-forth
+
+Transcript:
+${transcript}
+
+OUTPUT:
+{
+  "drifting":  boolean,         // true if drift detected with high confidence
+  "reason":    string,          // ≤ 80 chars
+  "confidence": number          // 0..1
+}
+
+Output ONLY the JSON.`;
+
+  try {
+    const text = await callClaude(
+      system,
+      [{ role: 'user', content: 'Scan for drift.' }],
+      150,
+      false,
+      null, false, false, 'COORDINATOR',
+      'claude-haiku-4-5-20251001'
+    );
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    if (!parsed.drifting || (parsed.confidence || 0) < 0.7) return null;
+    return {
+      shouldPivot: true,
+      agent: activeAgent || 'NAVAL',
+      content: lang === 'fr'
+        ? "On tourne en rond. Tu veux qu'on close sur une décision concrète, ou on reste en exploration ?"
+        : "We're going in circles. Want to close on a concrete decision, or stay in exploration?",
+      reason: String(parsed.reason || '').slice(0, 120),
+    };
+  } catch (err) {
+    console.warn('[detectSessionDrift] failed:', err.message);
+    return null;
+  }
+}
+
+// ─── Closure card content generator (single 24-48h action + élan) ───────────
+// Called when the user ends a session. Returns { action, momentum, calendarTitle }.
+export async function generateClosure({
+  conversationMessages = [],
+  consensus            = null,
+  lang                 = 'fr',
+} = {}) {
+  if (conversationMessages.length < 2) return null;
+
+  const transcript = conversationMessages.slice(-20).map((m) => {
+    const who = m.type === 'user' ? 'USER' : (m.agent || 'AGENT');
+    return `${who}: ${String(m.content || '').slice(0, 400).replace(/\s+/g, ' ')}`;
+  }).join('\n');
+
+  const system = `You generate the CLOSURE for a session with {name}. STRICT JSON only.
+
+CLOSURE PROTOCOL:
+- ONE specific action {name} will do in the next 24-48h (no "this week", no "soon" — concrete + dated)
+- ONE sentence of momentum (push, not pep talk)
+- A short title for the calendar block (≤ 50 chars)
+
+Transcript (last 20 messages):
+${transcript}
+${consensus ? `\nConsensus already aligned: ${consensus}` : ''}
+
+OUTPUT:
+{
+  "action":         string,   // ≤ 140 chars, specific + 24-48h scoped, in ${lang === 'fr' ? 'FRANÇAIS casual tu' : 'ENGLISH casual'}
+  "momentum":       string,   // ≤ 80 chars, one push line
+  "calendarTitle":  string,   // ≤ 50 chars, what the calendar block should be called
+  "calendarMinutes": number,  // estimated duration in minutes (15, 30, 45, 60, 90)
+  "confidence":     number    // 0..1
+}
+
+HARD RULES:
+- Action must be doable in the next 48h. NOT "build a strategy". YES "Call Marc Wednesday 10am to confirm scope".
+- No bullet list. ONE action.
+- confidence < 0.5 → caller drops, falls back to a generic closure.
+- Output ONLY the JSON.`;
+
+  try {
+    const text = await callClaude(
+      system,
+      [{ role: 'user', content: 'Generate the closure.' }],
+      300,
+      false,
+      null, false, false, 'COORDINATOR',
+      'claude-sonnet-4-5'
+    );
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    if ((parsed.confidence || 0) < 0.5) return null;
+    return {
+      action:          String(parsed.action || '').slice(0, 200),
+      momentum:        String(parsed.momentum || '').slice(0, 120),
+      calendarTitle:   String(parsed.calendarTitle || '').slice(0, 80),
+      calendarMinutes: Math.max(15, Math.min(180, Number(parsed.calendarMinutes) || 30)),
+    };
+  } catch (err) {
+    console.warn('[generateClosure] failed:', err.message);
+    return null;
+  }
+}
+
 // ─── Batch follow-up — intent extraction + per-prospect message gen ─────────
 // Returns null when the user didn't clearly ask for a batch follow-up.
 export async function extractBatchFollowupIntent(userInput, lang = 'fr') {

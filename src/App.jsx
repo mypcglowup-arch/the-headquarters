@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { runSession, archiveSession, callConsensus, getDailyQuote, getMomentumMirror, generateMondayReport, callClaudeStream, draftEmailReply, analyzeEmail, extractCalendarEvent, extractPipelineAction, extractDashboardUpdate, generateMemoryRecap, generateMorningBriefing, extractBatchFollowupIntent, generateFollowupMessage, detectMeetingPatterns, generateAgentOpening, generateFilRouge, analyzeInterjection, generateAnomalyAlert, extractActionableDecision, formatTrackRecord, generateMondayOpening } from './api.js';
+import { runSession, archiveSession, callConsensus, getDailyQuote, getMomentumMirror, generateMondayReport, callClaudeStream, draftEmailReply, analyzeEmail, extractCalendarEvent, extractPipelineAction, extractDashboardUpdate, generateMemoryRecap, generateMorningBriefing, extractBatchFollowupIntent, generateFollowupMessage, detectMeetingPatterns, generateAgentOpening, generateFilRouge, analyzeInterjection, generateAnomalyAlert, extractActionableDecision, formatTrackRecord, generateMondayOpening, generateSessionOpening, detectSessionDrift, generateClosure } from './api.js';
 import { getMaturityPhase, pickBestPattern, markPatternFired, pruneCooldowns } from './utils/meetingRoom.js';
 import { shouldFireMondaySession } from './utils/mondayWindow.js';
 import { updateTopicTracker, getStaleTopics } from './utils/topicTracker.js';
@@ -45,6 +45,7 @@ import OnboardingModal, { OnboardingNudge } from './components/OnboardingModal.j
 import ProfileScreen from './components/ProfileScreen.jsx';
 import { loadUserProfile, saveUserProfile, hasOnboarded } from './utils/userProfile.js';
 import { formatSectorContext, getPipelineStages } from './data/sectors.js';
+import { arcVisibility, getCurrentPhase, arcPhaseSuffix } from './components/SessionArc.jsx';
 import WorkflowBuilder from './components/WorkflowBuilder.jsx';
 import PulseScoreCard from './components/PulseScoreCard.jsx';
 import DailyCheckIn, { hasCheckedInToday } from './components/DailyCheckIn.jsx';
@@ -306,6 +307,7 @@ export default function App() {
   const briefingLockedRef       = useRef(false); // true once user has interacted — blocks late async briefings
   const interjectCooldownRef    = useRef(false); // true for 30s after an interjection fires — prevents back-to-back
   const pendingInteractionRef   = useRef(false); // true after an agent response lands — becomes a confirmed interaction on next engagement signal
+  const driftFiredRef           = useRef(false); // true once per session — drift pivot fires at most once
   const [streak, setStreak]           = useState(0);
   const [dailyQuote, setDailyQuote]   = useState(null);
   const [momentumMirror, setMomentumMirror] = useState(null);
@@ -680,6 +682,7 @@ export default function App() {
     //
     // Both phases can be cancelled mid-flight by briefingLockedRef (user typing).
     briefingLockedRef.current = false;
+    driftFiredRef.current = false; // reset drift firing for the new session
 
     const BRIEFING_UNLOCK_AT = 7;
     const thisSessionId = sessionIdRef.current;
@@ -897,6 +900,66 @@ export default function App() {
         })();
       }
     }
+
+    // ── Universal session opening (last resort, skipping if any prior path fired) ─
+    // Fires ~1500ms after start to let pattern/recap/briefing race finish first.
+    // Skipped if user already typed something, or briefingLockedRef tripped, or
+    // any agent message already populated the chat.
+    setTimeout(() => {
+      (async () => {
+        if (briefingLockedRef.current) return;
+        // Check that the only thing in the chat is the welcome system message
+        const currentMsgs = (() => { try { return messagesAtCheck; } catch { return []; } })();
+        // Use a setter to read fresh state without external scope leak
+        let canFire = false;
+        setMessages((prev) => {
+          const hasAgent = prev.some((m) => m.type === 'agent');
+          const hasUser  = prev.some((m) => m.type === 'user');
+          canFire = !hasAgent && !hasUser;
+          return prev;
+        });
+        if (!canFire) return;
+        try {
+          const recentWins = (() => {
+            try { return JSON.parse(localStorage.getItem('qg_wins_v1') || '[]').slice(0, 3); } catch { return []; }
+          })();
+          const totalMRR = (dashboard?.retainers || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+          const opening = await generateSessionOpening({
+            hour:           new Date().getHours(),
+            pipeline:       (dashboard?.pipeline && Array.isArray(dashboard.pipeline) ? dashboard.pipeline : []),
+            retainers:      dashboard?.retainers || [],
+            recentWins,
+            lastSession:    loadHistory()[0] || null,
+            victoriesCount: victories?.length || 0,
+            totalMRR,
+            lang,
+          });
+          if (briefingLockedRef.current || !opening) return;
+          // Re-check state — user may have typed during the await
+          let stillCanFire = false;
+          setMessages((prev) => {
+            const hasAgent = prev.some((m) => m.type === 'agent');
+            const hasUser  = prev.some((m) => m.type === 'user');
+            stillCanFire = !hasAgent && !hasUser;
+            return prev;
+          });
+          if (!stillCanFire) return;
+          setMessages((prev) => [...prev, {
+            id:        `session-opening-${thisSessionId}-${opening.agent}`,
+            type:      'agent',
+            agent:     opening.agent,
+            content:   opening.content,
+            streaming: false,
+            timestamp: new Date(),
+            meta:      { source: 'sessionOpening', rationale: opening.rationale },
+          }]);
+          pendingInteractionRef.current = true;
+          console.log('[SessionOpening] fired:', opening.agent, '·', opening.rationale);
+        } catch (err) {
+          console.warn('[SessionOpening] failed:', err.message);
+        }
+      })();
+    }, 1500);
 
   }
 
@@ -1614,7 +1677,15 @@ export default function App() {
       // their advice is calibrated on what's actually worked for {name}.
       const maturityCtx = getMaturityPhase(interactionCount);
       const trackRecordSuffix = activeFocus ? formatTrackRecord(decisions, activeFocus) : '';
-      const combinedSuffix = [maturityCtx?.behaviorSuffix || '', trackRecordSuffix].filter(Boolean).join('\n\n');
+      // Session arc — inject phase suffix for visible AND internal modes (not silent/roleplay/debate)
+      let arcSuffix = '';
+      const arcVis = arcVisibility(sessionMode);
+      if (arcVis === 'visible' || arcVis === 'internal') {
+        const exchangeCount = messages.filter((m) => m.type === 'user').length + 1; // +1 for the message we're about to send
+        const phase = getCurrentPhase(exchangeCount);
+        arcSuffix = arcPhaseSuffix(phase, lang);
+      }
+      const combinedSuffix = [maturityCtx?.behaviorSuffix || '', trackRecordSuffix, arcSuffix].filter(Boolean).join('\n\n');
       const result = await runSession(
         text.trim() || (attachment?.type === 'image' ? `Analyze this image and give me strategic advice.` : `Analyze the attached file: ${attachment?.name}`),
         messages.filter((m) => m.type === 'user' || m.type === 'agent'),
@@ -1681,6 +1752,43 @@ export default function App() {
 
         // An agent response has landed — wait for an engagement signal to confirm this as a real interaction.
         pendingInteractionRef.current = true;
+
+        // ── Drift detection ─────────────────────────────────────────────
+        // After every 10 exchanges, scan recent transcript for circular discussion.
+        // If drift detected → push a pivot card. Cooldown: not more than once per
+        // session via driftFiredRef.
+        if (!driftFiredRef.current) {
+          // Use the messages snapshot AFTER our latest update — read it fresh.
+          setMessages((prev) => {
+            const exchanges = prev.filter((m) => m.type === 'user' || m.type === 'agent').length;
+            if (exchanges >= 10 && exchanges % 4 === 0) {
+              // Fire async drift check (non-blocking)
+              (async () => {
+                try {
+                  const drift = await detectSessionDrift({
+                    recentMessages: prev.slice(-12),
+                    activeAgent:    result.activeAgent,
+                    lang,
+                  });
+                  if (drift?.shouldPivot && !driftFiredRef.current) {
+                    driftFiredRef.current = true;
+                    setMessages((p) => [...p, {
+                      id:        `drift-pivot-${Date.now()}`,
+                      type:      'agent',
+                      agent:     drift.agent,
+                      content:   drift.content,
+                      streaming: false,
+                      timestamp: new Date(),
+                      meta:      { source: 'drift-detection', reason: drift.reason },
+                    }]);
+                    console.log('[Drift] fired:', drift.reason);
+                  }
+                } catch (err) { console.warn('[Drift] check failed:', err.message); }
+              })();
+            }
+            return prev; // no state change here, just reading
+          });
+        }
 
         playDing(soundEnabled);
 
@@ -1834,12 +1942,26 @@ export default function App() {
     setAgentDepth(updateAgentDepth(conversationMessages));
 
     try {
-      const [consensus, summary] = await Promise.all([
+      const [consensus, summary, closure] = await Promise.all([
         callConsensus(conversationMessages, lang),
         archiveSession(conversationMessages, lang),
+        generateClosure({ conversationMessages, consensus: null, lang }).catch(() => null),
       ]);
 
       if (consensus) setConsensusLine(consensus);
+
+      // Closure card — single 24-48h action + Calendar block button + élan line
+      if (closure) {
+        setMessages((prev) => [...prev, {
+          id:        `closure-${Date.now()}`,
+          type:      'closure-card',
+          action:    closure.action,
+          momentum:  closure.momentum,
+          calendarTitle:   closure.calendarTitle,
+          calendarMinutes: closure.calendarMinutes,
+          timestamp: new Date(),
+        }]);
+      }
 
       const sessionObj = {
         id: sessionIdRef.current,

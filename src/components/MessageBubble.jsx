@@ -7,7 +7,7 @@ import AgentAvatar from './AgentAvatar.jsx';
 import { exportToPdf, getPdfBlobUrl } from '../utils/exportPdf.js';
 import { t } from '../i18n.js';
 
-export default function MessageBubble({ message, agentNames, agentPhotos, darkMode, feedback, onFeedback, onLogWin, onReaction, onPin, isPinned, onQuote, isLast, onSecondOpinion, onEngagement, lang = 'fr' }) {
+export default function MessageBubble({ message, agentNames, agentPhotos, darkMode, feedback, onFeedback, onLogWin, onReaction, onPin, isPinned, onQuote, isLast, onSecondOpinion, onEngagement, sessionCount = 0, lang = 'fr' }) {
   if (message.type === 'system') {
     if (message.isConsensus) {
       return (
@@ -43,7 +43,7 @@ export default function MessageBubble({ message, agentNames, agentPhotos, darkMo
   }
 
   if (message.type === 'agent') {
-    return <AgentMessage message={message} agentNames={agentNames} agentPhotos={agentPhotos} darkMode={darkMode} feedback={feedback} onFeedback={onFeedback} onLogWin={onLogWin} onReaction={onReaction} onPin={onPin} isPinned={isPinned} onQuote={onQuote} isLast={isLast} onSecondOpinion={onSecondOpinion} onEngagement={onEngagement} lang={lang} />;
+    return <AgentMessage message={message} agentNames={agentNames} agentPhotos={agentPhotos} darkMode={darkMode} feedback={feedback} onFeedback={onFeedback} onLogWin={onLogWin} onReaction={onReaction} onPin={onPin} isPinned={isPinned} onQuote={onQuote} isLast={isLast} onSecondOpinion={onSecondOpinion} onEngagement={onEngagement} sessionCount={sessionCount} lang={lang} />;
   }
 
   return null;
@@ -78,7 +78,67 @@ const REACTIONS = [
   { label: '≠ Je ne suis pas d\'accord', text: 'Je ne suis pas d\'accord. Défends ta position avec des faits ou admets que t\'avais tort.' },
 ];
 
-function AgentMessage({ message, agentNames, agentPhotos, darkMode, feedback, onFeedback, onLogWin, onReaction, onPin, isPinned, onQuote, isLast, onSecondOpinion, onEngagement, lang = 'fr' }) {
+// Adaptive chips — visibility depends on sessionCount maturity:
+//   1-20  : always shown
+//   21-50 : shown only when agent ends with a question (closed prompt)
+//   51+   : hidden, "..." toggle reveals on demand
+function AdaptiveReactions({ message, sessionCount, isLast, onReaction, darkMode }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!onReaction || message.streaming) return null;
+
+  const endsWithQuestion = /\?\s*$/.test(String(message.content || '').trim());
+  let mode;
+  if (sessionCount <= 20)        mode = 'always';
+  else if (sessionCount <= 50)   mode = endsWithQuestion ? 'always' : 'hidden';
+  else                            mode = 'collapsed';
+
+  if (mode === 'hidden') return null;
+
+  if (mode === 'collapsed' && !expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className={`mt-2 ml-1 px-2 py-0.5 rounded-full text-[10px] tap-target ${darkMode ? 'text-gray-500 hover:text-gray-300 hover:bg-white/5' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}
+        title="Réactions"
+        aria-label="Show reactions"
+      >
+        · · ·
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className={`flex flex-wrap items-center gap-1.5 mt-2 ml-1 ${isLast ? '' : 'opacity-0 group-hover/bubble:opacity-100'}`}
+      style={{ marginTop: '10px', display: 'flex', gap: '6px', transition: 'opacity 0.15s ease' }}
+    >
+      {REACTIONS.map((r) => (
+        <button
+          key={r.label}
+          type="button"
+          onClick={() => onReaction(r.text, message.agent)}
+          className={`${darkMode ? 'text-gray-400 hover:text-gray-100' : 'text-gray-500 hover:text-gray-900'}`}
+          style={{
+            background: 'transparent',
+            border: '0.5px solid rgba(255,255,255,0.1)',
+            borderRadius: '20px',
+            padding: '4px 12px',
+            fontSize: '11px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          {r.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AgentMessage({ message, agentNames, agentPhotos, darkMode, feedback, onFeedback, onLogWin, onReaction, onPin, isPinned, onQuote, isLast, onSecondOpinion, onEngagement, sessionCount = 0, lang = 'fr' }) {
   const config      = AGENT_CONFIG[message.agent] || AGENT_CONFIG.SYNTHESIZER;
   const displayName = agentNames[message.agent] || message.agent;
   const photo       = agentPhotos?.[message.agent];
@@ -464,35 +524,17 @@ function AgentMessage({ message, agentNames, agentPhotos, darkMode, feedback, on
         </div>
       )}
 
-      {/* Contextual reactions — always visible on last message, hover-only on older */}
-      {onReaction && !message.streaming && (
-        <div
-          className={`flex flex-wrap items-center gap-1.5 mt-2 ml-1 ${isLast ? '' : 'opacity-0 group-hover/bubble:opacity-100'}`}
-          style={{ marginTop: '10px', display: 'flex', gap: '6px', transition: 'opacity 0.15s ease' }}
-        >
-          {REACTIONS.map((r) => (
-            <button
-              key={r.label}
-              type="button"
-              onClick={() => onReaction(r.text, message.agent)}
-              className={`${darkMode ? 'text-gray-400 hover:text-gray-100' : 'text-gray-500 hover:text-gray-900'}`}
-              style={{
-                background: 'transparent',
-                border: '0.5px solid rgba(255,255,255,0.1)',
-                borderRadius: '20px',
-                padding: '4px 12px',
-                fontSize: '11px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Contextual reactions — adaptive visibility based on sessionCount.
+          1-20  : always shown (onboarding mode — hand-holding)
+          21-50 : shown only when agent ends with a question (selective scaffolding)
+          51+   : hidden by default, "..." toggle to expand (mature mode — out of the way) */}
+      <AdaptiveReactions
+        message={message}
+        sessionCount={sessionCount}
+        isLast={isLast}
+        onReaction={onReaction}
+        darkMode={darkMode}
+      />
 
       {/* E) Star rating — always shown below reactions when not streaming */}
       {!message.streaming && (

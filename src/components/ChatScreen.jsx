@@ -3,6 +3,7 @@ import { Volume2, VolumeX, CheckSquare, Square, ScrollText, Crosshair, Layers, A
 import MessageBubble from './MessageBubble.jsx';
 import ChatInput from './ChatInput.jsx';
 import HistoryPanel from './HistoryPanel.jsx';
+import SessionArc from './SessionArc.jsx';
 import { AGENT_CONFIG } from '../prompts.js';
 import { t } from '../i18n.js';
 
@@ -187,6 +188,11 @@ export default function ChatScreen({
         >
           {soundEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
         </button>
+      </div>
+
+      {/* ── SESSION ARC (visible for goal-driven modes only) ── */}
+      <div className="px-4 pt-1.5 pb-1">
+        <SessionArc mode={sessionMode} exchangeCount={messages.filter((m) => m.type === 'user').length} darkMode={darkMode} lang={lang} />
       </div>
 
       {/* ── CONSENSUS BANNER ── */}
@@ -419,6 +425,18 @@ export default function ChatScreen({
           }
 
           // ── Monday auto-session briefing header ────────────────────────────
+          if (msg.type === 'closure-card') {
+            return (
+              <ClosureCard
+                key={msg.id}
+                message={msg}
+                darkMode={darkMode}
+                lang={lang}
+                onCreateCalendarEvent={onCreateCalendarEvent}
+              />
+            );
+          }
+
           if (msg.type === 'monday-briefing-header') {
             return (
               <MondayBriefingHeader
@@ -573,6 +591,7 @@ export default function ChatScreen({
             isLast={isLastAgent}
             onSecondOpinion={msg.type === 'agent' && onSecondOpinion ? onSecondOpinion : undefined}
             onEngagement={msg.type === 'agent' ? onEngagement : undefined}
+            sessionCount={sessionCount}
             lang={lang}
           />
           );
@@ -2364,6 +2383,68 @@ function MondayBriefingHeader({ mondayIso, darkMode, lang = 'fr' }) {
         <span className="font-display font-semibold tracking-tight">
           {lang === 'fr' ? `${dateLabel} · Ta réunion hebdo` : `${dateLabel} · Your weekly meeting`}
         </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Closure card — end-of-session single action + calendar block + momentum line
+function ClosureCard({ message, darkMode, lang = 'fr', onCreateCalendarEvent }) {
+  const emerald = '16,185,129';
+  const handleBlockCalendar = () => {
+    if (!onCreateCalendarEvent) return;
+    const now = new Date();
+    // Schedule for tomorrow at 9am as a sensible default
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+    const end = new Date(tomorrow.getTime() + (Number(message.calendarMinutes) || 30) * 60_000);
+    onCreateCalendarEvent({
+      summary:     message.calendarTitle || message.action,
+      description: message.action,
+      start:       tomorrow.toISOString(),
+      end:         end.toISOString(),
+    });
+  };
+
+  return (
+    <div className="flex justify-start mb-4 px-1 animate-bubble-in">
+      <div
+        className="rounded-xl p-4 max-w-[88%]"
+        style={{
+          background: darkMode ? `rgba(${emerald},0.06)` : `rgba(${emerald},0.05)`,
+          border:     `1px solid rgba(${emerald},0.32)`,
+          borderLeft: `3px solid rgba(${emerald},0.85)`,
+        }}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <Trophy size={13} style={{ color: `rgba(${emerald},1)` }} strokeWidth={2.25} />
+          <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: `rgba(${emerald},1)` }}>
+            {lang === 'fr' ? 'Le move des prochaines 48h' : 'Next 48h move'}
+          </span>
+        </div>
+        <div className={`text-[14px] leading-relaxed font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+          {message.action}
+        </div>
+        {message.momentum && (
+          <div className={`text-[12.5px] leading-relaxed mt-2 italic ${darkMode ? 'text-gray-300' : 'text-slate-700'}`}>
+            "{message.momentum}"
+          </div>
+        )}
+        {onCreateCalendarEvent && message.calendarTitle && (
+          <button
+            onClick={handleBlockCalendar}
+            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold tap-target"
+            style={{
+              background: `rgba(${emerald},0.18)`,
+              color:      `rgba(${emerald},1)`,
+              boxShadow:  `0 0 0 1px rgba(${emerald},0.42)`,
+            }}
+          >
+            <Calendar size={12} />
+            {lang === 'fr' ? 'Bloquer dans mon Calendar' : 'Block in my Calendar'}
+          </button>
+        )}
       </div>
     </div>
   );
