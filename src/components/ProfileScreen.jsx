@@ -1,23 +1,33 @@
 import { useState } from 'react';
-import { User, Briefcase, Target, Save, RotateCcw, Check } from 'lucide-react';
+import { User, Briefcase, Target, Save, RotateCcw, Check, Building2, Users as UsersIcon } from 'lucide-react';
+import { SECTORS, AUDIENCE_OPTIONS } from '../data/sectors.js';
 
 export default function ProfileScreen({ darkMode, lang = 'fr', profile, dashboard, onSaveProfile, onUpdateDashboardGoal, onReopenOnboarding }) {
-  const [name, setName] = useState(profile?.name || '');
-  const [role, setRole] = useState(profile?.role || '');
-  const [goal, setGoal] = useState(String(dashboard?.annualGoal || profile?.annualGoal || 50000));
+  const [name, setName]                 = useState(profile?.name || '');
+  const [role, setRole]                 = useState(profile?.role || '');
+  const [goal, setGoal]                 = useState(String(dashboard?.annualGoal || profile?.annualGoal || 50000));
+  const [sectorId, setSectorId]         = useState(profile?.sector || '');
+  const [sectorCustom, setSectorCustom] = useState(profile?.sectorCustom || '');
+  const [audience, setAudience]         = useState(profile?.audience || '');
   const [savedFlash, setSavedFlash] = useState(false);
 
   const dirty =
     name !== (profile?.name || '') ||
     role !== (profile?.role || '') ||
-    Number(goal) !== Number(dashboard?.annualGoal || profile?.annualGoal || 50000);
+    Number(goal) !== Number(dashboard?.annualGoal || profile?.annualGoal || 50000) ||
+    sectorId !== (profile?.sector || '') ||
+    sectorCustom !== (profile?.sectorCustom || '') ||
+    audience !== (profile?.audience || '');
 
   function handleSave() {
     const newProfile = {
-      name:       name.trim(),
-      role:       role.trim(),
-      annualGoal: Number(goal) || 50000,
-      createdAt:  profile?.createdAt || new Date().toISOString(),
+      name:         name.trim(),
+      role:         role.trim(),
+      annualGoal:   Number(goal) || 50000,
+      sector:       sectorId || null,
+      sectorCustom: sectorId === 'other' ? sectorCustom.trim() : '',
+      audience:     audience || null,
+      createdAt:    profile?.createdAt || new Date().toISOString(),
     };
     onSaveProfile(newProfile);
     onUpdateDashboardGoal?.(Number(goal) || 50000);
@@ -89,6 +99,61 @@ export default function ProfileScreen({ darkMode, lang = 'fr', profile, dashboar
                 placeholder="50000"
                 className={`w-full px-3 py-2.5 rounded-lg text-[14px] outline-none ${darkMode ? 'bg-gray-950 border border-white/10 text-white placeholder:text-gray-500 focus:border-indigo-500/50' : 'bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-300'}`}
               />
+            </Field>
+
+            <Field
+              icon={<Building2 size={13} />}
+              label={lang === 'fr' ? 'Secteur' : 'Sector'}
+              hint={lang === 'fr' ? 'Pilote vocabulaire, exemples, pipeline et saisonnalité partout dans QG.' : 'Drives vocabulary, examples, pipeline and seasonality across QG.'}
+              darkMode={darkMode}
+            >
+              <select
+                value={sectorId}
+                onChange={(e) => setSectorId(e.target.value)}
+                className={`w-full px-3 py-2.5 rounded-lg text-[14px] outline-none ${darkMode ? 'bg-gray-950 border border-white/10 text-white focus:border-indigo-500/50' : 'bg-slate-50 border border-slate-200 text-slate-900 focus:border-indigo-300'}`}
+              >
+                <option value="">{lang === 'fr' ? '— Aucun —' : '— None —'}</option>
+                {SECTORS.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label[lang] || s.label.fr}
+                  </option>
+                ))}
+              </select>
+              {sectorId === 'other' && (
+                <input
+                  value={sectorCustom}
+                  onChange={(e) => setSectorCustom(e.target.value)}
+                  placeholder={lang === 'fr' ? 'Précise ton secteur' : 'Describe your sector'}
+                  className={`w-full mt-2 px-3 py-2.5 rounded-lg text-[14px] outline-none ${darkMode ? 'bg-gray-950 border border-white/10 text-white placeholder:text-gray-500 focus:border-indigo-500/50' : 'bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-300'}`}
+                />
+              )}
+            </Field>
+
+            <Field
+              icon={<UsersIcon size={13} />}
+              label={lang === 'fr' ? 'Audience' : 'Audience'}
+              hint={lang === 'fr' ? 'Filtre les scripts B2B/B2C dans la bibliothèque par défaut.' : 'Filters B2B/B2C scripts in the library by default.'}
+              darkMode={darkMode}
+            >
+              <div className="grid grid-cols-3 gap-1.5">
+                {AUDIENCE_OPTIONS.map((a) => {
+                  const active = audience === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      onClick={() => setAudience(a.id)}
+                      className="px-3 py-2 rounded-lg text-[12.5px] font-semibold transition-all tap-target text-center"
+                      style={{
+                        background: active ? `rgba(${a.rgb}, 0.18)` : (darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)'),
+                        color:      active ? `rgba(${a.rgb}, 1)`    : (darkMode ? 'rgba(229,231,235,0.85)' : 'rgba(51,65,85,0.85)'),
+                        boxShadow:  active ? `0 0 0 1px rgba(${a.rgb}, 0.36)` : 'none',
+                      }}
+                    >
+                      {a.label[lang] || a.label.fr}
+                    </button>
+                  );
+                })}
+              </div>
             </Field>
 
             {/* Actions */}

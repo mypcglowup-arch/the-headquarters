@@ -44,6 +44,7 @@ import { loadVictories, saveVictoriesCache, computeROI, formatVictoriesContext }
 import OnboardingModal, { OnboardingNudge } from './components/OnboardingModal.jsx';
 import ProfileScreen from './components/ProfileScreen.jsx';
 import { loadUserProfile, saveUserProfile, hasOnboarded } from './utils/userProfile.js';
+import { formatSectorContext, getPipelineStages } from './data/sectors.js';
 import WorkflowBuilder from './components/WorkflowBuilder.jsx';
 import PulseScoreCard from './components/PulseScoreCard.jsx';
 import DailyCheckIn, { hasCheckedInToday } from './components/DailyCheckIn.jsx';
@@ -1606,7 +1607,8 @@ export default function App() {
       // ── End Gmail injection ───────────────────────────────────────────────────
 
       const victoriesCtx = formatVictoriesContext(victories, lang);
-      const combinedContext = [gmailCtxBlock, dateCtx, pulseCtx, checkInCtx, emotionCtx, winsCtx, victoriesCtx, financialContext, historyContext, memContext, calendarContext].filter(Boolean).join('\n\n') || null;
+      const sectorCtx    = formatSectorContext(userProfile, lang);
+      const combinedContext = [sectorCtx, gmailCtxBlock, dateCtx, pulseCtx, checkInCtx, emotionCtx, winsCtx, victoriesCtx, financialContext, historyContext, memContext, calendarContext].filter(Boolean).join('\n\n') || null;
       // Meeting Room: maturity suffix tells agents how directive/reactive to be this session
       // Also inject the lead-agent's track record (past decisions + outcomes) so
       // their advice is calibrated on what's actually worked for {name}.
@@ -2654,6 +2656,7 @@ export default function App() {
               lang={lang}
               onStartSession={startSession}
               onGoProspects={() => setScreen('prospects')}
+              sectorPipelineStages={userProfile?.sector ? getPipelineStages(userProfile.sector, lang) : null}
             />
           </div>
         )}
@@ -2683,6 +2686,7 @@ export default function App() {
               onUseInChat={useSituationInChat}
               agentNames={agentNames}
               agentPhotos={agentPhotos}
+              userProfile={userProfile}
             />
           </div>
         )}

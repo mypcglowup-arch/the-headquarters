@@ -6,6 +6,7 @@ import { AGENT_CONFIG } from '../prompts.js';
 import AgentAvatar from './AgentAvatar.jsx';
 import Tooltip from './Tooltip.jsx';
 import { useFlipReorder } from '../hooks/useFlipReorder.js';
+import { getSectorHint } from '../data/sectors.js';
 
 const SUBTYPE_CONFIG = {
   b2b: { label: 'B2B', rgb: '59,130,246',  tooltip: { fr: 'Business to Business — vente entre entreprises', en: 'Business to Business — selling to companies' } },
@@ -25,11 +26,14 @@ export default function SituationsScreen({
   onUseInChat,              // ({ situation, variant }) => void — starts session + pre-fills
   agentNames = {},
   agentPhotos = {},
+  userProfile = null,       // { sector, audience, ... } — drives sector hint + audience default
 }) {
   const [query, setQuery]           = useState('');
   const [categoryId, setCategoryId] = useState(null);
   const [agentKey, setAgentKey]     = useState(null);
-  const [subType, setSubType]       = useState(null); // 'b2b' | 'b2c' | null — only used when categoryId === 'objection'
+  // subType defaults to user's audience preference ('b2b' | 'b2c' | null/'both' = no filter)
+  const profileAudienceDefault = (userProfile?.audience === 'b2b' || userProfile?.audience === 'b2c') ? userProfile.audience : null;
+  const [subType, setSubType]       = useState(profileAudienceDefault); // 'b2b' | 'b2c' | null — only used when categoryId === 'objection'
   const [selected, setSelected]     = useState(null); // full situation object
   const [liftingId, setLiftingId]   = useState(null); // id of the card currently doing the 150ms "lift" pre-FLIP
 
@@ -353,6 +357,7 @@ export default function SituationsScreen({
           }}
           agentNames={agentNames}
           agentPhotos={agentPhotos}
+          sectorHint={getSectorHint(userProfile, lang)}
         />
       )}
     </div>
@@ -502,7 +507,7 @@ function SituationCard({ situation, darkMode, lang, isFavorite, isLifting = fals
 }
 
 // ── Detail modal ─────────────────────────────────────────────────────────────
-function SituationDetailModal({ situation, darkMode, lang, isFavorite, onClose, onToggleFavorite, onUseInChat, agentPhotos, agentNames }) {
+function SituationDetailModal({ situation, darkMode, lang, isFavorite, onClose, onToggleFavorite, onUseInChat, agentPhotos, agentNames, sectorHint = null }) {
   const agentCfg = AGENT_CONFIG[situation.agent];
   const rgb = agentCfg?.glowRgb || '99,102,241';
   const agentDisplayName = agentNames[situation.agent] || agentCfg?.commercialName || situation.agent;
@@ -657,6 +662,31 @@ function SituationDetailModal({ situation, darkMode, lang, isFavorite, onClose, 
           >
             {renderScript(currentScript)}
           </div>
+
+          {/* Sector hint — surface vocabulary substitutions for the user's sector */}
+          {sectorHint && (
+            <div
+              className="mt-3 rounded-lg p-3 text-[12px] leading-relaxed"
+              style={{
+                background: 'rgba(99,102,241,0.08)',
+                border:     '1px solid rgba(99,102,241,0.22)',
+              }}
+            >
+              <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold mb-1`}
+                style={{ color: 'rgba(99,102,241,1)' }}>
+                💡 {lang === 'fr' ? `Pour ton secteur : ${sectorHint.sectorName}` : `For your sector: ${sectorHint.sectorName}`}
+              </div>
+              <div className={darkMode ? 'text-gray-300' : 'text-slate-700'}>
+                {lang === 'fr' ? 'Remplace les mots génériques par : ' : 'Swap generic words for: '}
+                <span className="font-semibold">{sectorHint.vocabulary.join(' · ')}</span>
+                {sectorHint.typicalUnit && (
+                  <span className={darkMode ? 'text-gray-500' : 'text-slate-500'}>
+                    {' '}— {lang === 'fr' ? `unité typique : ${sectorHint.typicalUnit}` : `typical unit: ${sectorHint.typicalUnit}`}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer actions */}

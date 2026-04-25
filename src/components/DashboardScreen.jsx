@@ -795,7 +795,7 @@ function RetainerRow({ r, c, lang, onUpdate, onDelete, isNew }) {
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
-export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr', onStartSession, onGoProspects }) {
+export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr', onStartSession, onGoProspects, sectorPipelineStages = null }) {
   const c = darkMode ? D : L;
   const { monthlyRevenue, pipeline, retainers, oneTimeRevenues = [], annualGoal = 50000 } = data;
 
@@ -815,12 +815,17 @@ export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr',
   const closingRate   = pipeline.contacted > 0 ? Math.round((pipeline.signed / pipeline.contacted) * 100) : 0;
 
   // ── Prospect pipeline ─────────────────────────────────────────────────────
+  // Stage labels adapt to the user's sector when provided, else fall back to
+  // the universal Contacted/Replied/Demo/Signed defaults.
   const lsP = loadProspectCounts();
+  const stageLabels = (Array.isArray(sectorPipelineStages) && sectorPipelineStages.length === 4)
+    ? sectorPipelineStages
+    : [t('pipeline.contacted', lang), t('pipeline.replied', lang), t('pipeline.demo', lang), t('pipeline.signed', lang)];
   const ringStages = [
-    { label: t('pipeline.contacted', lang), value: lsP?.contacted ?? pipeline.contacted, total: Math.max(lsP?.contacted ?? pipeline.contacted, 1) },
-    { label: t('pipeline.replied',   lang), value: lsP?.replied   ?? pipeline.replied,   total: Math.max(lsP?.contacted ?? pipeline.contacted, 1) },
-    { label: t('pipeline.demo',      lang), value: lsP?.demo      ?? pipeline.demo,      total: Math.max(lsP?.contacted ?? pipeline.contacted, 1) },
-    { label: t('pipeline.signed',    lang), value: lsP?.signed    ?? pipeline.signed,    total: Math.max(lsP?.contacted ?? pipeline.contacted, 1) },
+    { label: stageLabels[0], value: lsP?.contacted ?? pipeline.contacted, total: Math.max(lsP?.contacted ?? pipeline.contacted, 1) },
+    { label: stageLabels[1], value: lsP?.replied   ?? pipeline.replied,   total: Math.max(lsP?.contacted ?? pipeline.contacted, 1) },
+    { label: stageLabels[2], value: lsP?.demo      ?? pipeline.demo,      total: Math.max(lsP?.contacted ?? pipeline.contacted, 1) },
+    { label: stageLabels[3], value: lsP?.signed    ?? pipeline.signed,    total: Math.max(lsP?.contacted ?? pipeline.contacted, 1) },
   ];
 
   // Smart Insights

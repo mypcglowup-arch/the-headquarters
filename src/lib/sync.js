@@ -227,11 +227,14 @@ export async function syncUserProfile(profile) {
   if (!isSupabaseEnabled()) return;
   try {
     await supabase.from('user_profile').upsert({
-      id:          'samuel',
-      name:        profile?.name || null,
-      role:        profile?.role || null,
-      annual_goal: Number(profile?.annualGoal) || null,
-      updated_at:  new Date().toISOString(),
+      id:            'samuel',
+      name:          profile?.name || null,
+      role:          profile?.role || null,
+      annual_goal:   Number(profile?.annualGoal) || null,
+      sector:        profile?.sector || null,
+      sector_custom: profile?.sectorCustom || null,
+      audience:      profile?.audience || null,
+      updated_at:    new Date().toISOString(),
     }, { onConflict: 'id' });
   } catch (e) {
     console.warn('[Sync] syncUserProfile failed:', e.message);
@@ -243,16 +246,19 @@ export async function fetchUserProfile() {
   try {
     const { data, error } = await supabase
       .from('user_profile')
-      .select('id, name, role, annual_goal, created_at')
+      .select('id, name, role, annual_goal, sector, sector_custom, audience, created_at')
       .eq('id', 'samuel')
       .maybeSingle();
     if (error) throw error;
     if (!data) return null;
     return {
-      name:       data.name || '',
-      role:       data.role || '',
-      annualGoal: Number(data.annual_goal) || 50000,
-      createdAt:  data.created_at || null,
+      name:         data.name || '',
+      role:         data.role || '',
+      annualGoal:   Number(data.annual_goal) || 50000,
+      sector:       data.sector || null,
+      sectorCustom: data.sector_custom || '',
+      audience:     data.audience || null,
+      createdAt:    data.created_at || null,
     };
   } catch (e) {
     console.warn('[Sync] fetchUserProfile failed:', e.message);

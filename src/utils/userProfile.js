@@ -1,5 +1,5 @@
 /**
- * User profile — name, role, optional annualGoal pulled from onboarding.
+ * User profile — name, role, annualGoal, sector + audience pulled from onboarding.
  *
  * Source of truth : localStorage `qg_user_profile_v1` (synced to Supabase
  * fire-and-forget via syncUserProfile in lib/sync.js).
@@ -9,13 +9,18 @@
  * (technical partition key — changing it would orphan existing memories).
  */
 
+import { getSector } from '../data/sectors.js';
+
 const LS_PROFILE = 'qg_user_profile_v1';
 
 const DEFAULT_PROFILE = {
-  name:       '',
-  role:       '',
-  annualGoal: 50000,
-  createdAt:  null,
+  name:         '',
+  role:         '',
+  annualGoal:   50000,
+  sector:       null,        // id from data/sectors.js — null = not set
+  sectorCustom: '',          // free-text label when sector === 'other'
+  audience:     null,        // 'b2b' | 'b2c' | 'both' | null
+  createdAt:    null,
 };
 
 /** Read the profile from localStorage. Returns DEFAULT_PROFILE if absent. */
@@ -59,9 +64,13 @@ export function getDisplayName(profile, lang = 'fr') {
 export function buildUserContext(profile, lang = 'fr') {
   if (!profile) return null;
   return {
-    name:       (profile.name || '').trim() || (lang === 'fr' ? "l'utilisateur" : 'the user'),
-    role:       (profile.role || '').trim() || null,
-    annualGoal: Number(profile.annualGoal) || null,
+    name:         (profile.name || '').trim() || (lang === 'fr' ? "l'utilisateur" : 'the user'),
+    role:         (profile.role || '').trim() || null,
+    annualGoal:   Number(profile.annualGoal) || null,
+    sector:       profile.sector || null,
+    sectorCustom: profile.sectorCustom || '',
+    audience:     profile.audience || null,
+    profile,                               // raw — for callers that need formatSectorContext
   };
 }
 
@@ -76,11 +85,24 @@ export function personalize(promptString, ctx) {
     : "l'utilisateur");
   const role = ctx?.role || '';
   const annualGoal = ctx?.annualGoal != null ? `${ctx.annualGoal}$` : '50 000$';
+  const audience   = ctx?.audience || '';
+  // Resolved sector label — fall back to '' if no sector or custom not set
+  let sectorLabel = '';
+  if (ctx?.profile?.sector) {
+    if (ctx.profile.sector === 'other') {
+      sectorLabel = (ctx.profile.sectorCustom || '').trim();
+    } else {
+      const s = getSector(ctx.profile.sector);
+      sectorLabel = s?.label?.fr || ctx.profile.sector;
+    }
+  }
   return promptString
     .replace(/\{NAME\}/g, name.toUpperCase())
     .replace(/\{name\}/g, name)
     .replace(/\{role\}/g, role)
-    .replace(/\{annualGoal\}/g, annualGoal);
+    .replace(/\{annualGoal\}/g, annualGoal)
+    .replace(/\{sector\}/g, sectorLabel)
+    .replace(/\{audience\}/g, audience);
 }
 
 /**

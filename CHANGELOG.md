@@ -2,6 +2,136 @@
 
 ## [Unreleased]
 
+### Added — Personnalisation sectorielle complète (15 secteurs + B2B/B2C)
+À partir de deux inputs simples (secteur + audience), tout l'app s'adapte : vocabulaire des agents, exemples spécifiques, étapes de pipeline, saisonnalité dans les briefings, scripts de bibliothèque filtrés par défaut, hints sectoriels dans les modals.
+
+### Les 15 secteurs (+ Autre custom)
+Agence/Freelance · Aménagement paysager · Restaurant/Food · Immobilier · Construction/Rénovation · Santé/Bien-être · Commerce de détail · Consultation/Coaching · E-commerce · Transport/Logistique · Technologies/SaaS · Comptabilité/Finance · Événementiel · Beauté/Salon · **Autre** (champ libre)
+
+### Audience options
+B2B · B2C · Les deux — drive le filter par défaut dans la bibliothèque + un hint pour les agents.
+
+### Architecture
+```
+data/sectors.js
+  ├─ SECTORS[]  — 15 secteurs avec vocabulary, pipelineStages, revenueModel,
+  │              typicalUnit, seasonality, painPoints, defaultAudience
+  ├─ AUDIENCE_OPTIONS[]  — b2b / b2c / both avec rgb couleurs
+  ├─ getSector(id)  — fallback sur 'other' si introuvable
+  ├─ getSectorLabel(profile, lang) — résolution avec sectorCustom si 'other'
+  ├─ getPipelineStages(sectorId, lang) — array de 4 stage labels
+  ├─ formatSectorContext(profile, lang) — bloc complet pour agent prompts
+  └─ getSectorHint(profile, lang) — { sectorName, vocabulary, typicalUnit } pour la library
+
+userProfile.js (extended)
+  ├─ Schema: + sector (id), sectorCustom (string), audience ('b2b'|'b2c'|'both')
+  ├─ buildUserContext() expose le profile raw pour formatSectorContext
+  └─ personalize() ajoute tokens {sector} et {audience}
+
+App.jsx
+  ├─ combinedContext: + sectorCtx (premier dans l'ordre, avant Gmail/dashboard)
+  ├─ DashboardScreen reçoit sectorPipelineStages={getPipelineStages(...)}
+  └─ SituationsScreen reçoit userProfile pour défault audience + sector hint
+
+DashboardScreen.jsx
+  └─ ringStages utilise sectorPipelineStages avec fallback sur t('pipeline.X')
+
+SituationsScreen.jsx
+  ├─ subType state initialise avec userProfile.audience (si b2b ou b2c)
+  └─ Detail modal affiche un bloc "💡 Pour ton secteur : X" indigo subtle
+     avec liste des mots-clés et l'unité typique
+
+OnboardingModal.jsx
+  └─ 3 → 5 steps : name, role, goal, sector (grid 2 cols + custom field si 'other'), audience (3 chips B2B/B2C/Both)
+  └─ Auto-suggère audience selon defaultAudience du secteur choisi
+     (si user n'a pas encore touché)
+
+ProfileScreen.jsx
+  └─ + sector dropdown (avec champ custom si 'other')
+  └─ + audience radio chips
+```
+
+### Pipeline stages adaptés par secteur
+| Secteur | Stage 1 | Stage 2 | Stage 3 | Stage 4 |
+|---|---|---|---|---|
+| Agence/Freelance | Lead | Brief reçu | Devis envoyé | Mandat signé |
+| Aménagement paysager | Demande | Visite des lieux | Soumission | Travaux confirmés |
+| Restaurant | Visite | Réservation | Service | Client fidèle |
+| Immobilier | Contact | Rencontre | Visite | Offre acceptée |
+| Construction | Demande | Visite chantier | Soumission | Contrat signé |
+| Santé/Bien-être | Premier contact | Consultation | Plan proposé | Forfait acheté |
+| Retail | Visite | Essai | Vente | Client fidèle |
+| Consulting | Lead | Appel découverte | Proposition | Mandat signé |
+| E-commerce | Visite | Ajout panier | Checkout | Commande payée |
+| Transport | Demande | Devis | Contrat | Route active |
+| SaaS | Lead | Démo | Trial | Closed-won |
+| Comptabilité | Lead | Consultation | Proposition | Mandat signé |
+| Événementiel | Demande | Soumission | Acompte versé | Événement livré |
+| Beauté/Salon | Premier contact | Premier RDV | Forfait acheté | Client régulier |
+| Autre | Contacté | Répondu | Démo | Signé (defaults) |
+
+### Vocabulaire injecté dans les agent prompts
+Pour chaque agent call, un bloc `SECTOR CONTEXT` est ajouté en tête du combinedContext :
+
+```
+SECTEUR DE L'UTILISATEUR : Aménagement paysager · Audience : B2C (particuliers)
+Vocabulaire à utiliser : soumission, estimation, visite des lieux, plantation, entretien, déneigement
+Modèle de revenu typique : Projets ponctuels + contrats d'entretien saisonniers
+Unité typique de vente : projet (utilise ce mot)
+Saisonnalité : Avril-octobre = saison forte (90% du revenu). Novembre-mars = projets résidentiels intérieurs ou contrats déneigement.
+Pain points typiques du secteur : météo imprévisible · main-d'œuvre saisonnière · cash flow hors-saison
+RÈGLE : utilise le vocabulaire ci-dessus, donne des exemples spécifiques au secteur, ne reste jamais générique.
+```
+
+Les agents ont maintenant le bon vocabulaire (soumission au lieu de proposition pour un paysagiste, MRR/ARR pour SaaS, couvert pour restaurant, etc.) ET la bonne saisonnalité (le morning briefing intègre automatiquement la saisonnalité du secteur car le bloc fait partie de combinedContext).
+
+### Library : audience par défaut + sector hint
+- À l'ouverture de la Bibliothèque, `subType` est initialisé avec `userProfile.audience` (si 'b2b' ou 'b2c'). Pour 'both' → pas de filter par défaut.
+- Le filter reste pleinement contrôlable par l'utilisateur (les chips B2B/B2C peuvent être togglés).
+- Detail modal d'une situation : sous le script, un bloc indigo "💡 Pour ton secteur : X" liste les 6 premiers mots de vocabulaire du secteur + l'unité typique. L'utilisateur sait quoi remplacer dans le framework universel.
+
+### Onboarding (3 → 5 questions)
+1. Prénom (required)
+2. Rôle / Focus principal (optional)
+3. Objectif annuel ($) (optional, défault 50000)
+4. **NOUVEAU** Secteur — picker grid 2 colonnes avec les 15 options + champ libre si "Autre"
+5. **NOUVEAU** Audience — 3 chips colorés (B2B blue / B2C emerald / Les deux violet)
+
+Auto-suggestion : sélectionner un secteur pré-remplit l'audience avec `defaultAudience` (ex: SaaS → b2b, Restaurant → b2c, Construction → both) — l'utilisateur peut override.
+
+### Storage
+- `localStorage['qg_user_profile_v1']` étendu avec `sector`, `sectorCustom`, `audience`
+- Table Supabase `user_profile` : nouvelles colonnes `sector`, `sector_custom`, `audience`
+
+### SQL migration Supabase
+```sql
+alter table public.user_profile
+  add column if not exists sector        text,
+  add column if not exists sector_custom text,
+  add column if not exists audience      text check (audience in ('b2b', 'b2c', 'both'));
+```
+
+### Fichiers créés
+- `src/data/sectors.js` — 15 sectors + helpers + AUDIENCE_OPTIONS
+
+### Fichiers modifiés
+- `src/utils/userProfile.js` — schema + tokens `{sector}` `{audience}` dans `personalize()`
+- `src/lib/sync.js` — `syncUserProfile` + `fetchUserProfile` étendus avec sector/sector_custom/audience
+- `src/components/OnboardingModal.jsx` — 5 questions au lieu de 3, body adapte selon kind (text/number/sector/audience)
+- `src/components/ProfileScreen.jsx` — sector dropdown + audience radio chips
+- `src/components/DashboardScreen.jsx` — prop `sectorPipelineStages` + fallback sur t('pipeline.X')
+- `src/components/SituationsScreen.jsx` — userProfile prop, audience default sur subType, sector hint dans modal détail
+- `src/App.jsx` — formatSectorContext injecté dans combinedContext, sectorPipelineStages passé à DashboardScreen, userProfile passé à SituationsScreen
+
+### Comportement utilisateur
+1. **Profile vide** : tout fonctionne comme avant (fallback sur defaults), agents restent génériques mais opérationnels
+2. **Sector + audience set** : au prochain message, les agents répondent avec le vocabulaire du secteur, donnent des exemples du secteur, mentionnent la saisonnalité quand pertinent
+3. **Dashboard** : pipeline rings utilisent les stages du secteur (Soumission au lieu de Demo pour un paysagiste)
+4. **Library** : ouvre directement sur la sous-vue B2B ou B2C selon ton audience, hint sectoriel dans chaque modal
+5. **Morning briefing** : intègre automatiquement la saisonnalité du secteur dans son contexte (Q4 pic pour SaaS, été pic pour paysagiste, etc.)
+
+---
+
 ### Added — Sweep dynamique du nom utilisateur + onboarding 3 questions + ProfileScreen
 Toutes les références hardcodées "Samuel" / "SAMUEL" (143 instances réparties sur 15 fichiers) sont remplacées par des tokens dynamiques `{name}` / `{NAME}` substitués au runtime via `personalize()` à l'entrée des appels Claude. Le nom affiché est piloté par `userProfile` qui est rempli via une modal d'onboarding 3 questions, jamais bloquante (nudge banner skippable sur Home).
 
