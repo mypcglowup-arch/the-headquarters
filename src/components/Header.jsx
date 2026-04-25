@@ -36,11 +36,23 @@ export default function Header({
         borderBottom: darkMode ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0,0,0,0.08)',
       }}
     >
-      {/* Logo — purely decorative, non-interactive (no click, no edit, no select) */}
+      {/* Logo — clickable nav back to home. Non-editable, no text-select.
+          Subtle hover : opacity 0.8 + cursor pointer. No underline. */}
       <div
-        className="flex items-center gap-2.5 select-none"
-        style={{ userSelect: 'none', WebkitUserSelect: 'none', cursor: 'default' }}
-        aria-label="The Headquarters"
+        role="button"
+        tabIndex={0}
+        onClick={onGoHome}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onGoHome?.(); } }}
+        aria-label="The Headquarters — back to home"
+        className="flex items-center gap-2.5 select-none transition-opacity"
+        style={{
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          cursor: 'pointer',
+          transitionDuration: '120ms',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.8'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
       >
         <div
           className="flex gap-[3px]"
