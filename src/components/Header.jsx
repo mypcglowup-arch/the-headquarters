@@ -36,17 +36,34 @@ export default function Header({
         borderBottom: darkMode ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0,0,0,0.08)',
       }}
     >
-      {/* Logo */}
-      <button onClick={onGoHome} className="flex items-center gap-2.5 group">
-        <div className="flex gap-[3px]">
+      {/* Logo — purely decorative, non-interactive (no click, no edit, no select) */}
+      <div
+        className="flex items-center gap-2.5 select-none"
+        style={{ userSelect: 'none', WebkitUserSelect: 'none', cursor: 'default' }}
+        aria-label="The Headquarters"
+      >
+        <div
+          className="flex gap-[3px]"
+          style={{ pointerEvents: 'none' }}
+        >
           <div className="w-2.5 h-2.5 rounded-sm" style={{ background: darkMode ? '#f1f5f9' : '#0f172a' }} />
           <div className="w-2.5 h-2.5 rounded-sm" style={{ background: darkMode ? 'rgba(241,245,249,0.35)' : 'rgba(15,23,42,0.35)' }} />
         </div>
-        <span className="font-display font-semibold text-sm tracking-widest uppercase"
-          style={{ color: darkMode ? '#e2e8f0' : '#0f172a', letterSpacing: '0.14em' }}>
+        <span
+          className="font-display font-semibold text-sm tracking-widest uppercase"
+          style={{
+            color: darkMode ? '#e2e8f0' : '#0f172a',
+            letterSpacing: '0.14em',
+            pointerEvents: 'none',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+          }}
+          contentEditable={false}
+          suppressContentEditableWarning
+        >
           The Headquarters
         </span>
-      </button>
+      </div>
 
       {/* Save status */}
       <div className="flex-1 flex justify-center pointer-events-none">
