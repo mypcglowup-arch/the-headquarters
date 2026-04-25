@@ -1,8 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, X, Star, Copy, Check, MessageSquare, BookOpen } from 'lucide-react';
-import { SITUATIONS, SITUATION_CATEGORIES, searchSituations, filterByCategory, filterByAgent } from '../data/situations.js';
+import { SITUATIONS, SITUATION_CATEGORIES, searchSituations, filterByCategory, filterByAgent, filterBySubType } from '../data/situations.js';
 import { AGENT_CONFIG } from '../prompts.js';
 import AgentAvatar from './AgentAvatar.jsx';
+import Tooltip from './Tooltip.jsx';
+
+const SUBTYPE_CONFIG = {
+  b2b: { label: 'B2B', rgb: '59,130,246',  tooltip: { fr: 'Business to Business — vente entre entreprises', en: 'Business to Business — selling to companies' } },
+  b2c: { label: 'B2C', rgb: '16,185,129',  tooltip: { fr: 'Business to Customer — vente aux particuliers',   en: 'Business to Customer — selling to individuals' } },
+};
 
 const AGENT_KEYS = ['HORMOZI', 'CARDONE', 'ROBBINS', 'GARYV', 'NAVAL', 'VOSS'];
 
@@ -18,15 +25,22 @@ export default function SituationsScreen({
   const [query, setQuery]           = useState('');
   const [categoryId, setCategoryId] = useState(null);
   const [agentKey, setAgentKey]     = useState(null);
+  const [subType, setSubType]       = useState(null); // 'b2b' | 'b2c' | null — only used when categoryId === 'objection'
   const [selected, setSelected]     = useState(null); // full situation object
+
+  // Reset subType when leaving the objection category
+  useEffect(() => {
+    if (categoryId !== 'objection' && subType !== null) setSubType(null);
+  }, [categoryId, subType]);
 
   const filtered = useMemo(() => {
     let list = SITUATIONS;
     list = searchSituations(list, query, lang);
     list = filterByCategory(list, categoryId);
     list = filterByAgent(list, agentKey);
+    if (categoryId === 'objection') list = filterBySubType(list, subType);
     return list;
-  }, [query, categoryId, agentKey, lang]);
+  }, [query, categoryId, agentKey, subType, lang]);
 
   const favoriteObjects = useMemo(() => {
     return favorites
@@ -111,6 +125,33 @@ export default function SituationsScreen({
               </FilterChip>
             ))}
           </div>
+          {/* B2B / B2C subtoggle — visible only when objection category is selected */}
+          {categoryId === 'objection' && (
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className={`text-[10px] uppercase tracking-wider font-semibold mr-1 ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
+                {lang === 'fr' ? 'Type :' : 'Type:'}
+              </span>
+              <FilterChip active={!subType} onClick={() => setSubType(null)} darkMode={darkMode}>
+                {lang === 'fr' ? 'Tous' : 'All'}
+              </FilterChip>
+              <FilterChip
+                active={subType === 'b2b'}
+                onClick={() => setSubType('b2b')}
+                darkMode={darkMode}
+                accentRgb={SUBTYPE_CONFIG.b2b.rgb}
+              >
+                B2B
+              </FilterChip>
+              <FilterChip
+                active={subType === 'b2c'}
+                onClick={() => setSubType('b2c')}
+                darkMode={darkMode}
+                accentRgb={SUBTYPE_CONFIG.b2c.rgb}
+              >
+                B2C
+              </FilterChip>
+            </div>
+          )}
         </div>
 
         {/* Favorites strip */}
@@ -214,6 +255,28 @@ function FilterChip({ children, active, onClick, darkMode, accentRgb }) {
   );
 }
 
+// ── B2B / B2C subtype badge with tooltip ─────────────────────────────────────
+function SubTypeBadge({ subType, lang = 'fr' }) {
+  const cfg = SUBTYPE_CONFIG[subType];
+  if (!cfg) return null;
+  // Stop card click when interacting with the badge tooltip area
+  return (
+    <Tooltip content={cfg.tooltip[lang] || cfg.tooltip.fr}>
+      <span
+        onClick={(e) => e.stopPropagation()}
+        className="text-[10px] px-1.5 py-0.5 rounded font-bold tracking-wider cursor-help"
+        style={{
+          background: `rgba(${cfg.rgb}, 0.14)`,
+          color:      `rgba(${cfg.rgb}, 1)`,
+          boxShadow:  `0 0 0 1px rgba(${cfg.rgb}, 0.32)`,
+        }}
+      >
+        {cfg.label}
+      </span>
+    </Tooltip>
+  );
+}
+
 // ── Situation card ───────────────────────────────────────────────────────────
 function SituationCard({ situation, darkMode, lang, isFavorite, onClick, onToggleFavorite, agentPhotos, agentNames }) {
   const agentCfg = AGENT_CONFIG[situation.agent];
@@ -246,13 +309,16 @@ function SituationCard({ situation, darkMode, lang, isFavorite, onClick, onToggl
         />
       </button>
 
-      {/* Agent avatar + category badge */}
-      <div className="flex items-center gap-2 mb-2.5">
+      {/* Agent avatar + category badge + B2B/B2C badge if applicable */}
+      <div className="flex items-center gap-2 mb-2.5 flex-wrap">
         <AgentAvatar agentKey={situation.agent} size={22} photoUrl={agentPhotos[situation.agent]} />
         <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider"
           style={{ background: `rgba(${rgb}, 0.12)`, color: `rgba(${rgb}, 0.95)` }}>
           {categoryLabel}
         </span>
+        {situation.subType && SUBTYPE_CONFIG[situation.subType] && (
+          <SubTypeBadge subType={situation.subType} lang={lang} />
+        )}
       </div>
 
       {/* Title */}
@@ -304,7 +370,13 @@ function SituationDetailModal({ situation, darkMode, lang, isFavorite, onClose, 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // Lock body scroll while modal is open
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [onClose]);
 
   function handleCopy() {
@@ -313,7 +385,9 @@ function SituationDetailModal({ situation, darkMode, lang, isFavorite, onClose, 
     setTimeout(() => setCopied(false), 2000);
   }
 
-  return (
+  // Portal the modal into document.body so ancestor `transform` (from
+  // animate-screen-in / animate-panel-in) doesn't break `position: fixed`.
+  return createPortal((
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-modal-backdrop"
       style={{ background: 'rgba(3,7,18,0.75)', backdropFilter: 'blur(6px)' }}
@@ -332,11 +406,14 @@ function SituationDetailModal({ situation, darkMode, lang, isFavorite, onClose, 
         <div className="flex items-start gap-3 p-5 border-b" style={{ borderColor: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)' }}>
           <AgentAvatar agentKey={situation.agent} size={40} photoUrl={agentPhotos[situation.agent]} />
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
+            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider"
                 style={{ background: `rgba(${rgb}, 0.12)`, color: `rgba(${rgb}, 0.95)` }}>
                 {categoryLabel}
               </span>
+              {situation.subType && SUBTYPE_CONFIG[situation.subType] && (
+                <SubTypeBadge subType={situation.subType} lang={lang} />
+              )}
               <span className={`text-[11px] ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
                 · {agentDisplayName}
               </span>
@@ -454,7 +531,7 @@ function SituationDetailModal({ situation, darkMode, lang, isFavorite, onClose, 
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }
 
 // Render **bold** markdown in scripts

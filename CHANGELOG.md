@@ -2,6 +2,99 @@
 
 ## [Unreleased]
 
+### Changed — Bibliothèque : refonte complète des Objections (3 → 30) avec distinction B2B/B2C
+La catégorie Objections est passée de 3 à **30 scénarios** structurés en deux sous-types : **B2B (15)** et **B2C (15)**. Tous assignés à VOSS (négociation est sa spécialité). Nouveau champ `subType` au data model + UI subtoggle B2B/B2C qui apparaît uniquement quand la catégorie Objection est active. Badges colorés (B2B blue · B2C emerald) avec tooltip explicatif sur chaque card et dans le modal détail.
+
+### Bibliothèque totale : 50 → 77 situations
+| Avant | Après |
+|---|---|
+| 50 scénarios | 77 scénarios |
+| 3 objections (toutes B2B implicites) | 30 objections (15 B2B + 15 B2C) |
+| VOSS 10 | VOSS 37 (dont 30 objections) |
+
+### B2B objections (15) — toutes VOSS
+1. C'est trop cher
+2. On a déjà un fournisseur
+3. On va y penser
+4. Je dois en parler à mon associé
+5. On n'a pas le budget cette année
+6. Envoyez-moi une proposition par email
+7. On n'est pas prêts à changer de système
+8. Prouvez-moi le ROI avant qu'on signe
+9. On a essayé quelque chose de similaire, ça n'a pas marché
+10. Vous êtes trop petits / pas assez connus
+11. On va attendre après Q4
+12. C'est pas une priorité là
+13. Je peux trouver ça moins cher ailleurs
+14. On fait ça à l'interne
+15. Je dois consulter mon comptable
+
+### B2C objections (15) — toutes VOSS
+1. C'est trop cher pour moi
+2. J'ai pas les moyens là
+3. Je vais attendre les soldes
+4. Mon chum/ma blonde dit non
+5. Je suis pas sûr que j'en ai besoin
+6. J'ai vu la même chose moins cher sur Amazon
+7. Je vais y penser
+8. C'est quoi votre garantie ?
+9. J'ai pas confiance d'acheter en ligne
+10. Je veux pas m'engager
+11. C'est pour plus tard
+12. Je vais en parler à mes parents
+13. J'ai déjà essayé quelque chose de similaire
+14. Vous avez des reviews ?
+15. Je peux pas me permettre un abonnement mensuel
+
+### Data model
+```js
+{
+  id: 'objection-b2b-talk-to-partner',
+  agent: 'VOSS',
+  category: 'objection',
+  subType: 'b2b',                  // NEW — only on objections
+  title:   { fr: '...' },
+  context: { fr: '...' },
+  script:  { fr: '...' },          // VOSS framework: tactical empathy → labels → calibrated questions
+  variants: [],
+  keywords: [...],
+}
+```
+
+### UI flow
+```
+SituationsScreen
+  ├─ Filter chips catégories (10 catégories)
+  ├─ Filter chips agents (6 agents)
+  └─ NEW: Subtoggle B2B/B2C — apparaît UNIQUEMENT si categoryId === 'objection'
+      ├─ "Tous" (default)
+      ├─ "B2B" (blue chip, accent #3b82f6)
+      └─ "B2C" (emerald chip, accent #10b981)
+
+SituationCard (objection)
+  └─ Badge SubType (top-left, à côté du badge catégorie)
+     └─ Hover → Tooltip 200ms delay
+        ├─ B2B → "Business to Business — vente entre entreprises"
+        └─ B2C → "Business to Customer — vente aux particuliers"
+```
+
+### Reset behavior
+Le subType filter se reset automatiquement à `null` quand l'utilisateur quitte la catégorie Objection (useEffect watching categoryId). Évite l'état orphelin "subType=b2b mais categoryId=mindset".
+
+### Fichiers créés
+- `src/components/Tooltip.jsx` — composant réutilisable. Portal vers `document.body` (évite les clipping issues), 200ms delay au hover/focus, auto-flip top→bottom si pas assez d'espace, dark glass style avec backdrop-filter blur, `pointerEvents: 'none'` pour ne pas intercepter les clicks.
+
+### Fichiers modifiés
+- `src/data/situations.js` — 27 nouveaux scenarios objection (12 B2B + 15 B2C), `subType: 'b2b'` ajouté aux 3 existants, header doc à jour, nouvelle helper `filterBySubType(situations, subType)`
+- `src/components/SituationsScreen.jsx` — import `Tooltip` + `filterBySubType`, constante `SUBTYPE_CONFIG` (label, rgb, tooltip text par subType), state `subType`, useEffect reset, application dans `useMemo` filter chain, subtoggle UI rendu conditionnel, composant `SubTypeBadge` (avec onClick stopPropagation pour pas trigger card click), badge inséré sur SituationCard et dans modal header
+
+### Style
+Tooltip — `background: rgba(15,15,22,0.97)`, border `rgba(255,255,255,0.08)`, `backdrop-filter: blur(8px)`, `box-shadow: 0 10px 30px -10px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.35)`. Petit, élégant, ne capture pas les clicks. Texte `font-size: 11px`, `font-weight: 500`, `line-height: 1.4`. Apparition `opacity 160ms ease-out` après le delay de 200ms.
+
+Badges — `B2B` background `rgba(59,130,246,0.14)` + ring `rgba(59,130,246,0.32)`, `B2C` background `rgba(16,185,129,0.14)` + ring `rgba(16,185,129,0.32)`. Cursor `help`. Police `font-bold tracking-wider`.
+
+---
+
 ### Added — Journal de victoires avec ROI
 Nouveau screen dédié pour logger et suivre chaque win avec calcul ROI automatique. Source de vérité **Supabase cloud-first** (réconciliation au mount), localStorage = cache pour boot rapide. Les 5 dernières victoires sont injectées dans le contexte des agents — ils peuvent les référencer naturellement comme preuves de momentum.
 

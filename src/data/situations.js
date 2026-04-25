@@ -1,5 +1,5 @@
 /**
- * Bibliothèque de situations — 50 scénarios pré-construits pour les moments
+ * Bibliothèque de situations — 77 scénarios pré-construits pour les moments
  * critiques du quotidien solo-consultant.
  *
  * Format : frameworks structurés (pas mot-à-mot) — "reconnaître → pivoter →
@@ -10,8 +10,11 @@
  *   negotiation, objection, closing, prospecting, content, mindset,
  *   pricing, difficult-client, referral, leverage
  *
+ * Sub-type (objections only) : 'b2b' | 'b2c'
+ *
  * Répartition agents :
- *   VOSS 10 · CARDONE 10 · HORMOZI 8 · GARYV 8 · ROBBINS 7 · NAVAL 7 = 50
+ *   VOSS 37 (dont 30 objections) · CARDONE 10 · HORMOZI 8 · GARYV 8
+ *   · ROBBINS 7 · NAVAL 7 = 77
  *
  * EN translations : TODO (phase ultérieure). Pour l'instant { fr } only.
  */
@@ -73,6 +76,7 @@ Le prospect achète la réduction de risque, pas le rabais.` } },
     id: 'objection-too-expensive',
     agent: 'VOSS',
     category: 'objection',
+    subType: 'b2b',
     title: { fr: 'Objection "C\'est trop cher"' },
     context: { fr: '"Trop cher" est presque jamais un problème de prix. C\'est un problème de valeur perçue ou de confiance.' },
     script: { fr: `Structure : calibrer la question → faire parler le coût de l'inaction → ne pas justifier.
@@ -102,6 +106,7 @@ Si vraiment ton prix est plus haut sans raison défendable, c'est un problème d
     id: 'objection-think-about-it',
     agent: 'VOSS',
     category: 'objection',
+    subType: 'b2b',
     title: { fr: 'Objection "On va y penser"' },
     context: { fr: '"On va y penser" = un non poli 80% du temps. Ton job : transformer ça en un vrai oui ou un vrai non.' },
     script: { fr: `Structure : inviter le non → mirror la résistance → fixer un timeline.
@@ -126,6 +131,7 @@ Si vraiment ton prix est plus haut sans raison défendable, c'est un problème d
     id: 'objection-already-have-provider',
     agent: 'VOSS',
     category: 'objection',
+    subType: 'b2b',
     title: { fr: 'Objection "On a déjà un fournisseur"' },
     context: { fr: 'Tu tombes sur un prospect qui a déjà quelqu\'un. La question n\'est pas "peux-tu le remplacer" mais "qu\'est-ce qui lui manque".' },
     script: { fr: `Structure : ne pas attaquer le concurrent → sonder le manque → te positionner en complément ou en back-up.
@@ -144,6 +150,715 @@ Si vraiment ton prix est plus haut sans raison défendable, c'est un problème d
 Tu plantes une graine. 30% des fournisseurs se cassent la gueule dans les 12 mois.` },
     variants: [],
     keywords: ['fournisseur', 'concurrent', 'déjà', 'existant', 'relation'],
+  },
+  {
+    id: 'objection-b2b-talk-to-partner',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "Je dois en parler à mon associé"' },
+    context: { fr: 'Décision partagée — ou alibi pour gagner du temps. Tu dois identifier laquelle, vite.' },
+    script: { fr: `Structure : valider la structure de décision → impliquer l'absent → obtenir un commitment partiel.
+
+1. **Valider la structure**
+   → "Bien sûr. Sur ce genre de décision, ton associé pèse autant que toi, ou tu as le mandat de décider ?"
+   → S'il a le mandat → c'est un alibi. Adresse la vraie objection cachée.
+   → Si décision partagée → continue.
+
+2. **Impliquer l'absent**
+   → "Quels critères ton associé va vouloir voir avant de dire oui ?"
+   → Tu apprends ce qu'il faut adresser. Et tu donnes des munitions au prospect pour vendre en interne.
+
+3. **Commitment partiel**
+   → "Si toi tu es convaincu, tu es prêt à le défendre auprès de ton associé cette semaine ?"
+   → Si oui → tu as un champion interne.
+   → Si non → c'est lui qui est pas convaincu. Reviens à étape 1 du framework des objections cachées.` },
+    variants: [],
+    keywords: ['associé', 'partenaire', 'décision', 'absent', 'champion'],
+  },
+  {
+    id: 'objection-b2b-no-budget-this-year',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "On n\'a pas le budget cette année"' },
+    context: { fr: 'Budget = priorisation déguisée. Personne n\'a "pas de budget" — ils ont d\'autres priorités.' },
+    script: { fr: `Structure : reframer en priorité → coût de l'inaction → pivoter sur le timing.
+
+1. **Reframer en priorité**
+   → "Ça veut dire que c'est pas dans les priorités de l'année — ou que le budget est techniquement bloqué jusqu'en janvier ?"
+   → Force-le à distinguer. Les deux réponses ouvrent des routes différentes.
+
+2. **Coût de l'inaction**
+   → "Si on attend 12 mois pour adresser [problème], ça vous coûte combien en [perte/risque/manque-à-gagner] ?"
+   → Quand le coût d'attendre dépasse le coût d'agir, le budget se trouve.
+
+3. **Pivoter sur le timing**
+   → "Je peux vous tenir un slot pour janvier sans engagement, ou on peut commencer maintenant et facturer à l'exercice prochain."
+   → Tu lui offres une route, pas un push.` },
+    variants: [],
+    keywords: ['budget', 'pas cette année', 'priorité', 'fiscal', 'timing'],
+  },
+  {
+    id: 'objection-b2b-send-proposal-email',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "Envoyez-moi une proposition par email"' },
+    context: { fr: 'L\'email = la mort lente. 80% des propositions envoyées sans appel ne sont jamais lues.' },
+    script: { fr: `Structure : refuser poliment → trade-off implicite → fixer un appel court.
+
+1. **Refuser poliment**
+   → "Avec plaisir, mais je risque de mal cibler — j'ai pas assez d'info sur votre situation pour faire une proposition utile."
+
+2. **Trade-off implicite**
+   → "Je peux t'envoyer un PDF générique de 30 pages que tu vas pas lire. Ou on prend 20 minutes ensemble cette semaine, je te fais une proposition sur-mesure que tu peux décider sur place."
+
+3. **Fixer l'appel court**
+   → "Tu préfères mardi 9h ou jeudi 14h ?"
+   → Choix entre deux options > "es-tu disponible ?".
+
+Si insiste pour email pur → "OK. Je t'envoie une trame courte avec 3 questions à remplir en 5 min. Réponds à ça et je te fais la vraie proposition." Tu transformes le push en pull.` },
+    variants: [],
+    keywords: ['email', 'proposition', 'devis', 'envoyer', 'PDF'],
+  },
+  {
+    id: 'objection-b2b-not-ready-to-change',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "On n\'est pas prêts à changer de système"' },
+    context: { fr: 'La peur du changement bat l\'envie d\'amélioration 4 fois sur 5. Adresse la peur, pas la solution.' },
+    script: { fr: `Structure : labeliser la peur → minimiser le saut → introduire un palier intermédiaire.
+
+1. **Labeliser la peur** (sans la minimiser)
+   → "On dirait que ce qui te freine, c'est moins le besoin que la transition elle-même."
+   → Il acquiesce → tu adresses ce qui le tient vraiment éveillé la nuit.
+
+2. **Minimiser le saut**
+   → "Le pire scénario d'un changement : 30 jours d'inconfort. Le pire scénario de garder l'actuel : [problème exponentiel]. Comparons les coûts."
+
+3. **Introduire un palier intermédiaire**
+   → "On peut faire un pilote sur [un département / une partie / un mois]. Si ça marche pas, t'as rien perdu sauf 30 jours."
+   → Tu transformes un saut en marche.
+
+Règle Voss : "L'humain a peur de la perte 2x plus que de l'envie du gain." Ton job = minimiser la peur de perdre, pas amplifier le gain.` },
+    variants: [],
+    keywords: ['changement', 'transition', 'résistance', 'inertie', 'pilote'],
+  },
+  {
+    id: 'objection-b2b-prove-roi-first',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "Prouvez-moi le ROI avant qu\'on signe"' },
+    context: { fr: 'Le prospect veut zéro risque. Tu peux pas prouver à 100% sans avoir livré. Inverse la charge.' },
+    script: { fr: `Structure : valider sans céder → inverser la charge → garantie ciblée.
+
+1. **Valider sans céder**
+   → "Logique. Personne signe sans avoir une idée du retour."
+   → Tu reconnais sa demande sans l'accepter telle quelle.
+
+2. **Inverser la charge**
+   → "Pour modéliser un ROI précis, j'ai besoin de tes vrais chiffres : [conversion actuelle, panier moyen, coût d'acquisition]. Tu peux les partager ?"
+   → S'il refuse → il veut une garantie sans risquer la diligence. Pas un vrai prospect.
+   → S'il partage → tu modélises avec ses chiffres, le ROI devient SA simulation, pas la tienne.
+
+3. **Garantie ciblée**
+   → "Si on rate le ROI projeté de plus de 20% sur les 90 premiers jours, je rembourse [X% / la totalité]. Tu portes zéro risque."
+   → C'est ta confiance qui devient la preuve.
+
+Règle : si tu peux pas garantir, le prospect est plus prudent que tu peux te permettre de l'être.` },
+    variants: [],
+    keywords: ['ROI', 'preuve', 'garantie', 'risque', 'résultat'],
+  },
+  {
+    id: 'objection-b2b-tried-similar-failed',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "On a essayé quelque chose de similaire, ça n\'a pas marché"' },
+    context: { fr: 'Cicatrice d\'un échec passé. Tu paies pour les erreurs de quelqu\'un d\'autre.' },
+    script: { fr: `Structure : labeliser l'échec → diagnostiquer la cause → différencier sans dénigrer.
+
+1. **Labeliser l'échec**
+   → "Ça a dû être frustrant — du temps et de l'argent investis sans retour."
+   → Pas "bah ça arrive". Reconnais l'impact.
+
+2. **Diagnostiquer la cause**
+   → "Sans rentrer dans les détails — selon toi, qu'est-ce qui a vraiment fait que ça marchait pas ? Le produit, l'implémentation, ou le timing ?"
+   → Sa réponse t'indique quel angle adresser.
+
+3. **Différencier sans dénigrer le précédent**
+   → "Voici ce qu'on fait différemment : [1 différence concrète directement liée à la cause qu'il a nommée]."
+   → Pas une liste de 5 différences. UNE, ciblée. C'est ce qu'il retient.
+
+Règle : ne JAMAIS dire "le précédent était mauvais, nous on est meilleurs". Tu attaques son jugement de l'avoir choisi.` },
+    variants: [],
+    keywords: ['déjà essayé', 'échec passé', 'cicatrice', 'précédent', 'similaire'],
+  },
+  {
+    id: 'objection-b2b-too-small-unknown',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "Vous êtes trop petits / pas assez connus"' },
+    context: { fr: 'Le prospect veut une marque safe. La taille = un proxy pour la fiabilité dans son cerveau.' },
+    script: { fr: `Structure : reframer "petit" en avantage → preuve sociale ciblée → garantie de continuité.
+
+1. **Reframer "petit" en avantage**
+   → "Les gros labels ont 200 clients à gérer. Toi tu serais le 8ème. Tu veux être un numéro de ticket ou un dossier qu'on connaît par cœur ?"
+   → Transforme la faiblesse perçue en force réelle.
+
+2. **Preuve sociale ciblée** (pas de logos génériques)
+   → "[Client similaire en taille / industrie] travaille avec nous depuis [X mois]. Voici ce qu'il a livré : [résultat]. Veux son numéro pour valider ?"
+   → Une référence vérifiable bat 50 logos non-cliquables.
+
+3. **Garantie de continuité**
+   → "Mon plus grand risque pour toi, c'est que je disparaisse. Voici comment je l'évite : [structure légale, contrat avec exit, accès aux données]."
+   → Anticipe la peur de fond avant qu'il l'exprime.
+
+Règle Voss : tu ne combats pas la perception de "petit". Tu changes ce que "petit" signifie pour lui.` },
+    variants: [],
+    keywords: ['petit', 'startup', 'inconnu', 'crédibilité', 'preuve sociale'],
+  },
+  {
+    id: 'objection-b2b-wait-after-q4',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "On va attendre après Q4"' },
+    context: { fr: 'Q4 = le piège classique. "Après Q4" devient "après Q1" devient "jamais".' },
+    script: { fr: `Structure : valider le timing → coût d'attendre → bloquer un slot futur.
+
+1. **Valider le timing**
+   → "Ça peut faire du sens — Q4 c'est intense. Qu'est-ce qui rend impossible de commencer maintenant en parallèle ?"
+   → Soit il a une vraie raison (bandwidth, freeze budget) → tu adresses.
+   → Soit il bafouille → c'est un report d'évitement.
+
+2. **Coût d'attendre**
+   → "Si on commence en janvier, premiers résultats en avril au mieux. Si on commence en novembre, premiers résultats en février — t'as un trimestre de plus dans l'année."
+   → Le maths sont parlants.
+
+3. **Bloquer un slot futur** (pour les vrais reports)
+   → "OK. Je te bloque le slot de janvier dès maintenant — sans facturation jusqu'au démarrage. Tu prends pas de risque, mais tu sécurises le créneau au tarif d'aujourd'hui."
+   → Les prix montent en janvier, c'est ta vérité. Le slot disparaît si tu attends.
+
+Règle : un "report" sans engagement = un non. Si tu acceptes l'attente, ancre un commitment.` },
+    variants: [],
+    keywords: ['Q4', 'attendre', 'report', 'fin année', 'timing'],
+  },
+  {
+    id: 'objection-b2b-not-priority-now',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "C\'est pas une priorité là"' },
+    context: { fr: '"Pas une priorité" = un non poli OU un vrai problème de timing. Diagnostique vite.' },
+    script: { fr: `Structure : ranking direct → coût d'opportunité → pivot ou close.
+
+1. **Ranking direct**
+   → "OK. Sur ta liste de priorités cette année, où ça tombe — top 3, milieu, bottom ?"
+   → Top 3 mais pas maintenant → vrai timing. Adresse.
+   → Milieu/bottom → c'est pas vraiment une objection de timing, c'est une objection de valeur perçue.
+
+2. **Coût d'opportunité** (s'il est honnête sur le ranking)
+   → "Si ça monte en top 3 dans 6 mois quand le problème explose, t'auras perdu 6 mois de momentum. Tu préfères payer maintenant ou rattraper plus tard ?"
+
+3. **Pivot ou close**
+   → S'il maintient "pas priorité" → "Compris. Quand est-ce que ça redevient prioritaire selon toi ? Je te recontacte à ce moment-là."
+   → Tu lèves la pression. Souvent il pivote vers la vraie objection.
+   → Si vraiment pas → ferme proprement, demande un referral.
+
+Règle Voss : ne te bats pas contre une priorité — tu perds. Reframe la conversation pour qu'il VEUILLE te prioriser.` },
+    variants: [],
+    keywords: ['priorité', 'pas maintenant', 'urgence', 'ranking', 'focus'],
+  },
+  {
+    id: 'objection-b2b-cheaper-elsewhere',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "Je peux trouver ça moins cher ailleurs"' },
+    context: { fr: 'Vrai si comparé à un commodity. Faux s\'il compare une pomme à une orange. Ton job = clarifier la comparaison.' },
+    script: { fr: `Structure : valider → forcer la comparaison item-par-item → laisser conclure.
+
+1. **Valider**
+   → "Probablement. Le marché a des prix très variés."
+   → Pas de défensive. Tu reconnais.
+
+2. **Forcer la comparaison item-par-item**
+   → "Pour qu'on compare juste : leur offre inclut [livrable A] ?"
+   → "Et le délai de livraison ?"
+   → "Combien de revisions sont incluses ?"
+   → "Quel est le SLA en cas de problème ?"
+   → Pose 4-5 questions précises. Il découvre lui-même les trous.
+
+3. **Laisser conclure**
+   → "Honnêtement, regarde les deux côte à côte. Si t'as les mêmes garanties chez l'autre à moitié prix, prends-les. Je t'en voudrai pas."
+   → Souvent il revient. Ton détachement = ton autorité.
+
+Règle : ne jamais critiquer un concurrent par son nom. Tu attaques le bon goût du prospect.` },
+    variants: [],
+    keywords: ['moins cher', 'concurrent', 'comparaison', 'prix bas', 'commodity'],
+  },
+  {
+    id: 'objection-b2b-do-it-internally',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "On fait ça à l\'interne"' },
+    context: { fr: 'Souvent une excuse. Parfois une vraie capacité. Distingue avant d\'argumenter.' },
+    script: { fr: `Structure : reconnaître → questionner la réalité → quantifier le coût caché.
+
+1. **Reconnaître**
+   → "Bien sûr. Beaucoup de boîtes le font."
+   → Pas de jugement. Tu valides son choix actuel.
+
+2. **Questionner la réalité**
+   → "Qui s'en occupe spécifiquement chez vous ?"
+   → "Combien d'heures/semaine ça lui prend ?"
+   → "C'est sa principale responsabilité ou un side-project ?"
+   → Souvent : c'est un side-project mal fait par quelqu'un qui devrait faire autre chose.
+
+3. **Quantifier le coût caché**
+   → "Si [Marie] passe 8h/semaine sur [tâche] au lieu de [son vrai job], ça vous coûte [salaire × 8h × 52]. Plus le coût de pas faire son vrai job. Mon mandat coûte [X] et libère ces heures."
+   → Tu reframes en problème de leverage, pas de coût.
+
+Règle : "fait à l'interne" sous-entend souvent "mal fait par quelqu'un qui n'a pas le temps". Tu vends du levier, pas une tâche.` },
+    variants: [],
+    keywords: ['interne', 'in-house', 'équipe', 'do-it-yourself', 'levier'],
+  },
+  {
+    id: 'objection-b2b-consult-accountant',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2b',
+    title: { fr: 'Objection "Je dois consulter mon comptable"' },
+    context: { fr: 'Légitime pour fiscal/juridique. Souvent un alibi pour éviter de décider seul.' },
+    script: { fr: `Structure : valider → identifier la vraie question → fournir les éléments.
+
+1. **Valider**
+   → "Logique. Une décision financière de cette taille mérite un avis fiscal."
+
+2. **Identifier la vraie question**
+   → "Sur quoi spécifiquement tu vas vouloir son input ? La déductibilité, l'amortissement, le cash flow ?"
+   → Sa réponse t'indique l'angle à clarifier.
+   → S'il bafouille → ce n'est pas une vraie question fiscale. C'est un alibi pour gagner du temps.
+
+3. **Fournir les éléments**
+   → "Je peux te préparer un mémo court avec : structure de paiement, traitement comptable suggéré, impact cash flow sur 12 mois. Ton comptable répond en 5 minutes."
+   → Tu retires la friction. Soit il consulte vraiment et revient, soit il s'engage sans.
+
+4. **Fixer le retour**
+   → "Quand peux-tu lui parler ? Je te recontacte juste après."
+   → Sans deadline, "consulter mon comptable" = silence éternel.` },
+    variants: [],
+    keywords: ['comptable', 'fiscal', 'consultation', 'avis', 'finances'],
+  },
+
+  // ─── B2C objections (15) ──────────────────────────────────────────────
+  {
+    id: 'objection-b2c-too-expensive-for-me',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "C\'est trop cher pour moi"' },
+    context: { fr: 'B2C = émotionnel. "Trop cher" est rarement le prix — c\'est la peur de regretter l\'achat.' },
+    script: { fr: `Structure : valider sans pitié → ancrer la valeur en cycle de vie → option de paiement.
+
+1. **Valider sans pitié**
+   → "Je comprends — c'est un investissement réel."
+   → Pas "mais regardez ce que vous obtenez". Juste valider.
+
+2. **Ancrer en cycle de vie**
+   → "Sur 12 mois, ça revient à [X$/mois]. Sur 24 mois, [Y$/mois]. Comparé à [chose comparable qu'il dépense déjà — Netflix, Starbucks, gym], ça représente quoi pour toi ?"
+   → Le cerveau humain compare mieux les petits chiffres que les gros.
+
+3. **Option de paiement**
+   → "On peut splitter en 3 paiements sans frais. La première facture est dans [délai]. Ça aide ?"
+   → Réduire la friction de cash flow > baisser le prix.
+
+Règle B2C : si le prix est vraiment hors budget, propose une version réduite. Mais ne baisse JAMAIS le prix de la version pleine — c'est le signal que ton prix de base est arbitraire.` },
+    variants: [],
+    keywords: ['trop cher', 'budget personnel', 'B2C', 'paiement', 'cycle de vie'],
+  },
+  {
+    id: 'objection-b2c-cant-afford',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "J\'ai pas les moyens là"' },
+    context: { fr: 'Différent de "trop cher" — c\'est une vraie contrainte de cash flow temporaire, pas une objection de valeur.' },
+    script: { fr: `Structure : valider → distinguer "jamais" vs "pas maintenant" → garder la porte ouverte.
+
+1. **Valider**
+   → "Honnête de le dire. Tout le monde ne peut pas tout, tout le temps."
+   → Pas de pitch. Pas d'option de paiement immédiate. Respect.
+
+2. **Distinguer "jamais" vs "pas maintenant"**
+   → "Si l'argent n'était pas un enjeu, est-ce que tu prendrais ça ?"
+   → S'il dit oui → c'est un timing, pas une objection de valeur. Va à étape 3.
+   → S'il dit non/incertain → c'est en fait une objection de valeur déguisée.
+
+3. **Garder la porte ouverte** (pour les vrais "pas maintenant")
+   → "Je note. Quand est-ce que ça pourrait redevenir possible — fin de mois, prochaine paye, après un événement ?"
+   → "Je te recontacte à ce moment-là, sans pression."
+
+Règle : un client qui te dit "j'ai pas les moyens" et que tu respectes devient souvent client 3-6 mois plus tard. Le harcèlement le brûle pour toujours.` },
+    variants: [],
+    keywords: ['pas les moyens', 'cash flow', 'temporaire', 'B2C', 'patience'],
+  },
+  {
+    id: 'objection-b2c-wait-for-sale',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "Je vais attendre les soldes"' },
+    context: { fr: 'Acheteur conditionné aux promos. Si tu négocies, tu confirmes que ton prix actuel est négociable.' },
+    script: { fr: `Structure : valider → coût d'attendre → option de timing.
+
+1. **Valider**
+   → "Logique. Les soldes existent pour ça."
+
+2. **Coût d'attendre**
+   → "Combien tu sauverais à attendre — 10$, 20% ?"
+   → "Et le coût de ne pas avoir [le bénéfice du produit] pendant les 2-3 mois d'attente ?"
+   → Force-le à comparer la vraie économie au vrai manque.
+
+3. **Option de timing** (si ton produit a vraiment un cycle de promo)
+   → "On a une promo qui s'en vient le [date précise, vérifiable]. Tu veux que je te texte quand ça lance ?"
+   → Si t'as pas de promo prévue → "Notre prix bouge pas. Si tu prends maintenant, tu utilises le produit X mois de plus que si tu attends."
+
+Règle B2C : ne jamais inventer une promo. Les acheteurs sentent le mensonge à 3 km.` },
+    variants: [],
+    keywords: ['soldes', 'promo', 'rabais', 'attendre', 'discount'],
+  },
+  {
+    id: 'objection-b2c-spouse-says-no',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "Mon chum/ma blonde dit non"' },
+    context: { fr: 'Décision de couple — souvent une vraie objection partagée, parfois un alibi.' },
+    script: { fr: `Structure : labeliser → comprendre l'objection du partenaire → équiper le client.
+
+1. **Labeliser sans juger**
+   → "Bien sûr — pour ce genre d'achat, vous décidez ensemble. Important."
+
+2. **Comprendre l'objection du partenaire**
+   → "Qu'est-ce qui inquiète [il/elle] spécifiquement — le prix, l'usage réel, le timing ?"
+   → S'il sait → tu vas équiper sa réponse.
+   → S'il sait pas → suggère qu'il pose la question avant de revenir vers toi.
+
+3. **Équiper le client pour la conversation**
+   → "Voici ce qui aide souvent à convaincre : [3 bullets concrets selon l'inquiétude nommée]."
+   → "Si vous voulez, je peux t'envoyer un court résumé que tu lui montres."
+
+4. **Fixer le retour** (sans pression)
+   → "Tu reviens vers moi après votre discussion ? Pas de stress sur le timing."
+
+Règle : la décision de couple est sacrée. Ne jamais essayer de contourner le partenaire — tu perds les deux.` },
+    variants: [],
+    keywords: ['conjoint', 'couple', 'partenaire', 'décision', 'famille'],
+  },
+  {
+    id: 'objection-b2c-not-sure-need-it',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "Je suis pas sûr que j\'en ai besoin"' },
+    context: { fr: 'Le prospect doute du fit. Soit il a raison (pas pour lui), soit tu as mal qualifié.' },
+    script: { fr: `Structure : valider → faire émerger le besoin caché → laisser-le décider.
+
+1. **Valider**
+   → "Honnête de le dire. Acheter quelque chose qu'on n'utilise pas, c'est la pire dépense."
+
+2. **Faire émerger le besoin caché**
+   → "Quand tu as commencé à regarder [solution dans cette catégorie], qu'est-ce qui t'a fait cliquer ?"
+   → Sa réponse révèle s'il y a un vrai pain point ou juste une curiosité.
+   → "Et qu'est-ce qui te fait douter maintenant — le prix, ou que ça résout vraiment ?"
+
+3. **Laisser-le décider** (pas de hard sell)
+   → "Si tu doutes vraiment, n'achète pas. Tu vas regretter et ça va te briser sur le produit."
+   → "Par contre, si tu reviens dans 2-3 semaines avec la conviction, le produit sera encore là."
+
+Règle B2C : un acheteur incertain qui achète devient un acheteur frustré qui demande un refund. Mieux vaut un non clair qu'un oui mou.` },
+    variants: [],
+    keywords: ['pas sûr', 'doute', 'besoin', 'fit', 'qualification'],
+  },
+  {
+    id: 'objection-b2c-cheaper-on-amazon',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "J\'ai vu la même chose moins cher sur Amazon"' },
+    context: { fr: 'Comparaison classique. "La même chose" est presque jamais la même chose — ton job = clarifier.' },
+    script: { fr: `Structure : valider → différencier sur ce qui n'est pas dans le prix → résoudre la friction.
+
+1. **Valider**
+   → "Amazon a souvent des prix très bas, c'est vrai."
+
+2. **Différencier sur ce qui n'est pas dans le prix**
+   → "Sur Amazon, c'est vendu par qui — la marque ou un revendeur ?"
+   → "Quelle garantie est offerte si ça brise dans 6 mois ?"
+   → "Service après-vente — combien de temps avant de parler à un humain ?"
+   → "Origine du stock — neuf certifié ou retourné ?"
+   → Pose 2-3 questions. Il découvre lui-même les trous.
+
+3. **Résoudre la friction**
+   → "Notre prix inclut [garantie 2 ans, support direct, échange sans frais]. Comparé à 30 minutes de hold avec le service Amazon, ça fait quoi pour toi ?"
+
+4. **Laisse-le partir si vraiment commodity**
+   → "Si tu cherches juste le moins cher et que ça te dérange pas le risque, vas-y. Je le dis sans amertume."
+   → Le détachement vend mieux que l'argument.` },
+    variants: [],
+    keywords: ['Amazon', 'moins cher', 'comparaison', 'commodity', 'garantie'],
+  },
+  {
+    id: 'objection-b2c-think-about-it',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "Je vais y penser"' },
+    context: { fr: 'B2C "y penser" = 90% un non poli. Le sortir vite ou avancer.' },
+    script: { fr: `Structure : inviter le non → mirror → fixer un point de retour.
+
+1. **Inviter le non**
+   → "C'est cool. Et c'est OK si après réflexion c'est non — t'as pas à me dire oui par politesse."
+   → Tu désamorces la pression. Souvent il s'ouvre.
+
+2. **Mirror**
+   → Lui : "Oui je veux juste prendre le temps."
+   → Toi : "Prendre le temps ?"
+   → Il développe — souvent la vraie hésitation sort.
+
+3. **Fixer un point de retour** (s'il maintient)
+   → "OK. Tu veux que je te recontacte dans une semaine, ou tu reviens vers moi quand t'es prêt ?"
+   → S'il choisit "je reviens vers toi" → c'est un non poli. Ferme le dossier mentalement.
+   → S'il accepte le rappel → c'est un vrai "à réfléchir".
+
+Règle : "Je vais y penser" sans deadline = silence éternel. Force une borne ou ferme le dossier.` },
+    variants: [],
+    keywords: ['y penser', 'réfléchir', 'B2C', 'hésiter', 'temps'],
+  },
+  {
+    id: 'objection-b2c-warranty',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "C\'est quoi votre garantie ?"' },
+    context: { fr: 'Question de garantie = signal d\'achat avec friction du risque. Bonne objection à entendre.' },
+    script: { fr: `Structure : répondre clairement → en faire un argument → fermer.
+
+1. **Répondre clairement** (pas de jargon)
+   → "Garantie [X jours/mois]. Si tu n'es pas satisfait pour n'importe quelle raison, on te rembourse — sans questionner."
+   → Si garantie limitée : "Garantie sur [défauts manufacture] pendant [durée]. Voici ce qui est couvert : [liste courte]."
+
+2. **En faire un argument**
+   → "On peut offrir cette garantie parce que 97% de nos clients gardent le produit. Si on perdait beaucoup, on n'oserait pas."
+   → Tu transformes la garantie en preuve sociale implicite.
+
+3. **Fermer**
+   → "Donc — la garantie te protège complètement. Qu'est-ce qui te freine encore ?"
+   → S'il reste hésitant → c'est pas la garantie, c'est autre chose. Diagnostique.
+
+Règle : si tu n'as PAS de garantie et que le client en demande une, c'est un signal d'alarme. Considère en ajouter une — ça augmente conversion 30%.` },
+    variants: [],
+    keywords: ['garantie', 'remboursement', 'sécurité', 'risque', 'satisfaction'],
+  },
+  {
+    id: 'objection-b2c-no-trust-online',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "J\'ai pas confiance d\'acheter en ligne"' },
+    context: { fr: 'Vraie crainte — il a peut-être été arnaqué avant. Tu paies pour les fraudeurs précédents.' },
+    script: { fr: `Structure : valider → preuves de légitimité concrètes → friction zéro.
+
+1. **Valider** (sans psychologiser)
+   → "Tellement de bullshit en ligne, je comprends."
+
+2. **Preuves de légitimité concrètes** (pas "trust me")
+   → "Voici notre numéro d'entreprise [registre]. Voici notre adresse physique [Google Maps cliquable]. Voici 5 reviews vérifiables sur [Google/Trustpilot]."
+   → Tangible bat éloquent.
+
+3. **Friction zéro pour son risque**
+   → "Tu peux payer par [PayPal / carte avec assurance / virement avec preuve]. Si le produit n'arrive pas ou ne correspond pas, tu disputes en 1 clic."
+   → "Garantie [X] jours satisfait ou remboursé."
+
+4. **Option escalation**
+   → "Si tu veux, je peux te donner mon numéro perso. Tu m'appelles avant de payer pour valider que c'est bien moi."
+   → Personnalise. La voix humaine bat le site web.
+
+Règle : la défiance en ligne n'est pas irrationnelle. Tu la combats avec des preuves vérifiables, pas des assurances verbales.` },
+    variants: [],
+    keywords: ['confiance', 'en ligne', 'arnaque', 'légitimité', 'preuve'],
+  },
+  {
+    id: 'objection-b2c-no-commitment',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "Je veux pas m\'engager"' },
+    context: { fr: 'Peur de l\'engagement = peur d\'être coincé si ça marche pas. Adresse l\'exit, pas l\'entrée.' },
+    script: { fr: `Structure : valider → sortie facile mise en avant → période d'essai.
+
+1. **Valider**
+   → "Personne aime se sentir coincé. Particulièrement avec un nouveau produit."
+
+2. **Sortie facile en avant**
+   → "Tu peux annuler en 1 clic, n'importe quand, sans pénalité. [Lien direct vers la page de cancellation visible]."
+   → "Pas de période minimum. Pas d'appel à un agent."
+   → Réduire la friction de sortie augmente la friction d'achat à zéro.
+
+3. **Période d'essai**
+   → "Premier mois à [tarif réduit ou gratuit]. Si tu n'utilises pas, t'arrêtes."
+   → Tu décharges 100% du risque sur toi.
+
+4. **Reframer "engagement"**
+   → "Le seul vrai engagement, c'est si tu décides de continuer. Le mois 1 c'est un test, pas un contrat."
+
+Règle B2C : 70% des "no commitment" se transforment en clients à long terme — quand l'exit est visible et facile, ils n'utilisent jamais l'exit.` },
+    variants: [],
+    keywords: ['engagement', 'contrat', 'sortie', 'flexibilité', 'essai'],
+  },
+  {
+    id: 'objection-b2c-for-later',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "C\'est pour plus tard"' },
+    context: { fr: 'Procrastination d\'achat. Sans urgence, "plus tard" devient jamais.' },
+    script: { fr: `Structure : valider → coût d'attendre concret → urgence légitime (si elle existe).
+
+1. **Valider sans pousser**
+   → "OK. Quand est-ce que ça devient maintenant pour toi ?"
+   → Force une vraie réponse.
+
+2. **Coût d'attendre concret**
+   → "Si tu utilises [produit] dès maintenant, dans 6 mois t'as 6 mois de bénéfice. Si tu commences dans 6 mois, dans 6 mois t'es au début."
+   → Reframer le temps comme l'asset le plus rare.
+
+3. **Urgence légitime** (si vraie)
+   → "Le prix monte le [date précise vérifiable]. Si tu prends maintenant, tu ancres le tarif d'aujourd'hui."
+   → Si pas de vraie urgence : ne pas en inventer.
+
+4. **Garder le contact** (sans relance lourde)
+   → "Si tu veux, je te renvoie un message dans [délai]. Pas avant. T'es pas obligé de répondre — c'est juste un check."
+
+Règle : ne jamais créer de fausse urgence. Le client le sent, et la confiance se brise.` },
+    variants: [],
+    keywords: ['plus tard', 'procrastination', 'urgence', 'B2C', 'timing'],
+  },
+  {
+    id: 'objection-b2c-talk-to-parents',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "Je vais en parler à mes parents"' },
+    context: { fr: 'Jeune adulte ou ado. Décision financière partagée — vraie autorité chez les parents souvent.' },
+    script: { fr: `Structure : valider la dynamique → équiper la conversation → fixer le retour.
+
+1. **Valider sans condescendance**
+   → "Ça fait du sens. Ils financent en partie ?"
+   → Direct mais pas jugeant.
+
+2. **Équiper la conversation**
+   → "Pour qu'ils disent oui plus facilement, voici ce qui marche d'habitude :
+       - Le bénéfice concret pour toi : [résultat]
+       - La structure de paiement : [option]
+       - Pourquoi c'est cohérent avec ce que tu construis : [angle long-terme]"
+   → "Veux que je te résume ça en 5 lignes que tu leur montres ?"
+
+3. **Fixer le retour**
+   → "Tu en parles quand — ce soir, week-end ?"
+   → "Je te recontacte juste après."
+   → Sans timing, le "j'en parle à mes parents" disparaît.
+
+4. **Si refus parental** (anticiper)
+   → "Si ils disent non, demande-leur pourquoi spécifiquement. Souvent c'est résolvable."
+
+Règle : ne jamais essayer de contourner les parents — tu perds l'enfant ET les parents, et ta réputation locale.` },
+    variants: [],
+    keywords: ['parents', 'jeune', 'famille', 'autorité', 'consultation'],
+  },
+  {
+    id: 'objection-b2c-tried-similar',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "J\'ai déjà essayé quelque chose de similaire"' },
+    context: { fr: 'Cicatrice d\'une déception passée. Tu paies pour l\'échec d\'un autre produit.' },
+    script: { fr: `Structure : valider → diagnostiquer la cause → différencier sur 1 point précis.
+
+1. **Valider l'expérience**
+   → "Ça arrive trop souvent — beaucoup de produits sur-promettent."
+
+2. **Diagnostiquer la cause**
+   → "Qu'est-ce qui n'a pas marché précisément — c'était le produit qui ne livrait pas, ou ça collait pas à ton style/usage ?"
+   → Sa réponse t'indique le vrai pain point.
+
+3. **Différencier sur 1 point précis** (pas 5)
+   → Si le produit ne livrait pas → "Le nôtre fait [X spécifique]. Voici une preuve : [résultat client similaire]."
+   → Si style/usage → "Le nôtre est conçu pour [son contexte spécifique]. Voici comment c'est différent."
+
+4. **Réduire le risque**
+   → "Si après [X jours] ça t'a pas convaincu, tu rembourse. Tu portes zéro risque cette fois-ci."
+
+Règle B2C : la déception passée crée une charge émotionnelle. Tu adresses l'émotion d'abord, le rationnel ensuite. Inverse l'ordre = tu perds.` },
+    variants: [],
+    keywords: ['déjà essayé', 'déception', 'précédent', 'similaire', 'B2C'],
+  },
+  {
+    id: 'objection-b2c-need-reviews',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "Vous avez des reviews ?"' },
+    context: { fr: 'Demande de preuve sociale. Si tu n\'en as pas, c\'est un problème de fond. Si tu en as, présente-les bien.' },
+    script: { fr: `Structure : répondre direct → cibler la review pertinente → option d'escalation.
+
+1. **Répondre direct** (pas évasif)
+   → "Oui. [X reviews] sur [plateforme vérifiable]. Voici le lien : [URL directe]."
+   → Si peu de reviews : "On a [N] reviews — on est jeunes. Voici nos premiers clients : [lien]. Ils sont vrais et joignables."
+
+2. **Cibler la review pertinente**
+   → "Quel genre de [usage / résultat / contexte] tu cherches ? Je te pointe directement la review qui matche."
+   → Évite le mur de 50 reviews. Une review pertinente = 10x plus convaincante.
+
+3. **Option d'escalation** (clients réticents)
+   → "Si les écrits suffisent pas, je peux te connecter à un client actuel. Tu lui parles 5 minutes, sans moi sur l'appel."
+   → Le téléphone bat le texte. C'est rare et c'est puissant.
+
+Règle : si tu n'as VRAIMENT aucune review crédible, fais 3 clients pilotes gratuits cette semaine pour les obtenir. Sans preuve sociale, le B2C ne décolle pas.` },
+    variants: [],
+    keywords: ['reviews', 'avis', 'preuve sociale', 'témoignages', 'crédibilité'],
+  },
+  {
+    id: 'objection-b2c-no-monthly-subscription',
+    agent: 'VOSS',
+    category: 'objection',
+    subType: 'b2c',
+    title: { fr: 'Objection "Je peux pas me permettre un abonnement mensuel"' },
+    context: { fr: 'Fatigue d\'abonnements. Le client résiste à AJOUTER un mensuel à sa pile actuelle.' },
+    script: { fr: `Structure : valider la fatigue → reframer en valeur unitaire → option lifetime ou pause.
+
+1. **Valider la fatigue**
+   → "Totalement compris. La fatigue d'abonnements est réelle — Netflix, Spotify, gym, gros total à fin de mois."
+
+2. **Reframer en valeur unitaire**
+   → "Notre tarif c'est [X$/mois]. Combien de fois par mois tu vas l'utiliser ?"
+   → Si réponse genre "10x" → "Ça fait [X/10]$ par usage. Comparé à [coût alternatif unique], ça vaut quoi pour toi ?"
+   → Le cerveau achète mieux par usage que par mois.
+
+3. **Option lifetime ou pause**
+   → "On a une formule one-time à [Y$]. Tu payes une fois, t'as accès à vie. Tu sors complètement de la logique d'abonnement."
+   → Si pas de lifetime : "Tu peux pause à tout moment — pas d'engagement minimum. Si t'utilises pas un mois, tu pause sans facturation."
+
+Règle : la fatigue d'abonnements est une vraie tendance. Si tu peux offrir un one-time, conversion +40% vs subscription pure.` },
+    variants: [],
+    keywords: ['abonnement', 'mensuel', 'subscription', 'fatigue', 'lifetime'],
   },
   {
     id: 'client-ghosting-after-demo',
@@ -1376,4 +2091,10 @@ export function filterByCategory(situations, categoryId) {
 export function filterByAgent(situations, agentKey) {
   if (!agentKey) return situations;
   return situations.filter((s) => s.agent === agentKey);
+}
+
+/** Filter by subType ('b2b' | 'b2c'). null = all. Items without subType pass through unfiltered. */
+export function filterBySubType(situations, subType) {
+  if (!subType) return situations;
+  return situations.filter((s) => s.subType === subType);
 }

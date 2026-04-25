@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Trophy, DollarSign, Tag, Sparkles, Trash2 } from 'lucide-react';
 import { VICTORY_CATEGORIES, getCategoryConfig, computeROI } from '../utils/victories.js';
 
@@ -19,7 +20,13 @@ export function VictoryModal({ darkMode, lang = 'fr', annualGoal = 50000, onClos
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // Lock body scroll while modal is open
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [onClose]);
 
   function handleSubmit() {
@@ -34,7 +41,9 @@ export function VictoryModal({ darkMode, lang = 'fr', annualGoal = 50000, onClos
     });
   }
 
-  return (
+  // Portal to document.body so ancestor `transform` (animate-screen-in /
+  // animate-panel-in) doesn't break `position: fixed`.
+  return createPortal((
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-modal-backdrop"
       style={{ background: 'rgba(3,7,18,0.75)', backdropFilter: 'blur(6px)' }}
@@ -196,7 +205,7 @@ export function VictoryModal({ darkMode, lang = 'fr', annualGoal = 50000, onClos
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }
 
 function Label({ children, darkMode, icon }) {

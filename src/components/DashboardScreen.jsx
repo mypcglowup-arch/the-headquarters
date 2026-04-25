@@ -983,7 +983,7 @@ export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr',
             onClick={() => chartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
           <MetricCard label={t('dash.bestMonth', lang)} value={bestMonth} prefix="$" color={c.green}
             sublabel={t('dash.allTimeRecord', lang)} c={c} delay={140} />
-          <MetricCard label={t('dash.projectedARR', lang)} value={totalMRR > 0 ? totalMRR * 12 : projected} prefix="$" color={c.amber}
+          <MetricCard label={t('dash.projectedARR', lang)} value={totalMRR * 12} prefix="$" color={c.amber}
             sublabel={t('dash.atCurrentPace', lang)} c={c} delay={210} />
         </div>
 
