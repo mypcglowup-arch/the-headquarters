@@ -69,8 +69,8 @@ export default function TrajectoryWidget({ retainers = [], prospects = [], follo
         </div>
         <p style={{ fontSize: 12, color: c.text2, margin: 0 }}>
           {lang === 'fr'
-            ? `Pas assez de données pour projeter. Il faut au moins 2 retainers actifs et ${500}$ de MRR.`
-            : `Not enough data to project. Need at least 2 active retainers and $500 MRR.`}
+            ? `Pas assez de données pour projeter. Ajoute au moins 1 retainer actif avec une valeur > 0$.`
+            : `Not enough data to project. Add at least 1 active retainer with value > $0.`}
         </p>
       </div>
     );

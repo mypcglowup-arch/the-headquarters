@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { Plus, Trash2, ArrowRight, RefreshCw, Zap, Check, X, ExternalLink } from 'lucide-react';
+import { Plus, Trash2, ArrowRight, RefreshCw, Zap, Check, X, ExternalLink, AlertTriangle, RotateCcw } from 'lucide-react';
+import Tooltip from './Tooltip.jsx';
 import { generateDashboardAction } from '../api.js';
 import GmailInbox from './GmailInbox.jsx';
 import MemoryViewer from './MemoryViewer.jsx';
@@ -758,7 +759,8 @@ function RetainerRow({ r, c, lang, onUpdate, onDelete, isNew }) {
       {/* Name */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <input value={r.name} onChange={(e) => onUpdate(r.id, 'name', e.target.value)}
-          placeholder={lang === 'fr' ? 'Nom du client' : 'Client name'}
+          placeholder={lang === 'fr' ? 'Cliquer pour nommer' : 'Click to name'}
+          className="retainer-name-input"
           style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: 13, fontWeight: 600, color: c.text0, width: '100%' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
           {wf && <span style={{ padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 600, background: wf.bg, color: wf.color }}>{wf.label}</span>}
@@ -771,9 +773,16 @@ function RetainerRow({ r, c, lang, onUpdate, onDelete, isNew }) {
         <option value="">— workflow</option>
         {Object.entries(WORKFLOW).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
       </select>
-      {/* Amount */}
-      <EditableNumber value={r.amount} onChange={(v) => onUpdate(r.id, 'amount', v)} prefix="$" suffix="/mo"
-        style={{ fontSize: 13, fontWeight: 800, color: c.green }} />
+      {/* Amount + warning if 0 */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <EditableNumber value={r.amount} onChange={(v) => onUpdate(r.id, 'amount', v)} prefix="$" suffix="/mo"
+          style={{ fontSize: 13, fontWeight: 800, color: (Number(r.amount) || 0) === 0 ? c.text2 : c.green }} />
+        {(Number(r.amount) || 0) === 0 && (
+          <Tooltip content={lang === 'fr' ? 'Valeur non définie' : 'Value not set'}>
+            <AlertTriangle size={13} style={{ color: '#f59e0b', cursor: 'help' }} />
+          </Tooltip>
+        )}
+      </div>
       {/* Delete */}
       <button onClick={() => setConfirming(true)}
         style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.text2, padding: 4, borderRadius: 6, transition: 'color 0.15s' }}
@@ -816,8 +825,13 @@ export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr',
 
   // Smart Insights
   const daysSinceClient = lsP?.lastSigned ? Math.floor((Date.now() - (lsP.lastSigned.signedAt||lsP.lastSigned.updatedAt||Date.now())) / 86400000) : null;
-  const nextMilestone   = Math.ceil((totalRevenue + 1) / 10000) * 10000;
-  const toMilestone     = nextMilestone - totalRevenue;
+  // Prochaine borne — based on the live MRR, not the YTD revenue.
+  // Logical MRR paliers : 500 → 1000 → 2500 → 5000 → 10000 → 25000 → 50000 → 100000.
+  // Above 100k, snap to next 25k bracket.
+  const MRR_PALIERS = [500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
+  const nextMilestone = MRR_PALIERS.find((p) => p > totalMRR)
+    ?? (Math.ceil((totalMRR + 1) / 25000) * 25000);
+  const toMilestone   = Math.max(0, nextMilestone - totalMRR);
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [selectedMonth,    setSelectedMonth]    = useState(() => new Date().getMonth());
@@ -886,7 +900,7 @@ export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr',
   function addRetainer() {
     const isFirst = retainers.length === 0;
     const id = Date.now();
-    onUpdate({ retainers: [...retainers, { id, name: t('dash.newClient', lang), amount: 0, startedAt: Date.now(), workflow: null }] });
+    onUpdate({ retainers: [...retainers, { id, name: '', amount: 0, startedAt: Date.now(), workflow: null }] });
     setNewRetId(id);
     setTimeout(() => setNewRetId(null), 600);
     if (isFirst) showToast('Premier client. Le Bouclier commence ce soir. 🛡', '#10B981', 3500);
@@ -1380,7 +1394,108 @@ export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr',
           <MemoryViewer c={c} lang={lang} />
         )}
 
+        {/* ── Reset test data — discreet, footer-aligned ── */}
+        <DashboardSettings data={data} onUpdate={onUpdate} c={c} lang={lang} showToast={showToast} />
+
       </div>
+    </div>
+  );
+}
+
+// ─── Dashboard settings — reset aberrant test data ──────────────────────────
+// Filters values > $100,000 from retainers, monthlyRevenue, oneTimeRevenues.
+// Real entries (under that threshold) are preserved. Confirms before action.
+const ABERRATION_THRESHOLD = 100_000;
+
+function DashboardSettings({ data, onUpdate, c, lang, showToast }) {
+  const [confirming, setConfirming] = useState(false);
+
+  function countAberrations() {
+    const ret = (data.retainers || []).filter((r) => Number(r.amount) > ABERRATION_THRESHOLD).length;
+    const mon = (data.monthlyRevenue || []).filter((m) => Number(m.revenue) > ABERRATION_THRESHOLD || Number(m.expenses) > ABERRATION_THRESHOLD).length;
+    const otr = (data.oneTimeRevenues || []).filter((o) => Number(o.amount) > ABERRATION_THRESHOLD).length;
+    return ret + mon + otr;
+  }
+
+  function handleReset() {
+    const cleanedRetainers = (data.retainers || []).filter((r) => Number(r.amount) <= ABERRATION_THRESHOLD);
+    const cleanedMonthly   = (data.monthlyRevenue || []).map((m) => ({
+      ...m,
+      revenue:  Number(m.revenue)  > ABERRATION_THRESHOLD ? 0 : (m.revenue  || 0),
+      expenses: Number(m.expenses) > ABERRATION_THRESHOLD ? 0 : (m.expenses || 0),
+    }));
+    const cleanedOneTime = (data.oneTimeRevenues || []).filter((o) => Number(o.amount) <= ABERRATION_THRESHOLD);
+
+    onUpdate({
+      retainers:        cleanedRetainers,
+      monthlyRevenue:   cleanedMonthly,
+      oneTimeRevenues:  cleanedOneTime,
+    });
+    showToast(
+      lang === 'fr' ? '✓ Données de test nettoyées' : '✓ Test data cleared',
+      c.green || '#10B981',
+      2400
+    );
+    setConfirming(false);
+  }
+
+  const aberrationCount = countAberrations();
+
+  if (confirming) {
+    return (
+      <div style={{
+        marginTop: 28, padding: '12px 14px', borderRadius: 10,
+        background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.32)',
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      }}>
+        <AlertTriangle size={14} style={{ color: '#f59e0b', flexShrink: 0 }} />
+        <span style={{ fontSize: 12, color: c.text1, flex: 1 }}>
+          {lang === 'fr'
+            ? `Supprimer ${aberrationCount} entrée${aberrationCount > 1 ? 's' : ''} avec valeurs > $100k ? Les vraies données restent intactes.`
+            : `Delete ${aberrationCount} entr${aberrationCount > 1 ? 'ies' : 'y'} with values > $100k? Real data stays intact.`}
+        </span>
+        <button onClick={() => setConfirming(false)}
+          style={{ padding: '5px 10px', borderRadius: 6, background: 'transparent', border: `1px solid ${c.border}`, color: c.text2, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+          {lang === 'fr' ? 'Annuler' : 'Cancel'}
+        </button>
+        <button onClick={handleReset}
+          style={{ padding: '5px 10px', borderRadius: 6, background: 'rgba(245,158,11,0.18)', border: '1px solid rgba(245,158,11,0.42)', color: '#f59e0b', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+          {lang === 'fr' ? 'Confirmer' : 'Confirm'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 28, display: 'flex', justifyContent: 'flex-end' }}>
+      <Tooltip content={lang === 'fr'
+        ? `Filtre les entrées avec valeur > 100 000$ (probablement des données de test). ${aberrationCount > 0 ? `${aberrationCount} candidat${aberrationCount > 1 ? 's' : ''} détecté${aberrationCount > 1 ? 's' : ''}.` : 'Aucune anomalie détectée.'}`
+        : `Filters entries with value > $100,000 (likely test data). ${aberrationCount > 0 ? `${aberrationCount} candidate${aberrationCount > 1 ? 's' : ''} detected.` : 'No anomalies detected.'}`}>
+        <button
+          onClick={() => setConfirming(true)}
+          disabled={aberrationCount === 0}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 10px', borderRadius: 6,
+            background: 'transparent', border: `1px solid ${c.border}`,
+            color: aberrationCount > 0 ? c.text2 : 'rgba(148,163,184,0.4)',
+            fontSize: 11, fontWeight: 600,
+            cursor: aberrationCount > 0 ? 'pointer' : 'not-allowed',
+            opacity: aberrationCount > 0 ? 1 : 0.5,
+            transition: 'color 0.15s, border-color 0.15s',
+          }}
+          onMouseEnter={(e) => { if (aberrationCount > 0) { e.currentTarget.style.color = '#f59e0b'; e.currentTarget.style.borderColor = 'rgba(245,158,11,0.42)'; } }}
+          onMouseLeave={(e) => { if (aberrationCount > 0) { e.currentTarget.style.color = c.text2; e.currentTarget.style.borderColor = c.border; } }}
+        >
+          <RotateCcw size={11} />
+          {lang === 'fr' ? 'Reset données de test' : 'Reset test data'}
+          {aberrationCount > 0 && (
+            <span style={{ marginLeft: 4, padding: '1px 5px', borderRadius: 8, background: 'rgba(245,158,11,0.18)', color: '#f59e0b', fontSize: 9, fontWeight: 800 }}>
+              {aberrationCount}
+            </span>
+          )}
+        </button>
+      </Tooltip>
     </div>
   );
 }

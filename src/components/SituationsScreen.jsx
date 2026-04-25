@@ -1,10 +1,11 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, X, Star, Copy, Check, MessageSquare, BookOpen } from 'lucide-react';
 import { SITUATIONS, SITUATION_CATEGORIES, searchSituations, filterByCategory, filterByAgent, filterBySubType } from '../data/situations.js';
 import { AGENT_CONFIG } from '../prompts.js';
 import AgentAvatar from './AgentAvatar.jsx';
 import Tooltip from './Tooltip.jsx';
+import { useFlipReorder } from '../hooks/useFlipReorder.js';
 
 const SUBTYPE_CONFIG = {
   b2b: { label: 'B2B', rgb: '59,130,246',  tooltip: { fr: 'Business to Business — vente entre entreprises', en: 'Business to Business — selling to companies' } },
@@ -12,6 +13,9 @@ const SUBTYPE_CONFIG = {
 };
 
 const AGENT_KEYS = ['HORMOZI', 'CARDONE', 'ROBBINS', 'GARYV', 'NAVAL', 'VOSS'];
+
+// Virtual category id used when "⭐ Favoris" tab is active (not in data).
+const FAV_CATEGORY = '__favorites__';
 
 export default function SituationsScreen({
   darkMode,
@@ -27,28 +31,66 @@ export default function SituationsScreen({
   const [agentKey, setAgentKey]     = useState(null);
   const [subType, setSubType]       = useState(null); // 'b2b' | 'b2c' | null — only used when categoryId === 'objection'
   const [selected, setSelected]     = useState(null); // full situation object
+  const [liftingId, setLiftingId]   = useState(null); // id of the card currently doing the 150ms "lift" pre-FLIP
+
+  const isFavoritesView = categoryId === FAV_CATEGORY;
+  const favoritesSet = useMemo(() => new Set(favorites), [favorites]);
 
   // Reset subType when leaving the objection category
   useEffect(() => {
     if (categoryId !== 'objection' && subType !== null) setSubType(null);
   }, [categoryId, subType]);
 
+  // Base filtered list — applies search/agent/subType but NOT category if it's the favorites virtual tab.
   const filtered = useMemo(() => {
     let list = SITUATIONS;
     list = searchSituations(list, query, lang);
-    list = filterByCategory(list, categoryId);
+    if (!isFavoritesView) list = filterByCategory(list, categoryId);
     list = filterByAgent(list, agentKey);
     if (categoryId === 'objection') list = filterBySubType(list, subType);
+    if (isFavoritesView) list = list.filter((s) => favoritesSet.has(s.id));
     return list;
-  }, [query, categoryId, agentKey, subType, lang]);
+  }, [query, categoryId, agentKey, subType, lang, isFavoritesView, favoritesSet]);
 
-  const favoriteObjects = useMemo(() => {
-    return favorites
-      .map((id) => SITUATIONS.find((s) => s.id === id))
-      .filter(Boolean);
-  }, [favorites]);
+  // Split into favorites vs others (for the "favoris-on-top" sections in regular views).
+  const { favItems, otherItems } = useMemo(() => {
+    if (isFavoritesView) return { favItems: [], otherItems: [] };
+    const fav = [], other = [];
+    for (const s of filtered) (favoritesSet.has(s.id) ? fav : other).push(s);
+    return { favItems: fav, otherItems: other };
+  }, [filtered, favoritesSet, isFavoritesView]);
 
-  const showFavorites = favoriteObjects.length > 0 && !query && !categoryId && !agentKey;
+  // For the global ⭐ Favoris view: group by their actual category (preserving SITUATION_CATEGORIES order)
+  const favoritesGrouped = useMemo(() => {
+    if (!isFavoritesView) return [];
+    const byCat = new Map();
+    for (const s of filtered) {
+      if (!byCat.has(s.category)) byCat.set(s.category, []);
+      byCat.get(s.category).push(s);
+    }
+    // Order: follow SITUATION_CATEGORIES order
+    return SITUATION_CATEGORIES
+      .map((cat) => ({ category: cat, items: byCat.get(cat.id) || [] }))
+      .filter((g) => g.items.length > 0);
+  }, [filtered, isFavoritesView]);
+
+  // FLIP keys — every card across all sections must be tracked by stable id.
+  // Recomputing this on filter/favorite changes triggers the layout animation.
+  const flipDeps = useMemo(
+    () => [filtered.map((s) => s.id).join('|'), favItems.map((s) => s.id).join('|'), isFavoritesView],
+    [filtered, favItems, isFavoritesView]
+  );
+  const { register: registerFlip } = useFlipReorder(flipDeps);
+
+  // Handle star click — first lift (150ms scale+shadow), then commit toggle.
+  // The toggle triggers the FLIP animation since the item moves between sections.
+  function handleToggleFavorite(situationId) {
+    setLiftingId(situationId);
+    setTimeout(() => {
+      setLiftingId(null);
+      onToggleFavorite?.(situationId);
+    }, 150);
+  }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden animate-screen-in"
@@ -94,8 +136,30 @@ export default function SituationsScreen({
 
         {/* Filter chips */}
         <div className="max-w-6xl mx-auto mb-6 space-y-2.5">
-          {/* Category chips */}
+          {/* Category chips — ⭐ Favoris is the first virtual category */}
           <div className="flex flex-wrap gap-1.5">
+            <FilterChip
+              active={isFavoritesView}
+              onClick={() => setCategoryId(FAV_CATEGORY)}
+              darkMode={darkMode}
+              accentRgb="245,158,11"
+            >
+              <span className="inline-flex items-center gap-1">
+                <Star size={11} fill={isFavoritesView ? '#f59e0b' : 'transparent'} color={isFavoritesView ? '#f59e0b' : 'currentColor'} strokeWidth={2.25} />
+                <span>{lang === 'fr' ? 'Favoris' : 'Favorites'}</span>
+                {favorites.length > 0 && (
+                  <span
+                    className="ml-0.5 px-1 rounded text-[9px] font-bold"
+                    style={{
+                      background: isFavoritesView ? 'rgba(245,158,11,0.20)' : (darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)'),
+                      color: isFavoritesView ? 'rgba(245,158,11,1)' : 'inherit',
+                    }}
+                  >
+                    {favorites.length}
+                  </span>
+                )}
+              </span>
+            </FilterChip>
             <FilterChip active={!categoryId} onClick={() => setCategoryId(null)} darkMode={darkMode}>
               {lang === 'fr' ? 'Toutes catégories' : 'All categories'}
             </FilterChip>
@@ -154,60 +218,122 @@ export default function SituationsScreen({
           )}
         </div>
 
-        {/* Favorites strip */}
-        {showFavorites && (
-          <div className="max-w-6xl mx-auto mb-6">
-            <div className={`flex items-center gap-2 mb-2 text-[12px] font-semibold uppercase tracking-wider ${darkMode ? 'text-amber-400' : 'text-amber-600'}`}>
-              <Star size={12} fill="currentColor" /> {lang === 'fr' ? 'Tes favoris' : 'Your favorites'}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {favoriteObjects.map((s) => (
-                <SituationCard
-                  key={s.id}
-                  situation={s}
-                  darkMode={darkMode}
-                  lang={lang}
-                  isFavorite={true}
-                  onClick={() => setSelected(s)}
-                  onToggleFavorite={onToggleFavorite}
-                  agentNames={agentNames}
-                  agentPhotos={agentPhotos}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Results grid */}
+        {/* Results */}
         <div className="max-w-6xl mx-auto">
-          {filtered.length === 0 ? (
-            <div className={`text-center py-16 ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
-              <div className="text-[32px] mb-2">🔍</div>
-              <div className="text-[14px]">
-                {lang === 'fr' ? 'Aucune situation trouvée' : 'No situation found'}
+          {/* ── Global ⭐ Favoris view : grouped by their actual category ── */}
+          {isFavoritesView ? (
+            favoritesGrouped.length === 0 ? (
+              <div className={`text-center py-16 ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
+                <Star size={32} strokeWidth={1.5} className="mx-auto mb-2 opacity-50" />
+                <div className="text-[14px]">
+                  {lang === 'fr'
+                    ? 'Aucun favori — étoile une situation pour la retrouver ici.'
+                    : 'No favorite yet — star a situation to find it here.'}
+                </div>
               </div>
-            </div>
-          ) : (
-            <>
-              <div className={`text-[11px] uppercase tracking-wider mb-2 font-semibold ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
-                {lang === 'fr' ? `${filtered.length} situation${filtered.length > 1 ? 's' : ''}` : `${filtered.length} situation${filtered.length > 1 ? 's' : ''}`}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filtered.map((s) => (
-                  <SituationCard
-                    key={s.id}
-                    situation={s}
-                    darkMode={darkMode}
-                    lang={lang}
-                    isFavorite={favorites.includes(s.id)}
-                    onClick={() => setSelected(s)}
-                    onToggleFavorite={onToggleFavorite}
-                    agentNames={agentNames}
-                    agentPhotos={agentPhotos}
-                  />
+            ) : (
+              <>
+                {favoritesGrouped.map((g) => (
+                  <div key={g.category.id} className="mb-7">
+                    <SectionLabel darkMode={darkMode}>
+                      {g.category.label[lang] || g.category.label.fr}
+                      <span className={`ml-2 font-normal ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
+                        · {g.items.length}
+                      </span>
+                    </SectionLabel>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {g.items.map((s) => (
+                        <SituationCard
+                          key={s.id}
+                          situation={s}
+                          darkMode={darkMode}
+                          lang={lang}
+                          isFavorite={true}
+                          isLifting={liftingId === s.id}
+                          onClick={() => setSelected(s)}
+                          onToggleFavorite={handleToggleFavorite}
+                          agentNames={agentNames}
+                          agentPhotos={agentPhotos}
+                          flipRef={registerFlip(s.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
+              </>
+            )
+          ) : (
+            // ── Regular view : favoris en haut + dividers + reste ──
+            filtered.length === 0 ? (
+              <div className={`text-center py-16 ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
+                <div className="text-[32px] mb-2">🔍</div>
+                <div className="text-[14px]">
+                  {lang === 'fr' ? 'Aucune situation trouvée' : 'No situation found'}
+                </div>
               </div>
-            </>
+            ) : (
+              <>
+                {/* Favoris in this filtered view */}
+                {favItems.length > 0 && (
+                  <div className="mb-6">
+                    <SectionLabel darkMode={darkMode} amber>
+                      <Star size={11} fill="currentColor" strokeWidth={2.25} />
+                      {lang === 'fr' ? 'Favoris' : 'Favorites'}
+                      <span className={`ml-2 font-normal ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
+                        · {favItems.length}
+                      </span>
+                    </SectionLabel>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {favItems.map((s) => (
+                        <SituationCard
+                          key={s.id}
+                          situation={s}
+                          darkMode={darkMode}
+                          lang={lang}
+                          isFavorite={true}
+                          isLifting={liftingId === s.id}
+                          onClick={() => setSelected(s)}
+                          onToggleFavorite={handleToggleFavorite}
+                          agentNames={agentNames}
+                          agentPhotos={agentPhotos}
+                          flipRef={registerFlip(s.id)}
+                        />
+                      ))}
+                    </div>
+                    {/* Subtle divider before non-favorites */}
+                    {otherItems.length > 0 && (
+                      <div className={`mt-6 mb-4 h-px ${darkMode ? 'bg-white/[0.06]' : 'bg-slate-200'}`} />
+                    )}
+                  </div>
+                )}
+
+                {/* Other (non-favorited) items */}
+                {otherItems.length > 0 && (
+                  <>
+                    <div className={`text-[11px] uppercase tracking-wider mb-2 font-semibold ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
+                      {lang === 'fr' ? `${otherItems.length} situation${otherItems.length > 1 ? 's' : ''}` : `${otherItems.length} situation${otherItems.length > 1 ? 's' : ''}`}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {otherItems.map((s) => (
+                        <SituationCard
+                          key={s.id}
+                          situation={s}
+                          darkMode={darkMode}
+                          lang={lang}
+                          isFavorite={false}
+                          isLifting={liftingId === s.id}
+                          onClick={() => setSelected(s)}
+                          onToggleFavorite={handleToggleFavorite}
+                          agentNames={agentNames}
+                          agentPhotos={agentPhotos}
+                          flipRef={registerFlip(s.id)}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )
           )}
         </div>
       </div>
@@ -229,6 +355,21 @@ export default function SituationsScreen({
           agentPhotos={agentPhotos}
         />
       )}
+    </div>
+  );
+}
+
+// ── Section label ────────────────────────────────────────────────────────────
+function SectionLabel({ children, darkMode, amber = false }) {
+  return (
+    <div
+      className={`flex items-center gap-1.5 mb-2.5 text-[11px] font-semibold uppercase tracking-wider ${
+        amber
+          ? (darkMode ? 'text-amber-400' : 'text-amber-600')
+          : (darkMode ? 'text-gray-400' : 'text-slate-500')
+      }`}
+    >
+      {children}
     </div>
   );
 }
@@ -278,22 +419,34 @@ function SubTypeBadge({ subType, lang = 'fr' }) {
 }
 
 // ── Situation card ───────────────────────────────────────────────────────────
-function SituationCard({ situation, darkMode, lang, isFavorite, onClick, onToggleFavorite, agentPhotos, agentNames }) {
+function SituationCard({ situation, darkMode, lang, isFavorite, isLifting = false, onClick, onToggleFavorite, agentPhotos, agentNames, flipRef }) {
   const agentCfg = AGENT_CONFIG[situation.agent];
   const rgb = agentCfg?.glowRgb || '99,102,241';
   const categoryLabel = SITUATION_CATEGORIES.find((c) => c.id === situation.category)?.label[lang] || situation.category;
 
+  // Lift effect during the 150ms pre-FLIP window — slight scale + amber-tinted shadow.
+  const liftStyle = isLifting
+    ? {
+        transform: 'scale(1.02)',
+        boxShadow: '0 18px 40px -12px rgba(245,158,11,0.45), 0 0 0 1px rgba(245,158,11,0.55)',
+        transition: 'transform 150ms ease-out, box-shadow 150ms ease-out',
+        zIndex: 5,
+      }
+    : {};
+
   return (
     <button
+      ref={flipRef}
       onClick={onClick}
       className={`relative text-left rounded-xl p-4 border transition-all animate-card-in group`}
       style={{
         background: darkMode ? 'rgba(17,24,39,0.6)' : '#ffffff',
         borderColor: darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)',
         boxShadow: `0 0 0 0 rgba(${rgb}, 0)`,
+        ...liftStyle,
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 0 0 1px rgba(${rgb}, 0.28), 0 10px 30px -15px rgba(${rgb}, 0.35)`; }}
-      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = `0 0 0 0 rgba(${rgb}, 0)`; }}
+      onMouseEnter={(e) => { if (!isLifting) e.currentTarget.style.boxShadow = `0 0 0 1px rgba(${rgb}, 0.28), 0 10px 30px -15px rgba(${rgb}, 0.35)`; }}
+      onMouseLeave={(e) => { if (!isLifting) e.currentTarget.style.boxShadow = `0 0 0 0 rgba(${rgb}, 0)`; }}
     >
       {/* Favorite star — top right */}
       <button

@@ -9,6 +9,13 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* Retainer name placeholder — italic gray to signal "click to name" */
+  .retainer-name-input::placeholder {
+    font-style: italic;
+    color: rgba(148, 163, 184, 0.6);
+    font-weight: 500;
+  }
+
   html {
     /* Smooth scroll for anchor links & programmatic scrollIntoView */
     scroll-behavior: smooth;

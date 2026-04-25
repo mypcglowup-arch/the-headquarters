@@ -25,7 +25,7 @@ const THRESHOLDS = {
   maxGrowthRate:       0.05,  // < 5% / month = stagnating
   minOutreachPerWeek:  5,     // < 5 outreaches/week = low velocity
   minClosingRate:      0.10,  // < 10% = conversion problem
-  minRetainersToProject: 2,   // need ≥ 2 to compute meaningful newRate
+  minRetainersToProject: 1,   // need ≥ 1 active retainer with value > 0
   improvedUpliftMult:  2.4,   // 2x outreach × 1.2x closing = 2.4x new MRR
 };
 
@@ -83,13 +83,16 @@ export function computeForecast({
   const upliftDelta   = mrr90Improved - mrr90Current;
   const upliftPct     = mrr90Current > 0 ? (upliftDelta / mrr90Current) : 0;
 
-  // ─── Plateau detection ─────────────────────────────────────────
-  const hasEnoughData = currentMRR >= THRESHOLDS.minMRRForPlateau
-                     && activeRetainers.length >= THRESHOLDS.minRetainersToProject;
+  // ─── Trajectory display + plateau detection (separate gates) ───────────
+  // Show the widget as soon as there's at least 1 active retainer.
+  // Plateau alert needs more data (≥ 500 MRR floor) to be meaningful.
+  const hasEnoughData    = activeRetainers.length >= THRESHOLDS.minRetainersToProject
+                        && currentMRR > 0;
+  const enoughForPlateau = hasEnoughData && currentMRR >= THRESHOLDS.minMRRForPlateau;
   const isStagnating = growthRate < THRESHOLDS.maxGrowthRate;
   const lowOutreach  = avgOutreachPerWeek < THRESHOLDS.minOutreachPerWeek;
   const lowClosing   = closingRate < THRESHOLDS.minClosingRate;
-  const plateauDetected = hasEnoughData && isStagnating && (lowOutreach || lowClosing);
+  const plateauDetected = enoughForPlateau && isStagnating && (lowOutreach || lowClosing);
 
   // Friendly bottleneck label for the UI
   let bottleneck = null;
