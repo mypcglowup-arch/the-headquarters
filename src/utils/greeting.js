@@ -1,19 +1,24 @@
-export function getDayGreeting(name = 'Samuel', lang = 'fr') {
+export function getDayGreeting(name = '', lang = 'fr') {
   const h = new Date().getHours();
+  // Drop the personalized vocative if no name is set, so the line stays clean.
+  const personal = name && name.trim() ? `, ${name}` : '';
+  const personalQ = name && name.trim() ? `, ${name} ?` : ' ?';
   if (lang === 'fr') {
-    if (h < 5)  return `Encore debout, ${name} ? Les disciplinés bâtissent pendant que les autres dorment.`;
-    if (h < 12) return `Bonjour, ${name}. On construit quoi aujourd'hui ?`;
-    if (h < 14) return `Check du midi, ${name}. Reste focus.`;
-    if (h < 18) return `Bonne après-midi, ${name}. Toujours dans le game.`;
-    if (h < 21) return `Session du soir, ${name}. Le meilleur moment pour réfléchir.`;
-    return `Tu travailles tard, ${name} ? Les meilleurs entrepreneurs ne s'arrêtent jamais.`;
+    if (h < 5)  return `Encore debout${personalQ} Les disciplinés bâtissent pendant que les autres dorment.`;
+    if (h < 12) return `Bonjour${personal}. On construit quoi aujourd'hui ?`;
+    if (h < 14) return `Check du midi${personal}. Reste focus.`;
+    if (h < 18) return `Bonne après-midi${personal}. Toujours dans le game.`;
+    if (h < 21) return `Session du soir${personal}. Le meilleur moment pour réfléchir.`;
+    return `Tu travailles tard${personalQ} Les meilleurs entrepreneurs ne s'arrêtent jamais.`;
   }
-  if (h < 5)  return `Still up, ${name}? The disciplined build while others sleep.`;
-  if (h < 12) return `Good morning, ${name}. What are we building today?`;
-  if (h < 14) return `Midday check-in, ${name}. Stay sharp.`;
-  if (h < 18) return `Good afternoon, ${name}. Still in the game.`;
-  if (h < 21) return `Evening session, ${name}. Best time to think clearly.`;
-  return `Working late, ${name}? The best entrepreneurs never stop.`;
+  const personalEn = name && name.trim() ? `, ${name}` : '';
+  const personalEnQ = name && name.trim() ? `, ${name}?` : '?';
+  if (h < 5)  return `Still up${personalEnQ} The disciplined build while others sleep.`;
+  if (h < 12) return `Good morning${personalEn}. What are we building today?`;
+  if (h < 14) return `Midday check-in${personalEn}. Stay sharp.`;
+  if (h < 18) return `Good afternoon${personalEn}. Still in the game.`;
+  if (h < 21) return `Evening session${personalEn}. Best time to think clearly.`;
+  return `Working late${personalEnQ} The best entrepreneurs never stop.`;
 }
 
 export function formatLastSpoke(timestamp, lang = 'fr') {

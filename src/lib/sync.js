@@ -219,6 +219,47 @@ export async function fetchSituationFavorites() {
   }
 }
 
+// ─── User profile (single-row, upsert by id='samuel') ──────────────────────
+// `id='samuel'` is the technical partition key — see utils/userProfile.js.
+// The displayed name comes from the `name` column. The 'samuel' id is kept
+// stable across renames so existing rows don't get orphaned.
+export async function syncUserProfile(profile) {
+  if (!isSupabaseEnabled()) return;
+  try {
+    await supabase.from('user_profile').upsert({
+      id:          'samuel',
+      name:        profile?.name || null,
+      role:        profile?.role || null,
+      annual_goal: Number(profile?.annualGoal) || null,
+      updated_at:  new Date().toISOString(),
+    }, { onConflict: 'id' });
+  } catch (e) {
+    console.warn('[Sync] syncUserProfile failed:', e.message);
+  }
+}
+
+export async function fetchUserProfile() {
+  if (!isSupabaseEnabled()) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_profile')
+      .select('id, name, role, annual_goal, created_at')
+      .eq('id', 'samuel')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    return {
+      name:       data.name || '',
+      role:       data.role || '',
+      annualGoal: Number(data.annual_goal) || 50000,
+      createdAt:  data.created_at || null,
+    };
+  } catch (e) {
+    console.warn('[Sync] fetchUserProfile failed:', e.message);
+    return null;
+  }
+}
+
 // ─── Monday auto-session dedup ──────────────────────────────────────────────
 // Insert on first fire for a given Monday ISO date. PK on monday_date blocks
 // double-fire across devices (reload same day → existing row → insert skipped).
@@ -412,7 +453,7 @@ export async function fetchWeeklyRetainerChanges(sinceTs) {
 }
 
 // ─── Batch follow-up log ────────────────────────────────────────────────────
-// Append-only ledger of every follow-up email Samuel sends through QG. Useful
+// Append-only ledger of every follow-up email {name} sends through QG. Useful
 // to prevent double-relancing, build response-rate stats, and audit history.
 // Table schema provided in CHANGELOG.
 export async function syncFollowupLog(entry) {
@@ -455,7 +496,7 @@ export async function syncFocusSession(entry) {
 }
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
-// Append-only ledger. Samuel must create the `expenses` table manually — SQL in
+// Append-only ledger. {name} must create the `expenses` table manually — SQL in
 // CHANGELOG. Fire-and-forget: if the table doesn't exist, the warn is logged
 // and localStorage remains the source of truth.
 export async function syncExpense({ monthIdx, year, category, amount, label, isRecurring, sessionId }) {

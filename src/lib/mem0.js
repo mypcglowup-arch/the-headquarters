@@ -74,7 +74,7 @@ export async function searchMemories(userInput) {
   if (!lines) return null;
 
   console.log('[Mem0] injecting', items.length, 'memories into context.');
-  return `SAMUEL'S MEMORY (from past sessions — reference naturally if relevant):\n${lines}`;
+  return `{NAME}'S MEMORY (from past sessions — reference naturally if relevant):\n${lines}`;
 }
 
 // ─── CRUD for Memory Viewer UI ───────────────────────────────────────────────
@@ -145,7 +145,7 @@ export async function fetchMemoriesForRecap() {
   if (!isMem0Enabled()) return null;
 
   const results = await callProxy('search', {
-    query:   "Samuel's recent wins, blockers, decisions, and next moves for his business",
+    query:   "{name}'s recent wins, blockers, decisions, and next moves for his business",
     user_id: USER_ID,
     app_id:  APP_ID,
     limit:   8,
@@ -198,7 +198,7 @@ export async function addArchivistMemory(summary) {
 
   const facts = [];
   if (summary.consensusAction) {
-    facts.push(`Samuel's HQ aligned action: ${summary.consensusAction}`);
+    facts.push(`{name}'s HQ aligned action: ${summary.consensusAction}`);
   }
   if (summary.keyDecisions?.length) {
     summary.keyDecisions.forEach((d) => {

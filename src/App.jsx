@@ -11,7 +11,7 @@ import { updateStreak } from './utils/streak.js';
 import { logAppOpen, logSessionStart } from './utils/momentum.js';
 import { saveSession, formatHistoryContext, loadHistory } from './utils/sessionHistory.js';
 import { useAutoSave, mergeSaveStatus } from './hooks/useAutoSave.js';
-import { syncSession, syncDecisions, syncImprovementItem, syncImprovementStatus, syncFeedback, syncMomentum, syncAgentNames, syncExpense, syncOneTimeRevenue, syncRetainer, syncRetainerDelete, syncDashboardState, fetchDashboardState, syncFollowupLog, fetchWeeklyFollowups, fetchWeeklyOneTimeRevenues, fetchWeeklyRetainerChanges, syncDecisionOutcome, syncSituationFavorite, fetchSituationFavorites, syncVictory, syncVictoryDelete, fetchVictories } from './lib/sync.js';
+import { syncSession, syncDecisions, syncImprovementItem, syncImprovementStatus, syncFeedback, syncMomentum, syncAgentNames, syncExpense, syncOneTimeRevenue, syncRetainer, syncRetainerDelete, syncDashboardState, fetchDashboardState, syncFollowupLog, fetchWeeklyFollowups, fetchWeeklyOneTimeRevenues, fetchWeeklyRetainerChanges, syncDecisionOutcome, syncSituationFavorite, fetchSituationFavorites, syncVictory, syncVictoryDelete, fetchVictories, syncUserProfile, fetchUserProfile } from './lib/sync.js';
 import { searchMemories, addSessionMemory, addArchivistMemory, fetchMemoriesForRecap, isMem0Enabled } from './lib/mem0.js';
 import { getDayGreeting } from './utils/greeting.js';
 import {
@@ -41,6 +41,9 @@ import LibraryScreen from './components/LibraryScreen.jsx';
 import SituationsScreen from './components/SituationsScreen.jsx';
 import VictoriesScreen from './components/VictoriesScreen.jsx';
 import { loadVictories, saveVictoriesCache, computeROI, formatVictoriesContext } from './utils/victories.js';
+import OnboardingModal, { OnboardingNudge } from './components/OnboardingModal.jsx';
+import ProfileScreen from './components/ProfileScreen.jsx';
+import { loadUserProfile, saveUserProfile, hasOnboarded } from './utils/userProfile.js';
 import WorkflowBuilder from './components/WorkflowBuilder.jsx';
 import PulseScoreCard from './components/PulseScoreCard.jsx';
 import DailyCheckIn, { hasCheckedInToday } from './components/DailyCheckIn.jsx';
@@ -148,10 +151,10 @@ function formatDashboardContext(data) {
     topClientLines.push(`  - ${e.clientName || 'Unknown client'}: $${e.amount} one-time (${d})`);
   });
   const topClientsBlock = topClientLines.length > 0
-    ? `\nTOP CLIENTS (ranked by current monthly value — use this if Samuel asks about "my top-paying client" / "mon client le plus payant"):\n${topClientLines.join('\n')}`
+    ? `\nTOP CLIENTS (ranked by current monthly value — use this if {name} asks about "my top-paying client" / "mon client le plus payant"):\n${topClientLines.join('\n')}`
     : '';
 
-  return `SAMUEL'S CURRENT FINANCIAL DATA (read from his dashboard — reference these numbers naturally in advice):
+  return `{NAME}'S CURRENT FINANCIAL DATA (read from his dashboard — reference these numbers naturally in advice):
 MRR: $${totalMRR.toLocaleString()}
 YTD Revenue: $${totalRevenue.toLocaleString()}
 YTD Expenses: $${totalExpenses.toLocaleString()}
@@ -160,7 +163,7 @@ Monthly Revenue: ${revenueStr}
 Monthly Expenses: ${expenseStr}
 Prospect Pipeline: Contacted: ${pipeline.contacted || 0}, Replied: ${pipeline.replied || 0}, Demo: ${pipeline.demo || 0}, Signed: ${pipeline.signed || 0}
 Active Retainers: ${retainers.length} client(s) — ${retainerStr}, total MRR: $${totalMRR.toLocaleString()}
-Target: $${monthlyTarget.toLocaleString()}/month to hit $${annualGoal.toLocaleString()}/year goal${topClientsBlock}${totalRevenue === 0 ? '\nNOTE: All values are zero — Samuel is at the starting point. Calibrate advice for someone at day zero with no revenue yet.' : ''}`;
+Target: $${monthlyTarget.toLocaleString()}/month to hit $${annualGoal.toLocaleString()}/year goal${topClientsBlock}${totalRevenue === 0 ? '\nNOTE: All values are zero — {name} is at the starting point. Calibrate advice for someone at day zero with no revenue yet.' : ''}`;
 }
 
 function defaultDashboard() {
@@ -252,6 +255,11 @@ export default function App() {
   const [mondaySessionFiredIso, setMondaySessionFiredIso] = useState(() => loadLS(LS_MONDAY_SESSION, null));
   const [situationFavorites, setSituationFavorites] = useState(() => loadLS(LS_SITUATION_FAVS, []));
   const [victories, setVictories] = useState(() => loadVictories());
+  const [userProfile, setUserProfile] = useState(() => loadUserProfile());
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingNudgeDismissed, setOnboardingNudgeDismissed] = useState(() => {
+    try { return localStorage.getItem('qg_onboarding_nudge_dismissed_v1') === '1'; } catch { return false; }
+  });
   const [soundEnabled, setSoundEnabled] = useState(() => loadLS(LS_SOUND, true));
   const [voiceMode,    setVoiceMode]    = useState(() => loadLS(LS_VOICE, false) === true);
   const lastSpokenMsgIdRef = useRef(null);
@@ -312,7 +320,7 @@ export default function App() {
     activeAgent: null, threadDepth: 0, lastQuestion: null, topicLocked: false,
   });
   const { toasts, toast, dismiss: dismissToast } = useToast();
-  const greeting = getDayGreeting('Samuel', lang);
+  const greeting = getDayGreeting(userProfile?.name || (lang === 'fr' ? '' : ''), lang);
   const sessionIdRef = useRef(Date.now());
   const streamingMsgIdRef = useRef(null);
   const rafRef = useRef(null);
@@ -1568,8 +1576,8 @@ export default function App() {
       const winsCtx   = formatWinsContext(wins, lang);
       const pulseCtx = pulseScore ? formatPulseContext(pulseScore, lang) : null;
       const checkInCtx = checkInData ? (lang === 'fr'
-        ? `CHECK-IN MATINAL DE SAMUEL: Énergie ${checkInData.emoji} (${checkInData.energieScore}/10) · Priorité #1: "${checkInData.priority}"${checkInData.blocker ? ` · Blocage: "${checkInData.blocker}"` : ''}`
-        : `SAMUEL'S MORNING CHECK-IN: Energy ${checkInData.emoji} (${checkInData.energieScore}/10) · #1 Priority: "${checkInData.priority}"${checkInData.blocker ? ` · Blocker: "${checkInData.blocker}"` : ''}`) : null;
+        ? `CHECK-IN MATINAL DE {NAME}: Énergie ${checkInData.emoji} (${checkInData.energieScore}/10) · Priorité #1: "${checkInData.priority}"${checkInData.blocker ? ` · Blocage: "${checkInData.blocker}"` : ''}`
+        : `{NAME}'S MORNING CHECK-IN: Energy ${checkInData.emoji} (${checkInData.energieScore}/10) · #1 Priority: "${checkInData.priority}"${checkInData.blocker ? ` · Blocker: "${checkInData.blocker}"` : ''}`) : null;
       const emotionCtx = formatEmotionContext(lang);
 
       // ── Gmail context injection ───────────────────────────────────────────────
@@ -1601,7 +1609,7 @@ export default function App() {
       const combinedContext = [gmailCtxBlock, dateCtx, pulseCtx, checkInCtx, emotionCtx, winsCtx, victoriesCtx, financialContext, historyContext, memContext, calendarContext].filter(Boolean).join('\n\n') || null;
       // Meeting Room: maturity suffix tells agents how directive/reactive to be this session
       // Also inject the lead-agent's track record (past decisions + outcomes) so
-      // their advice is calibrated on what's actually worked for Samuel.
+      // their advice is calibrated on what's actually worked for {name}.
       const maturityCtx = getMaturityPhase(interactionCount);
       const trackRecordSuffix = activeFocus ? formatTrackRecord(decisions, activeFocus) : '';
       const combinedSuffix = [maturityCtx?.behaviorSuffix || '', trackRecordSuffix].filter(Boolean).join('\n\n');
@@ -2390,6 +2398,38 @@ export default function App() {
     })();
   }, []);
 
+  function saveUserProfileAll(newProfile) {
+    setUserProfile(newProfile);
+    saveUserProfile(newProfile);
+    syncUserProfile(newProfile);
+  }
+
+  function dismissOnboardingNudge() {
+    setOnboardingNudgeDismissed(true);
+    try { localStorage.setItem('qg_onboarding_nudge_dismissed_v1', '1'); } catch {}
+  }
+
+  // Cloud reconciliation for user profile — once on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const cloud = await fetchUserProfile();
+        if (!cloud) return;
+        // Merge: cloud wins on conflict (simple, since profile is small + low-friction)
+        setUserProfile((local) => {
+          const merged = {
+            name:       cloud.name       || local?.name       || '',
+            role:       cloud.role       || local?.role       || '',
+            annualGoal: cloud.annualGoal || local?.annualGoal || 50000,
+            createdAt:  cloud.createdAt  || local?.createdAt  || null,
+          };
+          saveUserProfile(merged);
+          return merged;
+        });
+      } catch { /* silent */ }
+    })();
+  }, []);
+
   function toggleSituationFavorite(situationId) {
     const already = situationFavorites.includes(situationId);
     const next = already
@@ -2457,6 +2497,7 @@ export default function App() {
         onGoLibrary={() => setScreen(screen === 'library' ? (sessionStarted ? 'chat' : 'home') : 'library')}
         onGoSituations={() => setScreen(screen === 'situations' ? (sessionStarted ? 'chat' : 'home') : 'situations')}
         onGoVictories={() => setScreen(screen === 'victories' ? (sessionStarted ? 'chat' : 'home') : 'victories')}
+        onGoProfile={() => setScreen(screen === 'profile' ? (sessionStarted ? 'chat' : 'home') : 'profile')}
         onGoWorkflow={() => setScreen(screen === 'workflow' ? (sessionStarted ? 'chat' : 'home') : 'workflow')}
         onGoEmail={() => { setUrgentEmailCount(0); setScreen(screen === 'dashboard' ? (sessionStarted ? 'chat' : 'home') : 'dashboard'); }}
         urgentEmailCount={urgentEmailCount}
@@ -2497,6 +2538,16 @@ export default function App() {
             hasGmailClientId={!!import.meta.env.VITE_GOOGLE_CLIENT_ID}
             wins={wins}
             agentDepth={agentDepth}
+            topBanner={
+              !hasOnboarded(userProfile) && !onboardingNudgeDismissed ? (
+                <OnboardingNudge
+                  darkMode={darkMode}
+                  lang={lang}
+                  onStart={() => setShowOnboarding(true)}
+                  onDismiss={dismissOnboardingNudge}
+                />
+              ) : null
+            }
           />
           </div>
         )}
@@ -2650,6 +2701,21 @@ export default function App() {
           </div>
         )}
 
+        {screen === 'profile' && (
+          <div className={`${sessionStarted ? 'absolute inset-0 z-20 animate-panel-in' : 'flex-1 animate-screen-in'} flex flex-col overflow-hidden ${darkMode ? 'bg-gray-950' : ''}`} style={!darkMode ? { background: '#F5F4F0' } : {}}>
+            {sessionStarted && <BackToChatBar darkMode={darkMode} onBack={() => setScreen('chat')} />}
+            <ProfileScreen
+              darkMode={darkMode}
+              lang={lang}
+              profile={userProfile}
+              dashboard={dashboard}
+              onSaveProfile={saveUserProfileAll}
+              onUpdateDashboardGoal={(goal) => updateDashboard({ annualGoal: goal })}
+              onReopenOnboarding={() => setShowOnboarding(true)}
+            />
+          </div>
+        )}
+
         {screen === 'workflow' && (
           <div className={`${sessionStarted ? 'absolute inset-0 z-20 animate-panel-in' : 'flex-1 animate-screen-in'} flex flex-col overflow-auto ${darkMode ? 'bg-gray-950' : ''}`} style={!darkMode ? { background: '#F5F4F0' } : {}}>
             {sessionStarted && <BackToChatBar darkMode={darkMode} onBack={() => setScreen('chat')} />}
@@ -2739,6 +2805,17 @@ export default function App() {
       {/* Toast notifications */}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <InstallPrompt darkMode={darkMode} lang={lang} />
+
+      {/* Onboarding modal — opens manually (never auto-blocks) */}
+      {showOnboarding && (
+        <OnboardingModal
+          darkMode={darkMode}
+          lang={lang}
+          initialProfile={userProfile}
+          onSave={(p) => { saveUserProfileAll(p); setShowOnboarding(false); toast(lang === 'fr' ? '✓ Profil enregistré' : '✓ Profile saved', { type: 'success', duration: 2400 }); }}
+          onClose={() => setShowOnboarding(false)}
+        />
+      )}
 
       {/* Tour Launcher — floating bottom-right button */}
       <TourLauncher onStart={() => setShowTour(true)} isActive={showTour} />

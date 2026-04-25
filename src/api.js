@@ -20,6 +20,7 @@ import {
   getRoleplayDebriefPrompt,
 } from './prompts.js';
 import { getMomentumStats, getCachedMirror, setCachedMirror } from './utils/momentum.js';
+import { personalize, getLiveUserContext } from './utils/userProfile.js';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 
@@ -86,6 +87,11 @@ async function callClaude(systemPrompt, messages, maxTokens = 600, deepMode = fa
   if (!apiKey || apiKey === 'sk-ant-your-key-here') {
     throw new Error('API key missing. Copy .env.example to .env and add your VITE_ANTHROPIC_API_KEY.');
   }
+
+  // Personalize {name}/{role}/{annualGoal} tokens with the live user profile.
+  // Replaces the legacy hardcoded "{name}" everywhere prompts are built.
+  const ctx = getLiveUserContext();
+  systemPrompt = personalize(systemPrompt, ctx);
 
   let apiMessages = injectAttachment(messages, attachment);
 
@@ -188,7 +194,7 @@ RETOURNE UNIQUEMENT du JSON valide, aucun texte autour, aucun markdown:
     "improvements": ["Heures d'ouverture manquantes","Peu de photos","Pas de réponse aux avis"],
     "notes": "Contexte bref: clientèle, années d'opération, spécialité.",
     "emailSubject": "Objet accrocheur 55 chars max",
-    "suggestedMessage": "Message de prospection en français 130-160 mots, naturel, personnalisé au commerce, signe Samuel — NT Solutions. Mentionne leur manque d'avis spécifiquement.",
+    "suggestedMessage": "Message de prospection en français 130-160 mots, naturel, personnalisé au commerce, signe {name} — NT Solutions. Mentionne leur manque d'avis spécifiquement.",
     "agentKey": "VOSS si score>=7 sinon CARDONE si score>=4 sinon HORMOZI"
   }]
 }
@@ -254,7 +260,7 @@ Règles strictes :
 4. Termine par UNE question sans friction
 5. Maximum 4 phrases. Pas de markdown. Pas de gras.
 6. Sonne comme un humain qui a recherché CE commerce à 23h.
-7. Signé : Samuel — NT Solutions
+7. Signé : {name} — NT Solutions
 
 Retourne UNIQUEMENT le texte du message.`,
     [{ role: 'user', content: `Écris le message maintenant pour ${businessName}, ${type}, ${city}. Service : Bouclier 5 Étoiles — automatise la collecte d'avis Google, 150$/mois.` }],
@@ -1174,6 +1180,9 @@ export async function callClaudeStream(systemPrompt, messages, maxTokens, deepMo
     throw new Error('API key missing. Copy .env.example to .env and add your VITE_ANTHROPIC_API_KEY.');
   }
 
+  // Personalize tokens with live user profile (same logic as callClaude)
+  systemPrompt = personalize(systemPrompt, getLiveUserContext());
+
   const apiMessages = injectAttachment(messages, attachment);
 
   const betas = ['prompt-caching-2024-07-31', 'web-search-2025-03-05'];
@@ -1445,7 +1454,7 @@ export async function extractPipelineAction(userInput, prospects, lang = 'fr') {
     currentStatus: p.status || 'Incomplet',
   }));
 
-  const system = `You identify pipeline status changes for Samuel's CRM. User speaks short, casual French/English. Reply with STRICT JSON only — no prose, no markdown.
+  const system = `You identify pipeline status changes for {name}'s CRM. User speaks short, casual French/English. Reply with STRICT JSON only — no prose, no markdown.
 
 Available prospects (id → business/name/city/current status):
 ${shortlist.map((p) => `  ${p.id} | ${p.business || p.name} | ${p.city} | ${p.currentStatus}`).join('\n')}
@@ -1529,7 +1538,7 @@ export async function extractDashboardUpdate(userInput, { retainers = [], knownN
     : '  (none)';
   const nameHints = knownNames.length > 0 ? knownNames.slice(0, 40).join(', ') : '(none)';
 
-  const system = `You extract FINANCIAL events from short user messages for Samuel's business dashboard. User speaks casual French/English. Reply with STRICT JSON only — no prose, no markdown.
+  const system = `You extract FINANCIAL events from short user messages for {name}'s business dashboard. User speaks casual French/English. Reply with STRICT JSON only — no prose, no markdown.
 
 Existing retainers (for matching a loss):
 ${retainerLines}
@@ -1641,14 +1650,14 @@ Output ONLY the JSON object.`;
 
 // ─── Decision outcome tracking ──────────────────────────────────────────────
 // After an agent responds, detect if their advice contains a concrete
-// actionable decision Samuel could execute on. If yes → returns the decision
+// actionable decision {name} could execute on. If yes → returns the decision
 // text (concise, imperative form). 30 days later, the app asks him how it
 // went — and that outcome flows back into the agent's context.
 export async function extractActionableDecision(agentResponse, lang = 'fr') {
   if (!agentResponse || typeof agentResponse !== 'string') return null;
   if (agentResponse.length < 80) return null; // too short to carry a real decision
 
-  const system = `You decide if an agent's message contains a CONCRETE ACTIONABLE DECISION that the user (Samuel) could execute on. Reply STRICT JSON only.
+  const system = `You decide if an agent's message contains a CONCRETE ACTIONABLE DECISION that the user ({name}) could execute on. Reply STRICT JSON only.
 
 Schema:
 {
@@ -1721,13 +1730,13 @@ export function formatTrackRecord(decisions, targetAgent) {
     return `  ${icon} ${dateStr}: "${d.decision}"${comment}`;
   }).join('\n');
 
-  return `YOUR TRACK RECORD WITH SAMUEL (your past advice + what actually happened — calibrate accordingly):
+  return `YOUR TRACK RECORD WITH {NAME} (your past advice + what actually happened — calibrate accordingly):
 ${lines}
 
 Rules for using this:
 - If a past recommendation led to ✗ (negative outcome), don't blindly repeat it — acknowledge what didn't work and adjust.
 - If ✓ patterns emerge, lean into what's been validated.
-- Never mention this track record directly to Samuel. Just let it shape your judgment silently.`;
+- Never mention this track record directly to {name}. Just let it shape your judgment silently.`;
 }
 
 // ─── Plateau brief — diagnostic + 3 corrective actions ──────────────────────
@@ -1749,9 +1758,9 @@ export async function generatePlateauBrief(forecast, lang = 'fr') {
     ? (lang === 'fr' ? 'taux de closing en dessous de 10%' : 'closing rate below 10%')
     : (lang === 'fr' ? 'croissance stagnante' : 'stalled growth');
 
-  const system = `You write a PLATEAU DIAGNOSTIC for Samuel (NT Solutions consultant). Tone = HORMOZI (numbers-first) meets NAVAL (systems thinking). Zero motivational talk. Reply STRICT JSON only.
+  const system = `You write a PLATEAU DIAGNOSTIC for {name} (NT Solutions consultant). Tone = HORMOZI (numbers-first) meets NAVAL (systems thinking). Zero motivational talk. Reply STRICT JSON only.
 
-Samuel's forecast (real numbers):
+{name}'s forecast (real numbers):
   Current MRR:         $${forecast.currentMRR}/mo
   Active retainers:    ${forecast.retainerCount}
   New retainers / mo:  ${forecast.newRetainersPerMonth}
@@ -1899,7 +1908,7 @@ export async function generateAnomalyAlert(anomaly, lang = 'fr') {
   const system = `${agentPrompt}
 
 ANOMALY CONTEXT (internal — you open the session by speaking to this directly):
-Samuel's numbers on ${ax.lens}:
+{name}'s numbers on ${ax.lens}:
   Previous week: ${anomaly.previous} ${ax.unit}
   This week:     ${anomaly.current} ${ax.unit}
   Drop:          -${dropPctRounded}%
@@ -2217,9 +2226,9 @@ export async function detectMeetingPatterns({
       }).join('\n')
     : '  (none)';
 
-  const system = `You scan Samuel's business context for NEGATIVE PATTERNS that warrant a senior colleague speaking up. Reply STRICT JSON only.
+  const system = `You scan {name}'s business context for NEGATIVE PATTERNS that warrant a senior colleague speaking up. Reply STRICT JSON only.
 
-Samuel's context (session ${sessionCount}):
+{name}'s context (session ${sessionCount}):
 
 Recent memories:
 ${memoryBlock}
@@ -2281,7 +2290,7 @@ Schema:
 }
 
 Severity guide:
-- "high"   = actively losing something right now (stale hot prospect, stale retainer, repeated block shutting Samuel down)
+- "high"   = actively losing something right now (stale hot prospect, stale retainer, repeated block shutting {name} down)
 - "medium" = concerning drift (avoidance, energy drop)
 - "low"    = mild background observation (long-term silence on non-urgent topic)
 
@@ -2336,7 +2345,7 @@ export async function generateAgentOpening({ agent, pattern, maturity, lang = 'f
   const system = `${agentPrompt}
 
 MEETING ROOM CONTEXT:
-You're opening a new session with Samuel. You haven't been asked — you're choosing to speak first because something you've been watching has crossed a line. Think of yourself as a senior colleague who walks into the office, sees Samuel at his desk, and decides it's time to say what's been on your mind. No one appointed you the "pattern detector". You just know this guy well enough to notice.
+You're opening a new session with {name}. You haven't been asked — you're choosing to speak first because something you've been watching has crossed a line. Think of yourself as a senior colleague who walks into the office, sees {name} at his desk, and decides it's time to say what's been on your mind. No one appointed you the "pattern detector". You just know this guy well enough to notice.
 
 What you've been watching (internal note — NEVER mention this directly):
   Pattern: ${pattern.type}
@@ -2391,7 +2400,7 @@ Output ONLY the message text. No quotes, no header, no JSON.`;
 }
 
 // ─── Memory pre-classifier — strict re-validation step ──────────────────────
-// Takes raw Mem0 entries and forces each one through Samuel's categorization
+// Takes raw Mem0 entries and forces each one through {name}'s categorization
 // rules (win / blocker / nextMove). Ambiguous → nextMove by default.
 // Returns an object with 3 buckets the briefing/recap can then cherry-pick from.
 //
@@ -2481,7 +2490,7 @@ Schema:
 export async function generateMemoryRecap({ memories = [], lastSession = null }, lang = 'fr') {
   if ((!memories || memories.length === 0) && !lastSession) return null;
 
-  // ── Step 1: Pre-classify every memory before display (Samuel's rules) ──
+  // ── Step 1: Pre-classify every memory before display ({name}'s rules) ──
   const { wins, blockers, nextMoves } = memories.length > 0
     ? await classifyMemories(memories, lang)
     : { wins: [], blockers: [], nextMoves: [] };
@@ -2500,9 +2509,9 @@ export async function generateMemoryRecap({ memories = [], lastSession = null },
       ].filter(Boolean).join('\n')
     : '  (none)';
 
-  const system = `You generate an ULTRA-SHORT session-start recap for Samuel. He runs NT Solutions (AI agency, Quebec) + PC Glow Up. Reply with STRICT JSON only.
+  const system = `You generate an ULTRA-SHORT session-start recap for {name}. He runs NT Solutions (AI agency, Quebec) + PC Glow Up. Reply with STRICT JSON only.
 
-Memories have ALREADY been classified by Samuel's strict rules. Pick ONE item per category (or leave empty). Do NOT re-classify. Do NOT move items between categories.
+Memories have ALREADY been classified by {name}'s strict rules. Pick ONE item per category (or leave empty). Do NOT re-classify. Do NOT move items between categories.
 
 VICTOIRES (completed accomplishments — use for lastWin):
 ${winsBlock}
@@ -2584,11 +2593,11 @@ export async function classifyEmailUrgency(email, lang = 'fr') {
   const snippet = String(email.snippet || '').slice(0, 500);
   const body    = String(email.body || '').slice(0, 800);
 
-  const system = `You classify a business email's URGENCY for Samuel (NT Solutions agency in Quebec). Reply with STRICT JSON only — no prose.
+  const system = `You classify a business email's URGENCY for {name} (NT Solutions agency in Quebec). Reply with STRICT JSON only — no prose.
 
 Schema:
 {
-  "isUrgent":   boolean,          // true only if action is expected from Samuel within 24-48h
+  "isUrgent":   boolean,          // true only if action is expected from {name} within 24-48h
   "category":   "prospect_reply" | "client_issue" | "invoice" | "opportunity" | "other",
   "oneLine":    string,            // ≤ 90 chars, ${lang === 'fr' ? 'EN FRANÇAIS' : 'IN ENGLISH'}, concise action-oriented summary (e.g. "Dubé Auto demande un devis pour lundi")
   "confidence": number             // 0 to 1
@@ -2599,7 +2608,7 @@ Urgency rules:
 - isUrgent=false for: FYI updates, "received" confirmations, long-term marketing conversations with no specific ask, general business inbound without deadline
 - A prospect simply saying "thanks for the info, we'll circle back" → NOT urgent
 - A client saying "we need this fixed by Friday" → URGENT
-- "oneLine" must extract the actual ASK, not rephrase the subject. What does Samuel need to do?
+- "oneLine" must extract the actual ASK, not rephrase the subject. What does {name} need to do?
 
 Output ONLY the JSON object.`;
 
@@ -2654,7 +2663,7 @@ export async function generateWorkflowPackage({ answers, template, pricing, lang
   // placeholder replacement; the LLM is forbidden from altering module types
   // / versions / flow order.
   const jsonSystem = `CONTEXT FRAME (unbreakable — do not deviate):
-Samuel runs NT Solutions, an AI automation agency. He is BUILDING this workflow FOR HIS CLIENT — he is NOT the end user. Every template value you fill (emails, prompts, SMS, invoice descriptions, etc.) must speak as if it belongs to the CLIENT's business, using the CLIENT's name, tone, and audience. Never write copy that assumes Samuel is the operator or the customer.
+{name} runs NT Solutions, an AI automation agency. He is BUILDING this workflow FOR HIS CLIENT — he is NOT the end user. Every template value you fill (emails, prompts, SMS, invoice descriptions, etc.) must speak as if it belongs to the CLIENT's business, using the CLIENT's name, tone, and audience. Never write copy that assumes {name} is the operator or the customer.
 
 TASK: fill {{PLACEHOLDERS}} in a Make.com scenario skeleton.
 
@@ -2663,11 +2672,11 @@ STRICT RULES:
 - Never remove or add modules.
 - For placeholders like {{CLIENT_NAME}} use the client's business name directly (from answers.clientName).
 - For {{SYSTEM_PROMPT}} / {{SYSTEM_EMAIL_X}} / {{WELCOME_EMAIL_BODY}} / {{SMS_CALLBACK_TEMPLATE}} / {{INVOICE_DESCRIPTION}} / {{SUBJECT_X}} write concrete French-Canadian (or English if lang=en) copy that the CLIENT'S business would actually send — the client's voice, talking to the client's own audience. Keep strings under 600 chars.
-- For placeholders that look like IDs (GBP_LOCATION_ID, SHEET_ID, NOTION_DB_ID, TWILIO_PHONE, APPROVAL_EMAIL, NOTIFY_EMAIL) leave them as the literal placeholder with REPLACE_ME_ prefix so Samuel knows to configure them with the client's real values during setup. Example: "REPLACE_ME_GBP_LOCATION_ID".
+- For placeholders that look like IDs (GBP_LOCATION_ID, SHEET_ID, NOTION_DB_ID, TWILIO_PHONE, APPROVAL_EMAIL, NOTIFY_EMAIL) leave them as the literal placeholder with REPLACE_ME_ prefix so {name} knows to configure them with the client's real values during setup. Example: "REPLACE_ME_GBP_LOCATION_ID".
 - Double-curly Make.com references like {{\`{{1.name}}\`}} MUST stay intact — those are Make's variable refs, not placeholders.
 - Return ONLY the raw JSON — no prose, no markdown, no \`\`\` fences.
 
-User answers (describe THE CLIENT, not Samuel):
+User answers (describe THE CLIENT, not {name}):
 ${answersStr}
 
 Skeleton to fill:
@@ -2693,11 +2702,11 @@ ${skeletonStr}`;
 
   // ── 2) Install guide (markdown) ─────────────────────────────────────────
   const guideSystem = `CONTEXT FRAME (unbreakable — do not deviate):
-You are writing an installation guide that Samuel (NT Solutions consultant) will follow himself to implement this workflow FOR HIS CLIENT "${answers.clientName}". The guide speaks TO Samuel the consultant. It references the CLIENT's tools/accounts, not Samuel's. Samuel is the operator doing the delivery.
+You are writing an installation guide that {name} (NT Solutions consultant) will follow himself to implement this workflow FOR HIS CLIENT "${answers.clientName}". The guide speaks TO {name} the consultant. It references the CLIENT's tools/accounts, not {name}'s. {name} is the operator doing the delivery.
 
 TASK: crystal-clear installation guide for the Make.com scenario.
 
-Output: MARKDOWN only. Language: ${lang === 'fr' ? 'FRANÇAIS (québécois simple, direct — tutoiement de Samuel)' : 'ENGLISH (US, direct, plain)'}.
+Output: MARKDOWN only. Language: ${lang === 'fr' ? 'FRANÇAIS (québécois simple, direct — tutoiement de {name})' : 'ENGLISH (US, direct, plain)'}.
 
 Structure (use these exact H2 headings):
 # Guide d'installation — ${template.name} (pour ${answers.clientName})
@@ -2719,7 +2728,7 @@ Industrie du client: ${answers.industry}
 Outils déjà utilisés par le client: ${toolsList}
 Volume chez le client: ${answers.volume}
 
-Keep it under 900 words. Be concrete, specific to the template. Everywhere you might be tempted to write "tu" referring to the end user, remember "tu" = Samuel the consultant. The client is "ton client" / "le client".`;
+Keep it under 900 words. Be concrete, specific to the template. Everywhere you might be tempted to write "tu" referring to the end user, remember "tu" = {name} the consultant. The client is "ton client" / "le client".`;
 
   const guidePromise = callClaude(
     guideSystem,
@@ -2734,23 +2743,23 @@ Keep it under 900 words. Be concrete, specific to the template. Everywhere you m
     : 'Pricing not computed.';
 
   const scriptSystem = `CONTEXT FRAME (unbreakable — do not deviate):
-Samuel (consultant NT Solutions, Québec) va utiliser ce script POUR PITCHER ce workflow à "${answers.clientName}" (un prospect / client externe). Samuel = le consultant qui vend. "${answers.clientName}" = le client qui achète. Tout le script parle AU CLIENT, dans la voix de Samuel qui s'adresse au client. Le "tu" du script = le client (pas Samuel).
+{name} (consultant NT Solutions, Québec) va utiliser ce script POUR PITCHER ce workflow à "${answers.clientName}" (un prospect / client externe). {name} = le consultant qui vend. "${answers.clientName}" = le client qui achète. Tout le script parle AU CLIENT, dans la voix de {name} qui s'adresse au client. Le "tu" du script = le client (pas {name}).
 
-TASK: Script de vente court et direct que Samuel lit/adapte au téléphone ou en meeting.
+TASK: Script de vente court et direct que {name} lit/adapte au téléphone ou en meeting.
 
 Language: ${lang === 'fr' ? 'FRANÇAIS québécois direct' : 'ENGLISH direct'}.
-Tone: Samuel's voice — direct, concret, orienté ROI. Pas de bullshit marketing. Tutoiement du client. Chiffré.
+Tone: {name}'s voice — direct, concret, orienté ROI. Pas de bullshit marketing. Tutoiement du client. Chiffré.
 
 Structure (markdown) :
 # Script de vente — ${answers.clientName}
 
-## Hook (2-3 phrases que Samuel dit AU client)
-Accroche spécifique à l'industrie du client (${answers.industry}). Samuel nomme le problème concret que le client vit au quotidien et que ce workflow résout.
+## Hook (2-3 phrases que {name} dit AU client)
+Accroche spécifique à l'industrie du client (${answers.industry}). {name} nomme le problème concret que le client vit au quotidien et que ce workflow résout.
 
-## Démo en une phrase (Samuel parle au client)
+## Démo en une phrase ({name} parle au client)
 "Concrètement [nom du client], ça fait X pour que TU (le client) gagnes Y par semaine."
 
-## Pricing proposé (Samuel annonce le prix au client)
+## Pricing proposé ({name} annonce le prix au client)
 Tier ${pricing?.tier || 'Pro'} — chiffres exacts :
 - **Setup** : $${pricing?.setupMin || 1500} - $${pricing?.setupMax || 3000}
 - **Retainer mensuel** : $${pricing?.retainerMin || 400} - $${pricing?.retainerMax || 800}/mo
@@ -2758,12 +2767,12 @@ Tier ${pricing?.tier || 'Pro'} — chiffres exacts :
 Justifie le prix en 2 phrases chiffrées (ROI client, temps économisé chez le client, etc.).
 
 ## Objection prévisible + réponse
-Anticipe la résistance #1 du client (ex : "on peut le faire nous-mêmes", "c'est trop cher", "on a pas le temps") et la réponse de Samuel en 2 phrases.
+Anticipe la résistance #1 du client (ex : "on peut le faire nous-mêmes", "c'est trop cher", "on a pas le temps") et la réponse de {name} en 2 phrases.
 
 ## Close
-La phrase exacte que Samuel dit pour proposer l'étape suivante (appel de 15 min, démo live, proposition écrite, etc.).
+La phrase exacte que {name} dit pour proposer l'étape suivante (appel de 15 min, démo live, proposition écrite, etc.).
 
-Contexte sur le client (pas sur Samuel) :
+Contexte sur le client (pas sur {name}) :
 Client: ${answers.clientName}
 Industrie du client: ${answers.industry}
 Outils actuels du client: ${toolsList}
@@ -2771,7 +2780,7 @@ Volume chez le client: ${answers.volume}
 Budget déclaré par le client: ${answers.budget}
 Pricing computed: ${pricingSummary}
 
-Keep it under 400 words. Samuel utilise ce script EN DIRECT au téléphone avec le client, pas une présentation PowerPoint. Écris comme Samuel parlerait au client.`;
+Keep it under 400 words. {name} utilise ce script EN DIRECT au téléphone avec le client, pas une présentation PowerPoint. Écris comme {name} parlerait au client.`;
 
   const scriptPromise = callClaude(
     scriptSystem,
@@ -2781,7 +2790,7 @@ Keep it under 400 words. Samuel utilise ce script EN DIRECT au téléphone avec 
   ).catch((e) => { console.warn('[Workflow] script error:', e.message); return null; });
 
   // ── 4) Problem summary (what pain this workflow fixes for the client) ──
-  const problemSystem = `CONTEXT FRAME (unbreakable): Samuel (consultant NT Solutions) is BUILDING this workflow FOR HIS CLIENT "${answers.clientName}". This document speaks ABOUT the client's pain, as if Samuel handed a diagnostic report to the client.
+  const problemSystem = `CONTEXT FRAME (unbreakable): {name} (consultant NT Solutions) is BUILDING this workflow FOR HIS CLIENT "${answers.clientName}". This document speaks ABOUT the client's pain, as if {name} handed a diagnostic report to the client.
 
 TASK: Write a CLIENT PROBLEM SUMMARY — a diagnostic of the pain this workflow solves.
 
@@ -2814,7 +2823,7 @@ Keep under 400 words. Zero bullshit marketing. Chiffré, concret, sobre.`;
   ).catch((e) => { console.warn('[Workflow] problem error:', e.message); return null; });
 
   // ── 5) Workflow explainer (what it does, in plain language for the client) ──
-  const explainerSystem = `CONTEXT FRAME (unbreakable): Samuel (consultant NT Solutions) is delivering this workflow TO HIS CLIENT "${answers.clientName}". This section explains what the workflow DOES in plain non-technical language — the client will read this to understand the system they're buying.
+  const explainerSystem = `CONTEXT FRAME (unbreakable): {name} (consultant NT Solutions) is delivering this workflow TO HIS CLIENT "${answers.clientName}". This section explains what the workflow DOES in plain non-technical language — the client will read this to understand the system they're buying.
 
 TASK: Write a WORKFLOW EXPLAINER.
 
@@ -2851,10 +2860,10 @@ Keep under 500 words. Zéro jargon (pas de "webhook", "API", "trigger" sauf si v
     1000, false, null, false, false, 'COORDINATOR', 'claude-sonnet-4-5'
   ).catch((e) => { console.warn('[Workflow] explainer error:', e.message); return null; });
 
-  // ── 6) FAQ / Objections (so Samuel has reactive answers in his pocket) ──
-  const faqSystem = `CONTEXT FRAME (unbreakable): Samuel (consultant NT Solutions) pitches ce workflow à "${answers.clientName}". Cette FAQ anticipe les objections que le client va poser et donne à Samuel des réponses prêtes.
+  // ── 6) FAQ / Objections (so {name} has reactive answers in his pocket) ──
+  const faqSystem = `CONTEXT FRAME (unbreakable): {name} (consultant NT Solutions) pitches ce workflow à "${answers.clientName}". Cette FAQ anticipe les objections que le client va poser et donne à {name} des réponses prêtes.
 
-TASK: Generate 5-6 realistic client objections with direct Samuel-voice answers.
+TASK: Generate 5-6 realistic client objections with direct {name}-voice answers.
 
 Output: MARKDOWN only. Language: ${lang === 'fr' ? 'FRANÇAIS québécois direct (tutoiement du client)' : 'ENGLISH direct (client addressed as "you")'}.
 
@@ -2862,7 +2871,7 @@ Structure:
 # FAQ — Objections anticipées
 
 ### Q: [objection typique en 1 phrase courte]
-**R:** Réponse de Samuel. 2-3 phrases max. Chiffrée si possible. Respectueuse mais ferme. Jamais défensive.
+**R:** Réponse de {name}. 2-3 phrases max. Chiffrée si possible. Respectueuse mais ferme. Jamais défensive.
 
 (répète pour 5-6 objections)
 
@@ -2919,7 +2928,7 @@ export async function generateMorningBriefing({
 } = {}) {
   // ── Step 1: Pre-classify memories before the briefing sees them ──
   // This guarantees the briefing's nextMoveLine never shows a "win" and
-  // vice-versa — every memory is re-validated against Samuel's rules.
+  // vice-versa — every memory is re-validated against {name}'s rules.
   const { wins, blockers, nextMoves } = memories.length > 0
     ? await classifyMemories(memories, lang)
     : { wins: [], blockers: [], nextMoves: [] };
@@ -2964,11 +2973,11 @@ export async function generateMorningBriefing({
     ? staleRetainers.slice(0, 5).map((r) => `  - ${r.name} ($${r.amount}/mo) — ${r.days ?? '?'}j sans activité`).join('\n')
     : '  (none)';
 
-  const system = `You generate a MORNING BRIEFING for Samuel (NT Solutions consultant, Quebec) at the start of a new session. He's past session 7 — you now know him. Reply with STRICT JSON only.
+  const system = `You generate a MORNING BRIEFING for {name} (NT Solutions consultant, Quebec) at the start of a new session. He's past session 7 — you now know him. Reply with STRICT JSON only.
 
 Sources (use verbatim facts only — NEVER invent):
 
-Memories have ALREADY been classified by Samuel's strict rules. Do NOT re-classify or move items between categories — they were pre-validated.
+Memories have ALREADY been classified by {name}'s strict rules. Do NOT re-classify or move items between categories — they were pre-validated.
 
 VICTOIRES (for context only — completed things, NOT for nextMoveLine):
 ${winsBlock}
@@ -3007,7 +3016,7 @@ CATEGORIZATION RULES (STRICT — apply before filling fields):
     NOT here: items from VICTOIRES (those are completed), items from BLOCAGES (those are stuck).
     NEVER re-categorize — the buckets above are authoritative.
 
-  emailsLine = SPECIFIC email that needs Samuel's response this morning. Name + ask.
+  emailsLine = SPECIFIC email that needs {name}'s response this morning. Name + ask.
     NOT: promotional, newsletters, generic Gmail chatter.
 
   calendarLine = Upcoming event with context. Name + when + any prep needed.
@@ -3086,7 +3095,7 @@ HARD RULES:
 }
 
 // ─── Monday auto-session opening ────────────────────────────────────────────
-// Builds the agent message that "starts the meeting" when Samuel opens the app
+// Builds the agent message that "starts the meeting" when {name} opens the app
 // Monday morning. The agent is picked by dominant signal in week data + memories.
 // Returns { agent, content, rationale, confidence } or null on failure.
 export async function generateMondayOpening({
@@ -3145,10 +3154,10 @@ export async function generateMondayOpening({
     ? staleRetainers.map((r) => `  - ${r.name} ($${r.amount}/mo) — ${r.days ?? '?'}j sans activité`).join('\n')
     : '  (none)';
 
-  const system = `You write the AGENT'S OPENING MESSAGE for Samuel's Monday morning auto-session. When Samuel opens the app, this is the first thing he sees — the meeting has ALREADY started, and an agent is talking first. Reply with STRICT JSON only.
+  const system = `You write the AGENT'S OPENING MESSAGE for {name}'s Monday morning auto-session. When {name} opens the app, this is the first thing he sees — the meeting has ALREADY started, and an agent is talking first. Reply with STRICT JSON only.
 
 CONTEXT FRAME (unbreakable):
-- Samuel is the user. He's a solo consultant at NT Solutions (Quebec).
+- {name} is the user. He's a solo consultant at NT Solutions (Quebec).
 - YOU are choosing which of the 6 agents opens the meeting based on the dominant signal in this week's data.
 - Tone: like a peer who's been watching the numbers all weekend and has something specific to say Monday 8am.
 - NEVER write pep talk. NEVER be generic. NEVER invent facts — only use what's in the sources below.
@@ -3156,9 +3165,9 @@ CONTEXT FRAME (unbreakable):
 AGENTS (pick exactly ONE as "agent"):
 - HORMOZI — offers, pricing, revenue, ROI. Pick if: revenue flat, pricing issue, offer weak, deals stalled on money.
 - CARDONE — sales, prospecting volume, follow-ups. Pick if: pipeline thin, follow-ups overdue, activity low.
-- ROBBINS — mindset, blocks, state. Pick if: emotional blockers dominate, Samuel seems stuck in his head.
+- ROBBINS — mindset, blocks, state. Pick if: emotional blockers dominate, {name} seems stuck in his head.
 - GARYV — content, brand, long game. Pick if: no content shipped in past week, visibility low.
-- NAVAL — systems, leverage, scalability. Pick if: all signals green or Samuel is grinding linearly.
+- NAVAL — systems, leverage, scalability. Pick if: all signals green or {name} is grinding linearly.
 - VOSS — negotiation, objections. Pick if: active deal needs scripting, negotiation point looming.
 
 SOURCES:
@@ -3186,7 +3195,7 @@ ${retainerBlock}
 TASK:
 1. Scan all sources. Identify the ONE dominant signal worth opening Monday on.
 2. Pick the agent whose domain matches that signal.
-3. Write that agent's opening message — reading to Samuel like the agent just walked in and started talking.
+3. Write that agent's opening message — reading to {name} like the agent just walked in and started talking.
 
 Message shape (the "content" field):
   - 3 short sections separated by blank lines:
@@ -3329,12 +3338,12 @@ export async function generateFollowupMessage(prospect, { daysSinceContact, lang
   };
   const tone = toneMap[status] || toneMap['Contacté'];
 
-  const system = `You write ONE follow-up email from Samuel (NT Solutions consultant) to a prospect who has gone silent. Output STRICT JSON only — no prose, no markdown fences.
+  const system = `You write ONE follow-up email from {name} (NT Solutions consultant) to a prospect who has gone silent. Output STRICT JSON only — no prose, no markdown fences.
 
 Schema:
 {
   "subject": string,   // ≤ 70 chars, concrete, NOT clickbait
-  "body":    string    // 70–140 words, plain text with \\n line breaks. Sign off: "Samuel"
+  "body":    string    // 70–140 words, plain text with \\n line breaks. Sign off: "{name}"
 }
 
 Context:
@@ -3354,8 +3363,8 @@ HARD RULES:
 - Start with a SPECIFIC reference: industry pain point, a signal from lastNote, or a past interaction.
 - Give ONE concrete ask (15 min call, reply to a single yes/no question, etc.) — not multiple options.
 - Never mention "relance" / "follow up" literally in the body — just BE the follow-up.
-- Never fake urgency ("last chance", "limited slots") — Samuel doesn't do that.
-- Sign off: "Samuel" (one line, no title, no signature block).
+- Never fake urgency ("last chance", "limited slots") — {name} doesn't do that.
+- Sign off: "{name}" (one line, no title, no signature block).
 - Output ONLY JSON.`;
 
   try {
@@ -3969,11 +3978,11 @@ export async function generateTopicLabel(exchangeText) {
 
 function getEmotionalSuffix(emotionalState) {
   const tones = {
-    frustrated: '\n\nEMOTIONAL CONTEXT: Samuel is frustrated right now. Acknowledge it briefly (1 sentence max), then get straight to practical solutions. Skip any pep talk.',
-    discouraged: '\n\nEMOTIONAL CONTEXT: Samuel is feeling discouraged. Open with genuine recognition of the difficulty, then rebuild momentum with specific, achievable next steps. Be direct and energizing.',
-    excited: '\n\nEMOTIONAL CONTEXT: Samuel is energized and excited. Match his energy. Amplify the momentum while adding sharp, tactical depth. Cut the caveats.',
-    urgent: '\n\nEMOTIONAL CONTEXT: Samuel needs this fast — time pressure is real. Lead immediately with the #1 most impactful action. Be ultra-concise.',
-    confused: '\n\nEMOTIONAL CONTEXT: Samuel is confused or overwhelmed. Simplify everything. Use clear structure (numbered steps or clear categories). Avoid jargon. Make the path obvious.',
+    frustrated: '\n\nEMOTIONAL CONTEXT: {name} is frustrated right now. Acknowledge it briefly (1 sentence max), then get straight to practical solutions. Skip any pep talk.',
+    discouraged: '\n\nEMOTIONAL CONTEXT: {name} is feeling discouraged. Open with genuine recognition of the difficulty, then rebuild momentum with specific, achievable next steps. Be direct and energizing.',
+    excited: '\n\nEMOTIONAL CONTEXT: {name} is energized and excited. Match his energy. Amplify the momentum while adding sharp, tactical depth. Cut the caveats.',
+    urgent: '\n\nEMOTIONAL CONTEXT: {name} needs this fast — time pressure is real. Lead immediately with the #1 most impactful action. Be ultra-concise.',
+    confused: '\n\nEMOTIONAL CONTEXT: {name} is confused or overwhelmed. Simplify everything. Use clear structure (numbered steps or clear categories). Avoid jargon. Make the path obvious.',
     neutral: '',
   };
   return tones[emotionalState] || '';

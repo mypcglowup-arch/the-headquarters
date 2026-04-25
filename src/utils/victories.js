@@ -39,7 +39,7 @@ export function saveVictoriesCache(victories) {
 /**
  * Compute ROI projection from a single monthly value.
  * @param {number} valueMonthly — recurring monthly amount in $ (0 = no $ impact)
- * @param {number} annualGoal — Samuel's yearly objective (default 50000)
+ * @param {number} annualGoal — {name}'s yearly objective (default 50000)
  * @returns {{ annual:number, goalPercent:number, mrrImpact:number }}
  */
 export function computeROI(valueMonthly, annualGoal = 50000) {
@@ -83,8 +83,8 @@ export function formatVictoriesContext(victories, lang = 'fr') {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 5);
   const header = lang === 'fr'
-    ? "VICTOIRES RÉCENTES DE SAMUEL (référence-les naturellement quand pertinent — preuves de momentum) :"
-    : "SAMUEL'S RECENT VICTORIES (reference these naturally when relevant — proof of momentum):";
+    ? "VICTOIRES RÉCENTES DE {NAME} (référence-les naturellement quand pertinent — preuves de momentum) :"
+    : "{NAME}'S RECENT VICTORIES (reference these naturally when relevant — proof of momentum):";
   const lines = recent.map((v) => {
     const cat = getCategoryConfig(v.category)?.label?.[lang] || v.category || '';
     const val = Number(v.value_monthly) > 0

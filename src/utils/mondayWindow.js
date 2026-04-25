@@ -4,8 +4,8 @@
  * Rules:
  *   - Window opens Monday 8:00 local.
  *   - Window closes Wednesday 8:00 local (48h rattrapage).
- *   - If Samuel opens before Monday 8am → wait.
- *   - If Samuel opens Tue/Wed → still fire (rattrapage) but tag it as the
+ *   - If {name} opens before Monday 8am → wait.
+ *   - If {name} opens Tue/Wed → still fire (rattrapage) but tag it as the
  *     previous Monday's session (so we don't double-fire if he opens both days).
  *   - Outside window (Wed 8am → Mon 8am) → null.
  */

@@ -516,7 +516,7 @@ export function t(key, lang = 'fr', vars = {}) {
   return str;
 }
 
-// Detect user's preferred language (FR default for Samuel)
+// Detect user's preferred language (FR default for {name})
 export function detectDefaultLang() {
   try {
     const saved = localStorage.getItem('qg_lang_v1');

@@ -30,8 +30,8 @@ export function formatWinsContext(wins, lang = 'fr') {
   if (!wins || wins.length === 0) return null;
   const recent = wins.slice(0, 5);
   const header = lang === 'fr'
-    ? 'VICTOIRES RÉCENTES DE SAMUEL (à référencer quand le momentum est bas):'
-    : "SAMUEL'S RECENT WINS (reference these when momentum is low):";
+    ? 'VICTOIRES RÉCENTES DE {NAME} (à référencer quand le momentum est bas):'
+    : "{NAME}'S RECENT WINS (reference these when momentum is low):";
   return header + '\n' + recent.map((w) => `- ${w.text}`).join('\n');
 }
 

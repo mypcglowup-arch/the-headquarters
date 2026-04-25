@@ -59,7 +59,7 @@ export function formatEmotionContext(lang = 'fr') {
 
   if (lang === 'fr') {
     const domLabel = stateDescFr[dominant] || dominant;
-    const lines = [`PATTERNS ÉMOTIONNELS DE SAMUEL (14 derniers jours, ${total} signaux détectés):`];
+    const lines = [`PATTERNS ÉMOTIONNELS DE {NAME} (14 derniers jours, ${total} signaux détectés):`];
     lines.push(`État dominant: **${dominant}** (${counts[dominant]}x) — ${domLabel}`);
     if (recent7 && recent7.dominant !== dominant) {
       lines.push(`Cette semaine, tendance plus vers: ${stateDescFr[recent7.dominant] || recent7.dominant}`);
@@ -73,7 +73,7 @@ export function formatEmotionContext(lang = 'fr') {
     return lines.join('\n');
   } else {
     const domLabel = stateDescEn[dominant] || dominant;
-    const lines = [`SAMUEL'S EMOTIONAL PATTERNS (last 14 days, ${total} signals detected):`];
+    const lines = [`{NAME}'S EMOTIONAL PATTERNS (last 14 days, ${total} signals detected):`];
     lines.push(`Dominant state: **${dominant}** (${counts[dominant]}x) — ${domLabel}`);
     if (recent7 && recent7.dominant !== dominant) {
       lines.push(`This week trending toward: ${stateDescEn[recent7.dominant] || recent7.dominant}`);

@@ -2,6 +2,110 @@
 
 ## [Unreleased]
 
+### Added — Sweep dynamique du nom utilisateur + onboarding 3 questions + ProfileScreen
+Toutes les références hardcodées "Samuel" / "SAMUEL" (143 instances réparties sur 15 fichiers) sont remplacées par des tokens dynamiques `{name}` / `{NAME}` substitués au runtime via `personalize()` à l'entrée des appels Claude. Le nom affiché est piloté par `userProfile` qui est rempli via une modal d'onboarding 3 questions, jamais bloquante (nudge banner skippable sur Home).
+
+### Architecture
+```
+utils/userProfile.js
+  ├─ loadUserProfile()  → lit qg_user_profile_v1 (fallback DEFAULT_PROFILE)
+  ├─ saveUserProfile()  → écrit en localStorage
+  ├─ hasOnboarded(p)    → bool, true si name non-vide
+  ├─ getDisplayName()   → 'Marc' ou 'l\'utilisateur' (fallback poli)
+  ├─ buildUserContext() → { name, role, annualGoal } pour personalize
+  ├─ personalize(s, ctx)→ remplace {name}, {NAME}, {role}, {annualGoal}
+  └─ getLiveUserContext() → lit LS sans avoir besoin de le passer
+
+api.js (entry-point interception)
+  ├─ callClaude()       : systemPrompt = personalize(systemPrompt, getLiveUserContext())
+  └─ callClaudeStream() : pareil
+  → tous les prompts (AGENT_PROMPTS, COORDINATOR, ARCHIVIST, briefing, etc.)
+    sont substitués au moment de l'envoi à Anthropic — aucun changement au
+    code des prompts ailleurs nécessaire.
+```
+
+### Sweep complet (par fichier)
+| Fichier | Avant | Après | Méthode |
+|---|---|---|---|
+| `prompts.js` | 46 | 0 | Token `{name}` |
+| `api.js` | 75 (Samuel + SAMUEL) | 0 | Token `{name}` / `{NAME}` |
+| `App.jsx` | 7 | 0 | Token + `userProfile.name` direct |
+| `lib/mem0.js` | 3 (1 prompt + 2 USER_ID) | 1 (USER_ID = 'samuel' technique) | Token sur prompts, garde USER_ID |
+| `lib/sync.js` | 5 (3 commentaires + 2 IDs) | 4 IDs techniques | Garde 'samuel' comme partition |
+| `utils/meetingRoom.js` | 4 | 0 | Token `{name}` |
+| `utils/pulseScore.js` | 4 | 0 | Token `{name}` / `{NAME}` |
+| `utils/mondayWindow.js` | 2 | 0 | Token (commentaires) |
+| `utils/weekSummary.js` | 1 | 0 | Token (commentaire) |
+| `utils/victories.js` | 3 | 0 | Token `{name}` / `{NAME}` |
+| `utils/wins.js` | 2 | 0 | Token `{NAME}` |
+| `utils/sessionHistory.js` | 1 | 0 | Token `{NAME}` |
+| `utils/gcal.js` | 1 | 0 | Token `{NAME}` |
+| `utils/emotionLog.js` | 2 | 0 | Token `{NAME}` |
+| `utils/voice.js` | 2 | 0 | Function dynamique `whisperPromptHint(lang)` qui injecte userName depuis localStorage |
+| `utils/greeting.js` | 1 (default 'Samuel') | 0 | Default empty string + vocative dropped si vide |
+| `utils/exportPdf.js` | 1 | 0 | Helper `getConsultantFooterLine()` lit userProfile |
+| `utils/workflowPdf.js` | 9 | 0 | Helper `getConsultantName()` + variables `consultantLine` / `consultantRef` |
+| `i18n.js` | 1 (commentaire) | 0 | Token (commentaire) |
+
+**Total** : 143 → 5 (uniquement les 'samuel' techniques en USER_ID Mem0 + partition Supabase)
+
+### Décisions techniques
+- **Mem0 USER_ID = 'samuel'** : conservé comme clé technique de partition. Renommer perdrait toute la mémoire long-terme. Documenté dans `userProfile.js` et `mem0.js`.
+- **Dashboard / Profile / Decisions tables Supabase** : `id='samuel'` reste comme PK technique single-user. Multi-user nécessitera une migration séparée.
+- **`{NAME}` uppercase token** : pour les sections style "SAMUEL'S MEMORY:" qui apparaissaient en majuscules dans les prompts. `personalize()` génère `name.toUpperCase()` en remplacement.
+- **NT Solutions garde son nom** : c'est le nom de la company (séparé de la person). Le PDF affiche maintenant `${userName} | NT Solutions` avec fallback `NT Solutions` si pas de userName.
+
+### Onboarding (3 questions)
+**Modal jamais bloquante** — appelée :
+- (a) clic sur le nudge banner sur Home (apparaît si `!hasOnboarded(profile) && !nudgeDismissed`)
+- (b) clic sur "Refaire l'onboarding" dans ProfileScreen
+- (c) jamais en auto-fire au premier mount
+
+3 étapes avec progression dots :
+1. **Prénom** (required) — utilisé partout
+2. **Rôle / Focus principal** (optional) — ex: "Consultant solo", "Founder SaaS"
+3. **Objectif annuel ($)** (optional, default 50000) — sync avec dashboard.annualGoal
+
+### Profile screen
+Nav button User dans Header. Édition des 3 champs avec auto-sync du goal vers dashboard. Bouton "Refaire l'onboarding" qui réouvre la modal. Tech note : "changer le prénom préserve tout l'historique mémoire".
+
+### Persistance
+- `localStorage['qg_user_profile_v1']` — source de vérité locale
+- `localStorage['qg_onboarding_nudge_dismissed_v1']` — flag '1' si nudge banner dismissed (fait disparaître le nudge même sans onboarding complet)
+- Table Supabase `user_profile` (PK `id='samuel'`) — sync fire-and-forget + reconciliation cloud au mount
+
+### SQL migration Supabase
+```sql
+create table if not exists public.user_profile (
+  id           text primary key,
+  name         text,
+  role         text,
+  annual_goal  numeric,
+  created_at   timestamptz default now(),
+  updated_at   timestamptz default now()
+);
+
+alter table public.user_profile enable row level security;
+create policy "user_profile_all" on public.user_profile for all using (true) with check (true);
+```
+
+### Fichiers créés
+- `src/utils/userProfile.js` — data layer + `personalize()` helper
+- `src/components/OnboardingModal.jsx` — modal 3-step + `<OnboardingNudge>` banner
+- `src/components/ProfileScreen.jsx` — édition des champs
+
+### Fichiers modifiés (sweep automatique via Node script + edits manuels)
+Tous listés dans le tableau ci-dessus + `App.jsx` (state, handlers, cloud reconciliation, render case, prop wiring, nudge mounting), `Header.jsx` (User icon, prop `onGoProfile`), `HomeScreen.jsx` (prop `topBanner` slot).
+
+### Comportement utilisateur
+- Premier load : nudge banner indigo en haut de Home — "Personnalise ton expérience · 3 questions rapides"
+- Clic "Commencer" → modal 3 questions
+- Clic X ou "Plus tard" → nudge dismissed (LS flag), réapparaît jamais sauf si tu reset le flag manuellement
+- Si pas de name défini : les agents reçoivent `"l'utilisateur"` (FR) / `"the user"` (EN) comme fallback poli — ils restent fonctionnels mais moins personnalisés
+- Une fois name défini : tous les agents disent ton prénom, tous les PDFs affichent ton nom + NT Solutions, le greeting Home utilise ton prénom
+
+---
+
 ### Changed — Bibliothèque : refonte complète des Objections (3 → 30) avec distinction B2B/B2C
 La catégorie Objections est passée de 3 à **30 scénarios** structurés en deux sous-types : **B2B (15)** et **B2C (15)**. Tous assignés à VOSS (négociation est sa spécialité). Nouveau champ `subType` au data model + UI subtoggle B2B/B2C qui apparaît uniquement quand la catégorie Objection est active. Badges colorés (B2B blue · B2C emerald) avec tooltip explicatif sur chaque card et dans le modal détail.
 

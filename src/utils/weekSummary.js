@@ -40,7 +40,7 @@ export function getPastWeekDecisions(now = Date.now()) {
 /**
  * Session-level signals from the past 7 days.
  * Blockers are inferred from improvements that are still 'todo' / 'in-progress'
- * — those are the things Samuel decided to address but hasn't closed yet.
+ * — those are the things {name} decided to address but hasn't closed yet.
  */
 export function getPastWeekSessions(now = Date.now()) {
   const cutoff = now - SEVEN_DAYS_MS;

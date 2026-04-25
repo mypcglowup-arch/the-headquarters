@@ -1,5 +1,19 @@
 import { jsPDF } from 'jspdf';
 
+// PDF footer line — pulls the consultant's display name from userProfile,
+// falls back to "NT Solutions" alone if no name set.
+function getConsultantFooterLine() {
+  try {
+    const raw = localStorage.getItem('qg_user_profile_v1');
+    if (raw) {
+      const p = JSON.parse(raw);
+      const name = (p?.name || '').trim();
+      if (name) return `${name}  |  NT Solutions`;
+    }
+  } catch { /* ignore */ }
+  return 'NT Solutions';
+}
+
 // ── Agent accent colors ──────────────────────────────────────────────────────
 const AGENT_COLORS = {
   HORMOZI:     [59,  130, 246],
@@ -462,7 +476,7 @@ function buildDoc(agentKey, agentName, content, date) {
     doc.setFontSize(7.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(156, 163, 175);
-    doc.text('Samuel Nicolas  |  NT Solutions', margin, fy);
+    doc.text(getConsultantFooterLine(), margin, fy);
     doc.text(
       new Date(date).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' }),
       pageW / 2, fy, { align: 'center' }

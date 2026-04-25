@@ -154,6 +154,7 @@ export default function HomeScreen({
   hasGmailClientId = false,
   wins = [],
   agentDepth = {},
+  topBanner = null,
 }) {
   const thisWeek  = getThisWeekEvents(calendarEvents || []);
   const calLocale = lang === 'fr' ? 'fr-CA' : 'en-US';
@@ -173,6 +174,13 @@ export default function HomeScreen({
   return (
     <div className="flex-1 flex flex-col items-center px-5 pt-10 pb-36 gap-10 min-h-0 overflow-y-auto"
       style={{ color: darkMode ? '#e2e8f0' : '#1A1A1A' }}>
+
+      {/* ── Onboarding nudge (slot from parent) ── */}
+      {topBanner && (
+        <div className="w-full max-w-3xl">
+          {topBanner}
+        </div>
+      )}
 
       {/* ── Greeting + Streak ── */}
       <div className="w-full max-w-3xl flex items-start justify-between" data-tour="welcome">

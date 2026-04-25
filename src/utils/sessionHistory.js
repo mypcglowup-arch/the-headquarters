@@ -35,5 +35,5 @@ export function formatHistoryContext() {
     return parts.join('\n');
   });
 
-  return `SAMUEL'S RECENT SESSION HISTORY — use for continuity, reference naturally:\n${lines.join('\n\n')}`;
+  return `{NAME}'S RECENT SESSION HISTORY — use for continuity, reference naturally:\n${lines.join('\n\n')}`;
 }

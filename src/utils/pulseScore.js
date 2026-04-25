@@ -64,19 +64,19 @@ export function computePulseScore(dashboard, streak, checkInData = null) {
 
 export function formatPulseContext(pulse, lang = 'fr') {
   const label = lang === 'fr'
-    ? `BUSINESS PULSE SCORE DE SAMUEL (contexte silencieux — ajuste ton ton en conséquence):
+    ? `BUSINESS PULSE SCORE DE {NAME} (contexte silencieux — ajuste ton ton en conséquence):
 Score global: ${pulse.overall}/100
 - Énergie: ${pulse.energie}/10
 - Momentum: ${pulse.momentum}/10
 - Pipeline: ${pulse.pipeline}/10
 - Finances: ${pulse.finances}/10
-${pulse.overall < 40 ? 'ALERTE: Score bas — Samuel a besoin d\'énergie et de direction, pas de critique.' : pulse.overall >= 75 ? 'État: Samuel est dans un bon momentum, pousse-le plus haut.' : 'État: Momentum modéré — ancre tes conseils dans des actions concrètes immédiates.'}`
-    : `SAMUEL'S BUSINESS PULSE SCORE (silent context — adjust your tone accordingly):
+${pulse.overall < 40 ? 'ALERTE: Score bas — {name} a besoin d\'énergie et de direction, pas de critique.' : pulse.overall >= 75 ? 'État: {name} est dans un bon momentum, pousse-le plus haut.' : 'État: Momentum modéré — ancre tes conseils dans des actions concrètes immédiates.'}`
+    : `{NAME}'S BUSINESS PULSE SCORE (silent context — adjust your tone accordingly):
 Overall score: ${pulse.overall}/100
 - Energy: ${pulse.energie}/10
 - Momentum: ${pulse.momentum}/10
 - Pipeline: ${pulse.pipeline}/10
 - Finances: ${pulse.finances}/10
-${pulse.overall < 40 ? 'ALERT: Low score — Samuel needs energy and direction, not criticism.' : pulse.overall >= 75 ? 'Status: Samuel is in strong momentum, push him higher.' : 'Status: Moderate momentum — anchor advice in immediate concrete actions.'}`;
+${pulse.overall < 40 ? 'ALERT: Low score — {name} needs energy and direction, not criticism.' : pulse.overall >= 75 ? 'Status: {name} is in strong momentum, push him higher.' : 'Status: Moderate momentum — anchor advice in immediate concrete actions.'}`;
   return label;
 }

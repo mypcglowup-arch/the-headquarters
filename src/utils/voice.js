@@ -21,14 +21,30 @@ export function isTTSSupported() {
 // ─── STT: MediaRecorder + Whisper ─────────────────────────────────────────
 // Whisper benefits from a prompt hint to bias vocabulary — we feed it the
 // business-specific words QG uses a lot so transcriptions of agent/client
-// names come out right.
-const WHISPER_PROMPT_HINT_FR =
-  'Samuel, NT Solutions, Bouclier 5 Étoiles, Répondeur Intelligent, Revenant, PC Glow Up, ' +
-  'Motion Composites, Hormozi, Cardone, Robbins, Gary Vee, Naval, Chris Voss. ' +
-  'Contexte : agence IA au Québec, prospects, retainers, MRR, dashboard, pipeline.';
-const WHISPER_PROMPT_HINT_EN =
-  'Samuel, NT Solutions, Hormozi, Cardone, Robbins, Gary Vee, Naval, Chris Voss. ' +
-  'Context: AI agency in Quebec, prospects, retainers, MRR, dashboard, pipeline.';
+// names come out right. Built dynamically so the user's actual name biases
+// the transcription too.
+function getUserNameForVoice() {
+  try {
+    const raw = localStorage.getItem('qg_user_profile_v1');
+    if (!raw) return '';
+    const p = JSON.parse(raw);
+    return (p?.name || '').trim();
+  } catch { return ''; }
+}
+
+function whisperPromptHint(lang) {
+  const userName = getUserNameForVoice();
+  const namePart = userName ? `${userName}, ` : '';
+  if (lang === 'fr') {
+    return namePart + 'NT Solutions, Bouclier 5 Étoiles, Répondeur Intelligent, Revenant, PC Glow Up, ' +
+      'Motion Composites, Hormozi, Cardone, Robbins, Gary Vee, Naval, Chris Voss. ' +
+      'Contexte : agence IA au Québec, prospects, retainers, MRR, dashboard, pipeline.';
+  }
+  return namePart + 'NT Solutions, Hormozi, Cardone, Robbins, Gary Vee, Naval, Chris Voss. ' +
+    'Context: AI agency in Quebec, prospects, retainers, MRR, dashboard, pipeline.';
+}
+const WHISPER_PROMPT_HINT_FR = whisperPromptHint('fr');
+const WHISPER_PROMPT_HINT_EN = whisperPromptHint('en');
 
 // Pick the best supported audio MIME for this browser
 function pickMimeType() {

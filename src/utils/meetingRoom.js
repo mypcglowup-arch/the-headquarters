@@ -27,7 +27,7 @@ export function getMaturityPhase(interactionCount) {
       phase: 'foundational',
       minSeverityForIntervention: 'medium', // even soft patterns can fire early
       behaviorSuffix: [
-        'MATURITY CONTEXT: Early interactions with Samuel (foundational phase, 0-5 interactions).',
+        'MATURITY CONTEXT: Early interactions with {name} (foundational phase, 0-5 interactions).',
         'Behavior: You direct the conversation. Ask the fundamental questions early.',
         'Lay the groundwork — assume he\'s still orienting. Don\'t wait long for him to drive.',
         'Tone: confident mentor breaking in a new pro. Brief questions, concrete next actions.',
@@ -39,7 +39,7 @@ export function getMaturityPhase(interactionCount) {
       phase: 'dialogue',
       minSeverityForIntervention: 'medium',
       behaviorSuffix: [
-        'MATURITY CONTEXT: Samuel is past onboarding (dialogue phase, 6-15 interactions).',
+        'MATURITY CONTEXT: {name} is past onboarding (dialogue phase, 6-15 interactions).',
         'Behavior: Leave room for him to drive, but ask good clarifying questions.',
         'Balance assertion and space. Let him surface what matters — you refine it.',
       ].join('\n'),
@@ -50,7 +50,7 @@ export function getMaturityPhase(interactionCount) {
       phase: 'partnership',
       minSeverityForIntervention: 'medium',
       behaviorSuffix: [
-        'MATURITY CONTEXT: Samuel knows the rhythm (partnership phase, 16-30 interactions).',
+        'MATURITY CONTEXT: {name} knows the rhythm (partnership phase, 16-30 interactions).',
         'Behavior: React to what he brings. Don\'t over-initiate unless a real signal calls for it.',
         'Tone: peer-to-peer. Brief. Assume shared context.',
       ].join('\n'),
@@ -60,7 +60,7 @@ export function getMaturityPhase(interactionCount) {
     phase: 'reactive',
     minSeverityForIntervention: 'high', // only critical patterns break silence
     behaviorSuffix: [
-      'MATURITY CONTEXT: Samuel is fluent in how this works (reactive phase, 31+ interactions).',
+      'MATURITY CONTEXT: {name} is fluent in how this works (reactive phase, 31+ interactions).',
       'Behavior: Full user freedom by default. Speak when asked.',
       'Intervene uninvited ONLY on critical signals. Otherwise, let him drive.',
     ].join('\n'),

@@ -169,7 +169,7 @@ export function formatCalendarContext(events) {
 
   if (lines.length === 0) return null;
 
-  return `SAMUEL'S CALENDAR — NEXT 14 DAYS:\n${lines.join('\n')}`;
+  return `{NAME}'S CALENDAR — NEXT 14 DAYS:\n${lines.join('\n')}`;
 }
 
 // ─── Return all fetched events for HomeScreen (already scoped to 14 days) ────

@@ -33,8 +33,22 @@ const C = {
 };
 
 // ─── Core builder ───────────────────────────────────────────────────────
+// Pull the consultant's display name from localStorage userProfile.
+// Fallback : 'NT Solutions' alone (company name) so the PDF still has a label.
+function getConsultantName() {
+  try {
+    const raw = localStorage.getItem('qg_user_profile_v1');
+    if (!raw) return '';
+    const p = JSON.parse(raw);
+    return (p?.name || '').trim();
+  } catch { return ''; }
+}
+
 export function buildWorkflowPdf({ answers, template, pkg, lang = 'fr' }) {
   if (!template || !pkg) return null;
+  const consultantName = getConsultantName();
+  const consultantLine = consultantName ? `${consultantName} · NT Solutions` : 'NT Solutions';
+  const consultantRef  = consultantName || (lang === 'fr' ? 'le consultant' : 'the consultant');
 
   const doc    = new jsPDF({ unit: 'pt', format: 'letter' });
   const pageW  = doc.internal.pageSize.getWidth();
@@ -470,8 +484,8 @@ export function buildWorkflowPdf({ answers, template, pkg, lang = 'fr' }) {
   section(lang === 'fr' ? "Guide d'installation" : 'Installation guide', 'SECTION 4');
   paragraph(
     lang === 'fr'
-      ? `Ce guide est écrit pour Samuel (consultant NT Solutions) qui installe le système pour ${answers.clientName}. Suis les étapes dans l'ordre. Prévois 30-90 minutes selon la complexité des intégrations.`
-      : `This guide is written for Samuel (NT Solutions consultant) installing the system for ${answers.clientName}. Follow the steps in order. Expect 30-90 minutes depending on integration complexity.`,
+      ? `Ce guide est écrit pour ${consultantRef} (consultant NT Solutions) qui installe le système pour ${answers.clientName}. Suis les étapes dans l'ordre. Prévois 30-90 minutes selon la complexité des intégrations.`
+      : `This guide is written for ${consultantRef} (NT Solutions consultant) installing the system for ${answers.clientName}. Follow the steps in order. Expect 30-90 minutes depending on integration complexity.`,
     { color: C.text2, size: 9.5, gap: 14 }
   );
   if (pkg.guide) {
@@ -523,8 +537,8 @@ export function buildWorkflowPdf({ answers, template, pkg, lang = 'fr' }) {
   section(lang === 'fr' ? 'Script de vente & pricing' : 'Sales script & pricing', 'SECTION 6');
   paragraph(
     lang === 'fr'
-      ? `Ce script est pour Samuel au téléphone ou en meeting avec ${answers.clientName}. Chaque section peut être adaptée, mais les chiffres de pricing sont calibrés — ne descends pas en dessous du minimum sans raison solide.`
-      : `This script is for Samuel on the phone or in a meeting with ${answers.clientName}. Each section can be adapted, but the pricing numbers are calibrated — don't go below the minimum without a solid reason.`,
+      ? `Ce script est pour ${consultantRef} au téléphone ou en meeting avec ${answers.clientName}. Chaque section peut être adaptée, mais les chiffres de pricing sont calibrés — ne descends pas en dessous du minimum sans raison solide.`
+      : `This script is for ${consultantRef} on the phone or in a meeting with ${answers.clientName}. Each section can be adapted, but the pricing numbers are calibrated — don't go below the minimum without a solid reason.`,
     { color: C.text2, size: 9.5, gap: 14 }
   );
   if (pkg.script) {
@@ -556,8 +570,8 @@ export function buildWorkflowPdf({ answers, template, pkg, lang = 'fr' }) {
   section(lang === 'fr' ? 'FAQ — objections anticipées' : 'FAQ — anticipated objections', 'SECTION 7');
   paragraph(
     lang === 'fr'
-      ? `Les objections que ${answers.clientName} est susceptible de poser, et les réponses que Samuel a prêtes. Lis avant l'appel — ne réinvente pas la roue en direct.`
-      : `Objections ${answers.clientName} is likely to raise, and Samuel's ready answers. Read before the call — don't reinvent live.`,
+      ? `Les objections que ${answers.clientName} est susceptible de poser, et les réponses que ${consultantRef} a prêtes. Lis avant l'appel — ne réinvente pas la roue en direct.`
+      : `Objections ${answers.clientName} is likely to raise, and ${consultantRef}'s ready answers. Read before the call — don't reinvent live.`,
     { color: C.text2, size: 9.5, gap: 14 }
   );
   if (pkg.faq) {
@@ -573,7 +587,7 @@ export function buildWorkflowPdf({ answers, template, pkg, lang = 'fr' }) {
   newPage();
   section(lang === 'fr' ? 'Prochaines étapes' : 'Next steps', 'SECTION 8');
 
-  subsection(lang === 'fr' ? 'De ton côté (Samuel)' : 'On your side (Samuel)');
+  subsection(lang === 'fr' ? `De ton côté${consultantName ? ` (${consultantName})` : ''}` : `On your side${consultantName ? ` (${consultantName})` : ''}`);
   markdown(lang === 'fr'
     ? `1. Relis le script (section 6) et le FAQ (section 7) avant l'appel.
 2. Vérifie que les credentials ${Array.isArray(answers.tools) ? answers.tools.filter((t) => t !== 'Aucun').join(', ') : ''} sont accessibles côté client.
@@ -599,7 +613,7 @@ export function buildWorkflowPdf({ answers, template, pkg, lang = 'fr' }) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
   setColor(C.text1);
-  doc.text(lang === 'fr' ? 'Samuel Nicolas · NT Solutions' : 'Samuel Nicolas · NT Solutions', margin, y);
+  doc.text(consultantLine, margin, y);
   y += 16;
   doc.text('mypcglowup@gmail.com', margin, y);
   y += 16;
@@ -616,7 +630,7 @@ export function buildWorkflowPdf({ answers, template, pkg, lang = 'fr' }) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   setColor(C.text2);
-  doc.text(lang === 'fr' ? 'Samuel Nicolas · NT Solutions' : 'Samuel Nicolas · NT Solutions', margin, y + 14);
+  doc.text(consultantLine, margin, y + 14);
   doc.text(String(answers.clientName || ''), pageW - margin - 200, y + 14);
   setColor(C.muted);
   doc.setFontSize(8);
