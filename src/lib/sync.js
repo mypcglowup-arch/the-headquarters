@@ -143,6 +143,50 @@ export async function syncMomentum(streak, sessionsWeek, totalSessions, interact
   }
 }
 
+// ─── Victories journal ──────────────────────────────────────────────────────
+// Cloud-first. fetchVictories at mount → reconcile with localStorage cache.
+export async function syncVictory(victory) {
+  if (!isSupabaseEnabled()) return;
+  try {
+    await supabase.from('victories').upsert({
+      id:            victory.id,
+      description:   victory.description,
+      value_monthly: Number(victory.value_monthly) || 0,
+      category:      victory.category || 'other',
+      roi_annual:    Number(victory.roi_annual)  || 0,
+      roi_percent:   Number(victory.roi_percent) || 0,
+      created_at:    victory.created_at,
+    }, { onConflict: 'id' });
+  } catch (e) {
+    console.warn('[Sync] syncVictory failed:', e.message);
+  }
+}
+
+export async function syncVictoryDelete(id) {
+  if (!isSupabaseEnabled()) return;
+  try {
+    await supabase.from('victories').delete().eq('id', id);
+  } catch (e) {
+    console.warn('[Sync] syncVictoryDelete failed:', e.message);
+  }
+}
+
+export async function fetchVictories() {
+  if (!isSupabaseEnabled()) return [];
+  try {
+    const { data, error } = await supabase
+      .from('victories')
+      .select('id, description, value_monthly, category, roi_annual, roi_percent, created_at')
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.warn('[Sync] fetchVictories failed:', e.message);
+    return [];
+  }
+}
+
 // ─── Situation library favorites ────────────────────────────────────────────
 export async function syncSituationFavorite(situationId, action) {
   if (!isSupabaseEnabled()) return;

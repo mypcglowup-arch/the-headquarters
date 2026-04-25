@@ -11,7 +11,7 @@ import { updateStreak } from './utils/streak.js';
 import { logAppOpen, logSessionStart } from './utils/momentum.js';
 import { saveSession, formatHistoryContext, loadHistory } from './utils/sessionHistory.js';
 import { useAutoSave, mergeSaveStatus } from './hooks/useAutoSave.js';
-import { syncSession, syncDecisions, syncImprovementItem, syncImprovementStatus, syncFeedback, syncMomentum, syncAgentNames, syncExpense, syncOneTimeRevenue, syncRetainer, syncRetainerDelete, syncDashboardState, fetchDashboardState, syncFollowupLog, fetchWeeklyFollowups, fetchWeeklyOneTimeRevenues, fetchWeeklyRetainerChanges, syncDecisionOutcome, syncSituationFavorite, fetchSituationFavorites } from './lib/sync.js';
+import { syncSession, syncDecisions, syncImprovementItem, syncImprovementStatus, syncFeedback, syncMomentum, syncAgentNames, syncExpense, syncOneTimeRevenue, syncRetainer, syncRetainerDelete, syncDashboardState, fetchDashboardState, syncFollowupLog, fetchWeeklyFollowups, fetchWeeklyOneTimeRevenues, fetchWeeklyRetainerChanges, syncDecisionOutcome, syncSituationFavorite, fetchSituationFavorites, syncVictory, syncVictoryDelete, fetchVictories } from './lib/sync.js';
 import { searchMemories, addSessionMemory, addArchivistMemory, fetchMemoriesForRecap, isMem0Enabled } from './lib/mem0.js';
 import { getDayGreeting } from './utils/greeting.js';
 import {
@@ -39,6 +39,8 @@ import ProspectsScreen from './components/ProspectsScreen.jsx';
 import ReplayScreen from './components/ReplayScreen.jsx';
 import LibraryScreen from './components/LibraryScreen.jsx';
 import SituationsScreen from './components/SituationsScreen.jsx';
+import VictoriesScreen from './components/VictoriesScreen.jsx';
+import { loadVictories, saveVictoriesCache, computeROI, formatVictoriesContext } from './utils/victories.js';
 import WorkflowBuilder from './components/WorkflowBuilder.jsx';
 import PulseScoreCard from './components/PulseScoreCard.jsx';
 import DailyCheckIn, { hasCheckedInToday } from './components/DailyCheckIn.jsx';
@@ -249,6 +251,7 @@ export default function App() {
   const [interactionCount, setInteractionCount] = useState(() => loadLS(LS_INTERACTIONS, 0));
   const [mondaySessionFiredIso, setMondaySessionFiredIso] = useState(() => loadLS(LS_MONDAY_SESSION, null));
   const [situationFavorites, setSituationFavorites] = useState(() => loadLS(LS_SITUATION_FAVS, []));
+  const [victories, setVictories] = useState(() => loadVictories());
   const [soundEnabled, setSoundEnabled] = useState(() => loadLS(LS_SOUND, true));
   const [voiceMode,    setVoiceMode]    = useState(() => loadLS(LS_VOICE, false) === true);
   const lastSpokenMsgIdRef = useRef(null);
@@ -1594,7 +1597,8 @@ export default function App() {
       }
       // ── End Gmail injection ───────────────────────────────────────────────────
 
-      const combinedContext = [gmailCtxBlock, dateCtx, pulseCtx, checkInCtx, emotionCtx, winsCtx, financialContext, historyContext, memContext, calendarContext].filter(Boolean).join('\n\n') || null;
+      const victoriesCtx = formatVictoriesContext(victories, lang);
+      const combinedContext = [gmailCtxBlock, dateCtx, pulseCtx, checkInCtx, emotionCtx, winsCtx, victoriesCtx, financialContext, historyContext, memContext, calendarContext].filter(Boolean).join('\n\n') || null;
       // Meeting Room: maturity suffix tells agents how directive/reactive to be this session
       // Also inject the lead-agent's track record (past decisions + outcomes) so
       // their advice is calibrated on what's actually worked for Samuel.
@@ -2338,6 +2342,54 @@ export default function App() {
     setInteractionCount((c) => c + 1);
   }
 
+  function addVictory(victoryData) {
+    const annualGoal = dashboard?.annualGoal || 50000;
+    const roi = computeROI(victoryData.value_monthly || 0, annualGoal);
+    const newVictory = {
+      id: `vic-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      description:   victoryData.description,
+      value_monthly: Number(victoryData.value_monthly) || 0,
+      category:      victoryData.category || 'other',
+      roi_annual:    roi.annual,
+      roi_percent:   roi.goalPercent,
+      created_at:    new Date().toISOString(),
+    };
+    const next = [newVictory, ...victories];
+    setVictories(next);
+    saveVictoriesCache(next);
+    syncVictory(newVictory);
+    toast(
+      lang === 'fr' ? '🏆 Victoire enregistrée' : '🏆 Victory saved',
+      { type: 'success', duration: 2400 }
+    );
+  }
+
+  function deleteVictory(id) {
+    const next = victories.filter((v) => v.id !== id);
+    setVictories(next);
+    saveVictoriesCache(next);
+    syncVictoryDelete(id);
+  }
+
+  // Cloud reconciliation for victories — once on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const cloud = await fetchVictories();
+        if (!Array.isArray(cloud) || cloud.length === 0) return;
+        // Merge: cloud is source of truth; preserve any local victories not yet synced
+        setVictories((local) => {
+          const cloudIds = new Set(cloud.map((v) => v.id));
+          const localOnly = (local || []).filter((v) => !cloudIds.has(v.id));
+          const merged = [...cloud, ...localOnly]
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          saveVictoriesCache(merged);
+          return merged;
+        });
+      } catch { /* silent */ }
+    })();
+  }, []);
+
   function toggleSituationFavorite(situationId) {
     const already = situationFavorites.includes(situationId);
     const next = already
@@ -2404,6 +2456,7 @@ export default function App() {
         onGoProspects={() => setScreen(screen === 'prospects' ? (sessionStarted ? 'chat' : 'home') : 'prospects')}
         onGoLibrary={() => setScreen(screen === 'library' ? (sessionStarted ? 'chat' : 'home') : 'library')}
         onGoSituations={() => setScreen(screen === 'situations' ? (sessionStarted ? 'chat' : 'home') : 'situations')}
+        onGoVictories={() => setScreen(screen === 'victories' ? (sessionStarted ? 'chat' : 'home') : 'victories')}
         onGoWorkflow={() => setScreen(screen === 'workflow' ? (sessionStarted ? 'chat' : 'home') : 'workflow')}
         onGoEmail={() => { setUrgentEmailCount(0); setScreen(screen === 'dashboard' ? (sessionStarted ? 'chat' : 'home') : 'dashboard'); }}
         urgentEmailCount={urgentEmailCount}
@@ -2579,6 +2632,20 @@ export default function App() {
               onUseInChat={useSituationInChat}
               agentNames={agentNames}
               agentPhotos={agentPhotos}
+            />
+          </div>
+        )}
+
+        {screen === 'victories' && (
+          <div className={`${sessionStarted ? 'absolute inset-0 z-20 animate-panel-in' : 'flex-1 animate-screen-in'} flex flex-col overflow-hidden ${darkMode ? 'bg-gray-950' : ''}`} style={!darkMode ? { background: '#F5F4F0' } : {}}>
+            {sessionStarted && <BackToChatBar darkMode={darkMode} onBack={() => setScreen('chat')} />}
+            <VictoriesScreen
+              darkMode={darkMode}
+              lang={lang}
+              victories={victories}
+              annualGoal={dashboard?.annualGoal || 50000}
+              onAddVictory={addVictory}
+              onDeleteVictory={deleteVictory}
             />
           </div>
         )}

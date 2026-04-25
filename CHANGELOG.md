@@ -2,6 +2,120 @@
 
 ## [Unreleased]
 
+### Added — Journal de victoires avec ROI
+Nouveau screen dédié pour logger et suivre chaque win avec calcul ROI automatique. Source de vérité **Supabase cloud-first** (réconciliation au mount), localStorage = cache pour boot rapide. Les 5 dernières victoires sont injectées dans le contexte des agents — ils peuvent les référencer naturellement comme preuves de momentum.
+
+### UX flow
+```
+Header → bouton "Victoires" (Trophy icon, accent ambre)
+  → VictoriesScreen
+     ├─ Hero : 4 stat cards
+     │   ├─ Total victoires (ambre)
+     │   ├─ Ce mois-ci (orange, accent gradient — badge "🔥 X")
+     │   ├─ MRR cumulé (emerald) — somme des value_monthly
+     │   └─ % objectif annuel (indigo) — vs annualGoal du dashboard
+     ├─ Filters : période (Tout / 7j / 30j / 90j) + catégorie (5 catégories)
+     ├─ Timeline cards (border-left coloré par catégorie)
+     │   └─ Hover → bouton delete (rouge)
+     └─ CTA "+ Victoire" (top-right, emerald) → VictoryModal
+        ├─ Description (required)
+        ├─ Valeur mensuelle $ (optional)
+        ├─ Catégorie picker (5 catégories colored chips)
+        └─ Live ROI preview (apparaît dès value > 0)
+            ├─ Annuel = value × 12
+            ├─ % objectif = annual / annualGoal × 100
+            └─ MRR + = value
+```
+
+### Catégories + couleurs
+| Catégorie | Couleur | RGB | Usage |
+|---|---|---|---|
+| Client signé | emerald | 16,185,129 | Nouveau retainer signé |
+| Deal closé | emerald | 16,185,129 | One-time revenue confirmé |
+| Feature livrée | blue | 59,130,246 | Tech ship — produit/site |
+| Milestone | violet | 139,92,246 | Étape symbolique non-financière |
+| Autre | gray | 148,163,184 | Catch-all |
+
+### Data model
+```js
+{
+  id:            'vic-1714000000-x7k3',  // local UUID-like
+  description:   'Signé Dubé — Bouclier 5 Étoiles',
+  value_monthly: 750,                     // 0 si pas applicable
+  category:      'client-signed',         // id from VICTORY_CATEGORIES
+  roi_annual:    9000,                    // value_monthly × 12
+  roi_percent:   18,                      // % of annualGoal
+  created_at:    '2026-04-24T15:30:00.000Z',
+}
+```
+
+### Agent context injection
+`formatVictoriesContext(victories, lang)` est appelé dans `sendMessage()` et injecté dans `combinedContext` (entre `winsCtx` et `financialContext`). Format :
+
+```
+VICTOIRES RÉCENTES DE SAMUEL (référence-les naturellement quand pertinent — preuves de momentum) :
+- [Client signé · 24/04/2026] Signé Dubé — Bouclier 5 Étoiles · 750$/mois (9 000$/an)
+- [Feature livrée · 22/04/2026] PWA installable shipped
+- ...
+```
+
+Les agents (HORMOZI surtout) peuvent maintenant dire des trucs comme "vu que tu viens de signer Dubé à 750/mois, on peut viser 1k sur le prochain — référence est posée".
+
+### Sync Supabase (cloud-first)
+- `syncVictory(victory)` — upsert on conflict id
+- `syncVictoryDelete(id)` — delete on id
+- `fetchVictories()` — order by created_at desc, limit 500
+- `useEffect` au mount dans App.jsx → merge cloud + local (cloud gagne par id, local-only conservé pour offline-first)
+
+### SQL migration Supabase
+```sql
+create table if not exists public.victories (
+  id            text primary key,                       -- 'vic-{ts}-{rand}' app-side
+  user_id       text default 'samuel',
+  description   text not null,
+  value_monthly numeric default 0,
+  category      text,
+  roi_annual    numeric,
+  roi_percent   numeric,
+  created_at    timestamptz default now()
+);
+
+alter table public.victories enable row level security;
+create policy "victories_all" on public.victories for all using (true) with check (true);
+
+create index if not exists victories_created_at_idx on public.victories (created_at desc);
+```
+
+> **Note** — la spec utilisateur initiale demandait `id uuid DEFAULT gen_random_uuid()`. J'ai gardé `text` PK pour cohérence avec le pattern app-side ID (`'vic-{ts}-{rand}'` généré côté client). Si tu veux du UUID stricte, il faudra adapter `addVictory` pour ne pas générer l'id local — mais ça ajoute une round-trip avant l'optimistic UI.
+
+### Différence vs `qg_wins_v1` existant
+| | `qg_wins_v1` (existing) | `qg_victories_v1` (new) |
+|---|---|---|
+| Trigger | "Log as Win" inline dans chat | Modal manuel via bouton "+ Victoire" |
+| Champs | text, agent, date, sessionId | description, value_monthly, category, roi_*, created_at |
+| ROI calc | non | oui (annual, % goal, MRR) |
+| Cloud sync | non (localStorage only) | oui (Supabase cloud-first) |
+| Agent context | oui (formatWinsContext) | oui (formatVictoriesContext) — distinct block |
+| Use case | Quick capture émotionnel | Track record financier structuré |
+
+Les deux coexistent. Pas de fusion auto pour éviter la confusion. Tu peux fusionner manuellement plus tard si l'usage révèle une redondance.
+
+### Fichiers créés
+- `src/utils/victories.js` — `loadVictories`, `saveVictoriesCache`, `computeROI(value, annualGoal)`, `totalMonthlyValue`, `totalAnnualValue`, `thisMonthCount`, `formatVictoriesContext`, `filterVictoriesByCategory`, `filterVictoriesByPeriod`, `VICTORY_CATEGORIES`, `getCategoryConfig`
+- `src/components/VictoryJournal.jsx` — `VictoryModal` (création avec live ROI preview) + `VictoryTimeline` (composable card list, hover delete) + helper `VictoryCard`
+- `src/components/VictoriesScreen.jsx` — screen dédié + 4 stat cards + filtres période/catégorie
+
+### Fichiers modifiés
+- `src/App.jsx` — imports victoires + sync, state `victories`, `addVictory()` (génère id + roi + sync), `deleteVictory()`, useEffect cloud reconciliation, `formatVictoriesContext` dans combinedContext, case `screen === 'victories'`, prop `onGoVictories`
+- `src/components/Header.jsx` — import `Trophy` icon, prop `onGoVictories`, nav button conditionnel
+- `src/lib/sync.js` — `syncVictory` / `syncVictoryDelete` / `fetchVictories`
+
+### Storage
+- `localStorage['qg_victories_v1']` — cache JSON `[{id, description, value_monthly, category, roi_annual, roi_percent, created_at}, ...]`
+- Cloud reconciliation merge au mount (cloud → set local cache mis à jour)
+
+---
+
 ### Added — Bibliothèque de situations (50 scénarios pré-construits)
 Nouvelle section de l'app : 50 scénarios-frameworks pour les moments critiques du quotidien solo-consultant. Chaque scénario = agent assigné + framework structuré + 0-2 variants selon contexte. Recherche par mot-clé (accent-insensitive, multi-word AND). Favoris sauvegardés localStorage + Supabase. "Utiliser avec [Agent]" démarre une session stratégique avec le framework pré-rempli + @mention de l'agent.
 
