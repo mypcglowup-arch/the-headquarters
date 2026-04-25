@@ -35,7 +35,7 @@ export default function MessageBubble({ message, agentNames, agentPhotos, darkMo
   if (message.type === 'user') {
     return (
       <div className="flex justify-end mb-4">
-        <div className={`max-w-[80%] px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-800 text-white'}`}>
+        <div className={`max-w-[80%] px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed selectable ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-800 text-white'}`}>
           {message.content}
         </div>
       </div>

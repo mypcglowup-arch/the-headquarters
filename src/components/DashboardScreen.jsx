@@ -803,7 +803,11 @@ export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr',
   const totalRevenue  = monthlyRevenue.reduce((s, m) => s + (m.revenue  || 0), 0);
   const totalExpenses = monthlyRevenue.reduce((s, m) => s + (m.expenses || 0), 0);
   const totalMRR      = retainers.reduce((s, r) => s + (r.amount || 0), 0);
-  const goalPct       = annualGoal > 0 ? Math.min(100, Math.round((totalRevenue / annualGoal) * 100)) : 0;
+  // ARR-driven goal tracking — for SaaS/agency businesses, recurring MRR × 12
+  // is the meaningful "annual revenue" projection (not YTD manual entries which
+  // are often empty when retainers are the primary revenue driver).
+  const arr           = totalMRR * 12;
+  const goalPct       = annualGoal > 0 ? Math.min(100, Math.round((arr / annualGoal) * 100)) : 0;
   const now           = new Date();
   const currentMonth  = now.getMonth();
   const monthsElapsed = Math.max(1, currentMonth + (now.getDate() >= 15 ? 1 : 0.5));
@@ -997,13 +1001,13 @@ export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr',
           <MetricCard label="MRR" value={totalMRR} prefix="$" color={c.accent}
             sublabel={t('dash.clickRetainers', lang)} c={c} delay={0}
             onClick={() => retainersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
-          <MetricCard label={t('dash.revenueYTD', lang)} value={totalRevenue} prefix="$" color={c.text0}
+          <MetricCard label={t('dash.annualRevenue', lang)} value={arr} prefix="$" color={c.text0}
             sublabel={`${goalPct}% ${t('dash.ofGoal', lang)}`} c={c} delay={70}
             onClick={() => chartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
           <MetricCard label={t('dash.bestMonth', lang)} value={bestMonth} prefix="$" color={c.green}
             sublabel={t('dash.allTimeRecord', lang)} c={c} delay={140} />
-          <MetricCard label={t('dash.projectedARR', lang)} value={totalMRR * 12} prefix="$" color={c.amber}
-            sublabel={t('dash.atCurrentPace', lang)} c={c} delay={210} />
+          <MetricCard label={t('dash.revenueYTD', lang)} value={totalRevenue} prefix="$" color={c.amber}
+            sublabel={t('dash.actualEarned', lang)} c={c} delay={210} />
         </div>
 
         {/* ── Step 3: Annual goal card ── */}
@@ -1019,11 +1023,11 @@ export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr',
               </div>
             </div>
 
-            {/* Progress row */}
+            {/* Progress row — driven by ARR (MRR × 12), not YTD actuals */}
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-              <span style={{ fontSize: 13, color: c.text1 }}>{t('dash.earned', lang, { amount: `$${totalRevenue.toLocaleString()}` })}</span>
+              <span style={{ fontSize: 13, color: c.text1 }}>{t('dash.projected', lang, { amount: `$${arr.toLocaleString()}` })}</span>
               <span style={{ fontSize: 34, fontWeight: 900, lineHeight: 1, color: goalPct >= 100 ? c.green : c.text0 }}>{goalPct}%</span>
-              <span style={{ fontSize: 12, color: c.text2 }}>${Math.max(0, annualGoal - totalRevenue).toLocaleString()} {t('dash.toGetThere', lang)}</span>
+              <span style={{ fontSize: 12, color: c.text2 }}>${Math.max(0, annualGoal - arr).toLocaleString()} {t('dash.toGetThereYear', lang)}</span>
             </div>
 
             {/* Progress bar */}

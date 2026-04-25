@@ -2604,7 +2604,12 @@ export default function App() {
   const todoCount = improvementJournal.filter((i) => i.status !== 'done').length;
 
   return (
-    <div className={`min-h-screen flex flex-col ${darkMode ? 'bg-gray-950' : ''}`} style={!darkMode ? { background: '#F5F4F0' } : {}}>
+    <div
+      className={`min-h-screen flex flex-col ${darkMode ? 'bg-gray-950' : ''}`}
+      style={!darkMode ? { background: '#F5F4F0' } : {}}
+      contentEditable={false}
+      suppressContentEditableWarning
+    >
       <Header
         darkMode={darkMode}        onToggleDark={() => setDarkMode((d) => !d)}
         deepMode={deepMode}        onToggleDeep={() => setDeepMode((d) => !d)}
