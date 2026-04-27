@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Security — Removed `xlsx` (SheetJS) — Excel uploads no longer supported
+La library `xlsx` (SheetJS, v0.18.5) avait des CVEs connues sans fix upstream disponible (prototype pollution, ReDoS — CVE-2023-30533 et al.). Comme elle était utilisée **uniquement** pour parser des fichiers Excel uploadés par l'utilisateur (et pas pour exports), c'était une attack surface directe sur du contenu binaire arbitraire. La library est retirée du projet entièrement.
+
+### Audit
+**Usage avant** : 1 seul site, `src/utils/parseFile.js:36-50` — parsing `.xlsx` / `.xls` uploadé via `ChatInput.jsx` (file picker), résultat injecté dans le contexte agent.
+**Usage après** : 0. La dépendance n'est plus dans le bundle ni dans le lockfile.
+
+### Migration utilisateur
+Si tu uploads une feuille Excel : un message clair s'affiche → "Convertis en CSV (Fichier → Enregistrer sous → CSV) et upload à nouveau." Les fichiers CSV étaient déjà supportés à 100% (parser papaparse, audit clean, parse texte uniquement).
+
+### Changements code
+- `src/utils/parseFile.js` — bloc `if (ext === 'xlsx' || 'xls')` remplacé par retour `{ type: 'rejected', reason: 'xlsx-not-supported', message, messageFr }`. Plus aucun `import('xlsx')`.
+- `src/components/ChatInput.jsx` :
+  - `handleFileChange` : si `parsed.type === 'rejected'` → toast/alert avec le message localisé selon `lang`
+  - File picker `accept=".pdf,.csv,.xlsx,.xls"` → `accept=".pdf,.csv"` (xlsx disparaît du dialog navigateur)
+- `package.json` — `"xlsx": "^0.18.5"` retiré des dependencies
+- `package-lock.json` — régénéré via `npm install` (xlsx + ses transitives complètement absents)
+
+### Verdict audit
+```
+Avant : npm audit → xlsx mentionné, no fix available
+Après : npm audit → xlsx absent, 0 occurrences dans lockfile
+```
+
+Les vulns restantes (axios via mem0ai, esbuild via vite dev server, undici via @qdrant) sont d'autres packages — adressables séparément avec leur propre stratégie (upgrade chains qui peuvent breaker mem0ai et vite). Hors scope de ce fix.
+
+---
+
 ### Changed — i18n centralisé : module + hook + LanguageContext + userProfile.language
 Refonte de la couche de traduction pour avoir une source unique : le dictionnaire dans `src/i18n/translations.js`, exposé via un hook React `useTranslation()` et un `<LanguageProvider>`. La langue préférée vit maintenant dans `userProfile.language` (synchronisé Supabase + localStorage) au lieu d'un state séparé.
 

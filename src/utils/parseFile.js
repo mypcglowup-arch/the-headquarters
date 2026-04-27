@@ -33,20 +33,20 @@ export async function parseUploadedFile(file) {
     return { type: 'csv', name: file.name, text: text_ };
   }
 
+  // Excel files (.xlsx / .xls) are intentionally rejected.
+  // Rationale: the SheetJS / xlsx package has known prototype-pollution and
+  // ReDoS vulnerabilities (CVE-2023-30533 et al.) with no fix available
+  // upstream. Parsing binary spreadsheets from user uploads is a direct attack
+  // surface — we removed the dependency entirely. CSV covers the same use case
+  // safely (papaparse is well-audited and parses text only).
   if (ext === 'xlsx' || ext === 'xls') {
-    const { read, utils } = await import('xlsx');
-    const buffer = await file.arrayBuffer();
-    const workbook = read(buffer);
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const rows = utils.sheet_to_json(sheet, { defval: '' });
-    if (!rows.length) return { type: 'xlsx', name: file.name, text: 'Empty spreadsheet.' };
-    const headers = Object.keys(rows[0]);
-    const preview = rows.slice(0, 80)
-      .map((row) => headers.map((h) => `${h}: ${row[h]}`).join(' | '))
-      .join('\n');
-    const text_ = `[Sheet: ${sheetName} · ${rows.length} rows · columns: ${headers.join(', ')}]\n\n${preview}${rows.length > 80 ? `\n... +${rows.length - 80} more rows` : ''}`;
-    return { type: 'xlsx', name: file.name, text: text_ };
+    return {
+      type: 'rejected',
+      name: file.name,
+      reason: 'xlsx-not-supported',
+      message: 'Excel files (.xlsx/.xls) are not supported for security reasons. Please save your spreadsheet as CSV (File → Save As → CSV) and upload again.',
+      messageFr: 'Les fichiers Excel (.xlsx/.xls) ne sont pas supportés pour des raisons de sécurité. Convertis ton tableur en CSV (Fichier → Enregistrer sous → CSV) et upload à nouveau.',
+    };
   }
 
   return null;

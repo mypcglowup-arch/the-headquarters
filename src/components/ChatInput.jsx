@@ -201,6 +201,16 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
     setAttachLoading(true);
     try {
       const parsed = await parseUploadedFile(file);
+      if (parsed?.type === 'rejected') {
+        // Show user-facing reason (no toast prop available here — use alert as fallback)
+        const msg = lang === 'fr' ? parsed.messageFr : parsed.message;
+        if (typeof onToast === 'function') {
+          onToast(msg, { type: 'error', duration: 6000 });
+        } else {
+          alert(msg);
+        }
+        return;
+      }
       if (parsed) setAttachment(parsed);
     } catch (err) {
       console.error('[ChatInput] file parse error:', err);
@@ -455,7 +465,7 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.csv,.xlsx,.xls"
+          accept=".pdf,.csv"
           className="hidden"
           onChange={handleFileChange}
         />
