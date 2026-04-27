@@ -668,7 +668,7 @@ export default function FocusTimer({ darkMode, lang = 'fr', onStartSession, reta
                   ref={autreLabelRef}
                   value={autreLabel}
                   onChange={e => setAutreLabel(e.target.value)}
-                  placeholder="Précise ce que tu fais…"
+                  placeholder={lang === 'fr' ? 'Précise ce que tu fais…' : 'Specify what you\'re working on…'}
                   style={{
                     width: '100%', background: 'transparent', outline: 'none',
                     border: 'none', borderBottom: `1px solid ${T.border}`,
@@ -737,7 +737,7 @@ export default function FocusTimer({ darkMode, lang = 'fr', onStartSession, reta
                     ref={blockerInputRef}
                     value={blockerInput}
                     onChange={e => setBlockerInput(e.target.value)}
-                    placeholder="Optionnel — Entrée pour passer"
+                    placeholder={lang === 'fr' ? 'Optionnel — Entrée pour passer' : 'Optional — Enter to skip'}
                     style={{
                       width: '100%', background: 'transparent', outline: 'none',
                       border: 'none', borderBottom: `1px solid ${T.border}`,

@@ -273,7 +273,7 @@ function EditableNumber({ value, onChange, prefix = '', suffix = '', style = {},
   );
 
   return (
-    <button onClick={start} title="Cliquer pour modifier"
+    <button onClick={start} title={typeof window !== 'undefined' && (window.localStorage?.getItem?.('qg_lang_v1') === 'en') ? 'Click to edit' : 'Cliquer pour modifier'}
       style={{
         background: 'none', border: 'none', cursor: 'pointer', padding: 0,
         borderRadius: 4,

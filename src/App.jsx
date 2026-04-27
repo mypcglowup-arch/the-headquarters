@@ -330,9 +330,18 @@ export default function App() {
   const streamAccumRef = useRef('');
 
   // Persist language preference
+  // Source of truth : userProfile.language (synced cloud + local).
+  // Legacy 'qg_lang_v1' key still written for backward compat with detectDefaultLang().
   useEffect(() => {
     try { localStorage.setItem('qg_lang_v1', lang); } catch {}
-  }, [lang]);
+    // Mirror to userProfile if it differs (avoid loop)
+    if (userProfile && userProfile.language !== lang) {
+      const next = { ...userProfile, language: lang };
+      setUserProfile(next);
+      saveUserProfile(next);
+      syncUserProfile(next);
+    }
+  }, [lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleLang() { setLang((l) => (l === 'fr' ? 'en' : 'fr')); }
 
@@ -2542,14 +2551,22 @@ export default function App() {
         // Merge: cloud wins on conflict (simple, since profile is small + low-friction)
         setUserProfile((local) => {
           const merged = {
-            name:       cloud.name       || local?.name       || '',
-            role:       cloud.role       || local?.role       || '',
-            annualGoal: cloud.annualGoal || local?.annualGoal || 50000,
-            createdAt:  cloud.createdAt  || local?.createdAt  || null,
+            name:         cloud.name         || local?.name         || '',
+            role:         cloud.role         || local?.role         || '',
+            annualGoal:   cloud.annualGoal   || local?.annualGoal   || 50000,
+            sector:       cloud.sector       || local?.sector       || null,
+            sectorCustom: cloud.sectorCustom || local?.sectorCustom || '',
+            audience:     cloud.audience     || local?.audience     || null,
+            language:     cloud.language     || local?.language     || null,
+            createdAt:    cloud.createdAt    || local?.createdAt    || null,
           };
           saveUserProfile(merged);
           return merged;
         });
+        // Also apply cloud language to the live lang state if it differs
+        if (cloud.language && (cloud.language === 'fr' || cloud.language === 'en')) {
+          setLang((prev) => prev !== cloud.language ? cloud.language : prev);
+        }
       } catch { /* silent */ }
     })();
   }, []);

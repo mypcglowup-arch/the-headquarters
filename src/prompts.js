@@ -687,9 +687,26 @@ Tone: direct, no fluff, no motivation speech. This is a war room briefing, not a
 
 export function getLangInstruction(lang) {
   if (lang === 'fr') {
-    return '\nLANGUE : Tu réponds UNIQUEMENT en français québécois. Zéro mot en anglais. Jamais. Si un terme technique n\'a pas d\'équivalent français, utilise le terme anglais entre parenthèses seulement.';
+    return [
+      '',
+      'LANGUAGE LOCK (UNBREAKABLE — applies to EVERY response):',
+      '- Tu réponds UNIQUEMENT en français québécois casual (tu, pas vous).',
+      '- ZÉRO mot en anglais. Pas un seul. Pas même dans une exclamation.',
+      '- Termes techniques sans équivalent FR (ex: MRR, SaaS, ROI, B2B, KPI) : OK tels quels.',
+      '- Anglicismes courants en québécois (ex: pitch, deal, closing, prospect) : autorisés mais minimisés.',
+      '- Si tu te surprends à écrire un mot anglais qui a un équivalent français normal, REWRITE.',
+      '- JSON technical fields (clés, types) restent en anglais — c\'est de la structure, pas du contenu.',
+    ].join('\n');
   }
-  return '\nLANGUAGE: Respond in English only. No French whatsoever.';
+  return [
+    '',
+    'LANGUAGE LOCK (UNBREAKABLE — applies to EVERY response):',
+    '- Respond in ENGLISH only. Not a single French word, ever.',
+    '- No "voilà", no "déjà", no "n\'est-ce pas", no slipping into French.',
+    '- French names of people/places stay as-is (e.g., "Québec", "Marc-André").',
+    '- JSON technical fields (keys, types) stay in English (structure, not content).',
+    '- If you catch yourself writing a French word, REWRITE.',
+  ].join('\n');
 }
 
 export const PROSPECT_VOSS_PROMPT = `You are Chris Voss — master negotiator, FBI hostage negotiator, author of Never Split The Difference.

@@ -340,7 +340,7 @@ export default function ChatScreen({
                       onClick={() => savePinned(pinnedMessages.filter((_, i) => i !== idx))}
                       className="flex-shrink-0 transition-opacity opacity-40 hover:opacity-100"
                       style={{ fontSize: '11px', color: `rgb(${cfg?.glowRgb || '99,102,241'})`, marginLeft: '2px' }}
-                      title="Désépingler"
+                      title={lang === 'fr' ? 'Désépingler' : 'Unpin'}
                     >
                       ×
                     </button>

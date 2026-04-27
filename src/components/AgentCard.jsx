@@ -108,7 +108,7 @@ export default function AgentCard({
         />
         <button
           onClick={() => fileRef.current?.click()}
-          title="Click to change photo"
+          title={lang === 'fr' ? 'Cliquer pour changer la photo' : 'Click to change photo'}
           className="relative group block"
         >
           <AgentAvatar agentKey={agentKey} photo={agentPhoto} size="md" />
@@ -135,7 +135,7 @@ export default function AgentCard({
       ) : (
         <button
           onClick={() => { setNameInput(displayName); setEditing(true); }}
-          title="Click to rename"
+          title={lang === 'fr' ? 'Cliquer pour renommer' : 'Click to rename'}
           className={`text-sm font-semibold leading-tight transition-colors ${popName ? 'animate-name-pop' : ''}`}
           style={{ color: darkMode ? '#f1f5f9' : '#1A1A1A' }}
         >

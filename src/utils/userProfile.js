@@ -20,6 +20,7 @@ const DEFAULT_PROFILE = {
   sector:       null,        // id from data/sectors.js — null = not set
   sectorCustom: '',          // free-text label when sector === 'other'
   audience:     null,        // 'b2b' | 'b2c' | 'both' | null
+  language:     null,        // 'fr' | 'en' | null — null falls back to detectDefaultLang()
   createdAt:    null,
 };
 

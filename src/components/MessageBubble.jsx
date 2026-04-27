@@ -100,8 +100,8 @@ function AdaptiveReactions({ message, sessionCount, isLast, onReaction, darkMode
         type="button"
         onClick={() => setExpanded(true)}
         className={`mt-2 ml-1 px-2 py-0.5 rounded-full text-[10px] tap-target ${darkMode ? 'text-gray-500 hover:text-gray-300 hover:bg-white/5' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}
-        title="Réactions"
-        aria-label="Show reactions"
+        title={lang === 'fr' ? 'Réactions' : 'Reactions'}
+        aria-label={lang === 'fr' ? 'Afficher les réactions' : 'Show reactions'}
       >
         · · ·
       </button>
@@ -353,7 +353,7 @@ function AgentMessage({ message, agentNames, agentPhotos, darkMode, feedback, on
               <button
                 type="button"
                 onClick={handleShare}
-                title="Copier le contenu formaté"
+                title={lang === 'fr' ? 'Copier le contenu formaté' : 'Copy formatted content'}
                 className="p-1 rounded-lg transition-all"
                 style={{ color: shareCopied ? '#10b981' : (darkMode ? '#6b7280' : '#9ca3af') }}
               >
@@ -461,7 +461,7 @@ function AgentMessage({ message, agentNames, agentPhotos, darkMode, feedback, on
               type="button"
               onClick={openPreview}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer ${darkMode ? 'bg-gray-900 border-gray-700 hover:border-gray-500 hover:bg-gray-800' : 'bg-white border-gray-200 hover:border-gray-400 hover:bg-gray-50'}`}
-              title="Click to open"
+              title={lang === 'fr' ? 'Cliquer pour ouvrir' : 'Click to open'}
             >
               <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `rgba(${rgb}, 0.12)` }}>
                 <FileText size={18} style={{ color: accentColor }} />

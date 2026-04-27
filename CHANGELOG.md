@@ -2,6 +2,100 @@
 
 ## [Unreleased]
 
+### Changed — i18n centralisé : module + hook + LanguageContext + userProfile.language
+Refonte de la couche de traduction pour avoir une source unique : le dictionnaire dans `src/i18n/translations.js`, exposé via un hook React `useTranslation()` et un `<LanguageProvider>`. La langue préférée vit maintenant dans `userProfile.language` (synchronisé Supabase + localStorage) au lieu d'un state séparé.
+
+### Architecture
+```
+src/i18n/translations.js
+  └─ export const TRANSLATIONS = { fr: {...}, en: {...} }   (436 keys × 2 langs)
+
+src/i18n/index.js
+  ├─ t(key, lang, vars)             — imperative API (backward compat)
+  ├─ useTranslation()               — React hook → { t, lang, setLang }
+  ├─ <LanguageProvider lang setLang> — Context wrapper
+  ├─ LanguageContext                 — raw context for advanced cases
+  ├─ detectDefaultLang()             — userProfile → qg_lang_v1 → browser
+  └─ TRANSLATIONS                    — re-export for callers needing the dict
+
+src/i18n.js  (legacy file, now a 1-line shim)
+  └─ re-exports everything from ./i18n/index.js — old imports still work
+```
+
+### Lookup order in t()
+`current lang → English → French → key (literal fallback)` — guarantees that a missing key in EN gracefully falls back to FR (the QC default), rather than rendering the raw key.
+
+### userProfile.language
+- Ajout du champ dans `DEFAULT_PROFILE` (`null` par défaut, falls back à detect).
+- Sync Supabase : nouvelle colonne `language` dans table `user_profile` (TEXT).
+- Migration : `detectDefaultLang()` lit en priorité `userProfile.language`, fallback sur `qg_lang_v1` (legacy), fallback sur `navigator.language`.
+- `useEffect [lang]` : quand l'utilisateur toggle FR/EN, le profile est mis à jour + sync cloud.
+- Cloud reconciliation au mount applique `cloud.language` au state local s'il existe.
+
+### SQL migration Supabase
+```sql
+alter table public.user_profile
+  add column if not exists language text check (language in ('fr', 'en'));
+```
+
+### Strict language enforcement (agent prompts)
+`getLangInstruction(lang)` durci avec une règle "LANGUAGE LOCK (UNBREAKABLE)" appliquée à CHAQUE réponse :
+
+**FR mode** :
+- Réponse uniquement en français québécois casual
+- ZÉRO mot anglais (sauf MRR, SaaS, ROI, B2B, KPI etc. sans équivalent FR)
+- Anglicismes québécois minimisés mais autorisés
+- Si l'agent écrit un mot anglais évitable → REWRITE
+
+**EN mode** :
+- Réponse uniquement en anglais
+- Pas un seul mot français (sauf noms propres : Québec, Marc-André)
+- "voilà", "déjà", "n'est-ce pas" → interdits
+- JSON keys techniques restent en anglais (structure, pas contenu)
+
+### Hardcoded one-language strings — fixés
+Audit des `title=`, `placeholder=`, `aria-label=` qui étaient en une seule langue (cassés dans l'autre) :
+
+| Fichier | Avant | Après |
+|---|---|---|
+| `AgentCard.jsx` | "Click to change photo" | `lang === 'fr' ? 'Cliquer pour changer la photo' : 'Click to change photo'` |
+| `AgentCard.jsx` | "Click to rename" | `lang === 'fr' ? 'Cliquer pour renommer' : 'Click to rename'` |
+| `MessageBubble.jsx` | "Réactions" / "Show reactions" | Both langs ternary |
+| `MessageBubble.jsx` | "Copier le contenu formaté" | Ternary |
+| `MessageBubble.jsx` | "Click to open" | Ternary |
+| `ChatScreen.jsx` | "Désépingler" | `lang === 'fr' ? 'Désépingler' : 'Unpin'` |
+| `DashboardScreen.jsx` | "Cliquer pour modifier" | LocalStorage-driven (EditableNumber sans prop lang) |
+| `FocusTimer.jsx` | "Précise ce que tu fais…" | Ternary |
+| `FocusTimer.jsx` | "Optionnel — Entrée pour passer" | Ternary |
+
+### Scope NOT done (deferred)
+- **425 inline `lang === 'fr' ? ... : ...` ternaries** dans les composants — ces strings sont déjà bilingues fonctionnellement, juste pas centralisées dans le dict. Conversion mécanique vers `t('key')` à faire en passe séparée. Aucun bug visible — uniquement de la dette de centralisation.
+- **DailyCheckIn.jsx** — utilise un mini-dict local (`fr: {...}, en: {...}` inline). Fonctionnel, pas migré pour l'instant.
+- **ProspectsScreen** — quelques placeholders FR-only restent ("Ex : Prix trop élevé...", "Confirmer les infos avant de contacter") — niche, faible visibilité.
+
+### Backward compat
+Tous les call-sites existants (`import { t } from '../i18n.js'`, `import { detectDefaultLang } from '../i18n.js'`) continuent de fonctionner sans changement — `src/i18n.js` est devenu un shim qui ré-exporte depuis `./i18n/index.js`.
+
+### Comportement utilisateur
+- Toggle FR/EN dans le header → application instantanée (déjà le cas avant) + persistance dans userProfile au lieu de qg_lang_v1
+- Ouverture de l'app sur autre device : si Supabase est connecté, la langue préférée est récupérée du cloud
+- Agents : zéro mélange FR/EN dans les réponses, peu importe le contexte
+- Tooltips et placeholders fixés s'adaptent à la langue active
+
+### Fichiers créés
+- `src/i18n/translations.js` — dict pur (extrait de l'ancien i18n.js)
+- `src/i18n/index.js` — `t()`, `useTranslation()`, `LanguageContext`, `LanguageProvider`, `detectDefaultLang()`
+
+### Fichiers modifiés
+- `src/i18n.js` — devient un 1-liner shim
+- `src/utils/userProfile.js` — `language` ajouté au schema
+- `src/lib/sync.js` — `syncUserProfile` + `fetchUserProfile` étendus avec `language`
+- `src/App.jsx` — useEffect [lang] miroir vers userProfile, cloud reconciliation merge `language`
+- `src/prompts.js` — `getLangInstruction` durci en LANGUAGE LOCK multi-règles
+- `src/components/AgentCard.jsx`, `MessageBubble.jsx`, `ChatScreen.jsx`, `DashboardScreen.jsx`, `FocusTimer.jsx` — fix attributes hardcodés une seule langue
+
+---
+
 ### Added — Flow de session équilibré (momentum infaillible)
 Refonte du flow conversationnel pour créer un arc structuré chaque session : initiative agent dès l'ouverture, une question par message, chips qui s'effacent à mesure que l'utilisateur mature, détection de dérive, clôture infaillible avec action 24-48h.
 

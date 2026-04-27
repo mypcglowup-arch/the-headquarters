@@ -234,6 +234,7 @@ export async function syncUserProfile(profile) {
       sector:        profile?.sector || null,
       sector_custom: profile?.sectorCustom || null,
       audience:      profile?.audience || null,
+      language:      profile?.language || null,
       updated_at:    new Date().toISOString(),
     }, { onConflict: 'id' });
   } catch (e) {
@@ -246,7 +247,7 @@ export async function fetchUserProfile() {
   try {
     const { data, error } = await supabase
       .from('user_profile')
-      .select('id, name, role, annual_goal, sector, sector_custom, audience, created_at')
+      .select('id, name, role, annual_goal, sector, sector_custom, audience, language, created_at')
       .eq('id', 'samuel')
       .maybeSingle();
     if (error) throw error;
@@ -258,6 +259,7 @@ export async function fetchUserProfile() {
       sector:       data.sector || null,
       sectorCustom: data.sector_custom || '',
       audience:     data.audience || null,
+      language:     data.language || null,
       createdAt:    data.created_at || null,
     };
   } catch (e) {
