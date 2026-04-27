@@ -378,6 +378,12 @@ EMAIL_INJECT_KEYWORDS → inject emails non lus dans combinedContext (passif)
 
 ---
 
+## DESIGN RULES
+
+Magic 21st.dev génère les composants. UI/UX Pro Max valide et ajuste après chaque génération. UI/UX Pro Max a toujours priorité sur Magic en cas de conflit.
+
+---
+
 ## DESIGN SYSTEM
 
 ### Couleurs principales
