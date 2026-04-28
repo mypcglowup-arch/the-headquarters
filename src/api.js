@@ -4054,7 +4054,8 @@ export async function runSession(userInput, conversationHistory, mode, deepMode,
   }
 
   // Call lead agent (streaming if callbacks provided)
-  const leadSystem = BASE_CONTEXT + langInstruction + calendarSuffix + dataSuffix + emotionalSuffix + sessionMemorySuffix + matSuffix + '\n\n' + buildAgentPrompt(routing.lead) + modeSuffix + continuationSuffix;
+  const sessionCount = parseInt(localStorage.getItem('qg_session_count_v1'), 10) || 0;
+  const leadSystem = BASE_CONTEXT + langInstruction + calendarSuffix + dataSuffix + emotionalSuffix + sessionMemorySuffix + matSuffix + '\n\n' + buildAgentPrompt(routing.lead, sessionCount) + modeSuffix + continuationSuffix;
   const leadResponse = await callLead(routing.lead, leadSystem, leadMessages, 1000, attachment);
 
   const responses = [{ agent: routing.lead, content: leadResponse }];

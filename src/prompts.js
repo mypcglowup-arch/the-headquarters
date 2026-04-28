@@ -542,6 +542,16 @@ export const AGENT_CONFIG = {
   },
 };
 
+// ─── Discovery questions (sessions 1-3) — one signature question per agent ──
+export const DISCOVERY_PROMPTS = {
+  HORMOZI: "T'as une offre avec un prix fixe en ce moment, ou t'es encore en train de négocier au cas par cas ?",
+  CARDONE: "T'es en mode chasse active ou t'attends que les prospects viennent à toi ?",
+  ROBBINS: "Qu'est-ce qui te bloque le plus là — le savoir ou le faire ?",
+  GARYV: "Est-ce que quelqu'un qui te cherche sur Google trouve quelque chose qui te représente vraiment ?",
+  NAVAL: "T'as quelque chose dans ton business qui génère de la valeur même quand tu dors, ou tout dépend encore de toi ?",
+  VOSS: "T'as des conversations actives avec des prospects là, ou le pipeline est silencieux ?",
+};
+
 // Auto-resolves based on COMMERCIAL_MODE — flip the toggle above to switch
 export const DEFAULT_AGENT_NAMES = Object.fromEntries(
   Object.entries(AGENT_CONFIG).map(([key, cfg]) => [
@@ -919,10 +929,24 @@ const AGENT_FORMAT_RULES = {
   SYNTHESIZER:`FORMAT SPÉCIFIQUE : Max 15 mots. Toujours. Un verbe. Une action. Une deadline.`,
 };
 
-export function buildAgentPrompt(agentKey) {
+export function buildAgentPrompt(agentKey, sessionCount = null) {
   const base     = AGENT_PROMPTS[agentKey] || '';
   const agentFmt = AGENT_FORMAT_RULES[agentKey] || '';
-  return `${base}\n\n${GLOBAL_FORMAT_BLOCK}${agentFmt ? '\n\n' + agentFmt : ''}`;
+
+  const discoveryQuestion = DISCOVERY_PROMPTS[agentKey];
+  const inDiscovery = sessionCount !== null && sessionCount < 3 && discoveryQuestion;
+  const discoveryBlock = inDiscovery
+    ? `DISCOVERY MODE (session ${sessionCount + 1}/3) :
+Tu n'as pas encore de profil complet sur cet utilisateur.
+AVANT de donner un conseil, pose UNE seule question dans ta voix pour mieux le connaître.
+Utilise exactement cette question : "${discoveryQuestion}"
+Après sa réponse, donne ton conseil basé sur ce qu'il vient de dire.
+Ne pose jamais plus d'une question par message.
+
+`
+    : '';
+
+  return `${discoveryBlock}${base}\n\n${GLOBAL_FORMAT_BLOCK}${agentFmt ? '\n\n' + agentFmt : ''}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
