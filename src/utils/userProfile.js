@@ -10,6 +10,8 @@
  */
 
 import { getSector } from '../data/sectors.js';
+import { computePulseScore } from './pulseScore.js';
+import { loadWins }          from './wins.js';
 
 const LS_PROFILE = 'qg_user_profile_v1';
 
@@ -75,6 +77,37 @@ export function buildUserContext(profile, lang = 'fr') {
   };
 }
 
+function daysSinceLastWin() {
+  const wins = loadWins();
+  const last = wins[0]?.date;
+  if (!last) return null;
+  return Math.floor((Date.now() - new Date(last).getTime()) / 86400000);
+}
+
+function buildLiveContext() {
+  if (typeof window === 'undefined' || !window.localStorage) return '';
+  try {
+    const dashboard = JSON.parse(localStorage.getItem('qg_dashboard_v1') || '{}');
+    const streak    = JSON.parse(localStorage.getItem('qg_streak_v1') || '{}').count || 0;
+    const checkIn   = JSON.parse(localStorage.getItem('qg_checkin_today') || 'null');
+    const sessionCount = Number(localStorage.getItem('qg_session_count_v1') || 1);
+
+    let momentum = 'unknown';
+    try {
+      const pulse = computePulseScore(dashboard, streak, checkIn);
+      momentum = pulse?.overall ?? 'unknown';
+    } catch {}
+
+    const p = dashboard.pipeline || {};
+    const activeDeals = (p.contacted || 0) + (p.replied || 0) + (p.demo || 0);
+    const dslw = daysSinceLastWin();
+
+    return `momentum: ${momentum} | pipeline: ${activeDeals} active deals | days_since_last_win: ${dslw ?? 'unknown'} | emotional_state: unknown | avoided_topics: none detected | session_arc: unknown | session_count: ${sessionCount}`;
+  } catch {
+    return 'momentum: unknown | pipeline: 0 active deals | days_since_last_win: unknown | emotional_state: unknown | avoided_topics: none detected | session_arc: unknown | session_count: 1';
+  }
+}
+
 /**
  * Replace {name} / {role} / {annualGoal} tokens in a prompt string at runtime.
  * Use this in api.js right before sending the prompt to Anthropic.
@@ -103,7 +136,8 @@ export function personalize(promptString, ctx) {
     .replace(/\{role\}/g, role)
     .replace(/\{annualGoal\}/g, annualGoal)
     .replace(/\{sector\}/g, sectorLabel)
-    .replace(/\{audience\}/g, audience);
+    .replace(/\{audience\}/g, audience)
+    .replace(/\{liveContext\}/g, buildLiveContext());
 }
 
 /**
