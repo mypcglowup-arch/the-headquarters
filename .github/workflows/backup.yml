@@ -1,0 +1,115 @@
+name: Supabase Daily Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install @supabase/supabase-js@2
+
+      - name: Export Supabase tables to JSON
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          node <<'EOF'
+          const { createClient } = require('@supabase/supabase-js');
+          const fs = require('fs');
+          const path = require('path');
+
+          const url = process.env.SUPABASE_URL;
+          const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+          if (!url || !key) {
+            console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY secret');
+            process.exit(1);
+          }
+
+          const supabase = createClient(url, key, {
+            auth: { persistSession: false, autoRefreshToken: false }
+          });
+
+          const TABLES = [
+            'victories',
+            'sessions_history',
+            'user_profile',
+            'expenses',
+            'monthly_revenue',
+            'mem0_cache',
+            'situation_favorites',
+            'training_sessions'
+          ];
+
+          const date = new Date().toISOString().slice(0, 10);
+          const dir = path.join('backups', date);
+          fs.mkdirSync(dir, { recursive: true });
+
+          (async () => {
+            const summary = { date, tables: {} };
+            let hadError = false;
+
+            for (const table of TABLES) {
+              try {
+                const { data, error } = await supabase
+                  .from(table)
+                  .select('*');
+
+                if (error) {
+                  console.error(`[${table}] error:`, error.message);
+                  summary.tables[table] = { ok: false, error: error.message };
+                  hadError = true;
+                  continue;
+                }
+
+                const file = path.join(dir, `${table}.json`);
+                fs.writeFileSync(file, JSON.stringify(data, null, 2));
+                console.log(`[${table}] ${data.length} rows -> ${file}`);
+                summary.tables[table] = { ok: true, rows: data.length };
+              } catch (e) {
+                console.error(`[${table}] exception:`, e.message);
+                summary.tables[table] = { ok: false, error: e.message };
+                hadError = true;
+              }
+            }
+
+            fs.writeFileSync(
+              path.join(dir, '_summary.json'),
+              JSON.stringify(summary, null, 2)
+            );
+
+            if (hadError) {
+              console.error('One or more tables failed to export');
+              process.exit(1);
+            }
+          })();
+          EOF
+
+      - name: Commit and push backup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          DATE=$(date -u +%Y-%m-%d)
+          git add backups/
+          if git diff --cached --quiet; then
+            echo "No backup changes to commit"
+            exit 0
+          fi
+          git commit -m "chore(backup): Supabase snapshot ${DATE}"
+          git push
