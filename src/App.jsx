@@ -817,6 +817,7 @@ export default function App() {
           const history = loadHistory();
           const memories = await fetchMemoriesForRecap();
           if (briefingLockedRef.current) return;
+          if (!memories || memories.length === 0) return;
 
           const prospects = loadLS('hq_prospects', []);
           const patterns = await detectMeetingPatterns({
@@ -839,8 +840,10 @@ export default function App() {
             lang,
           });
           if (briefingLockedRef.current || !opening) return;
+          // Lock immediately to prevent race with FilRouge / SessionOpening
+          briefingLockedRef.current = true;
 
-          // Commit: push agent message + mark pattern fired + block briefing
+          // Commit: push agent message + mark pattern fired
           setMessages((prev) => [...prev, {
             id:        `meeting-opening-${thisSessionId}`,
             type:      'agent',
@@ -852,8 +855,6 @@ export default function App() {
           }]);
           markPatternFired(chosen.type, interactionCount);
           meetingRoomFired = true;
-          // Also trip the briefingLock so the briefing flow (below) skips
-          briefingLockedRef.current = true;
           console.log('[MeetingRoom] fired:', chosen.agent, 'for pattern', chosen.type);
         } catch (err) {
           console.warn('[MeetingRoom] failed:', err.message);
@@ -885,6 +886,7 @@ export default function App() {
             const lastSession = history && history.length > 0 ? history[0] : null;
             const memories = isMem0Enabled() ? await fetchMemoriesForRecap() : [];
             if (briefingLockedRef.current) return;
+            if (!memories || memories.length === 0) return;
 
             const fil = await generateFilRouge({
               lastSession,
@@ -892,6 +894,8 @@ export default function App() {
               lang,
             });
             if (briefingLockedRef.current || !fil) return;
+            // Lock immediately to prevent race with MeetingRoom / SessionOpening
+            briefingLockedRef.current = true;
 
             setMessages((prev) => [...prev, {
               id:        `fil-rouge-${thisSessionId}`,
@@ -917,6 +921,10 @@ export default function App() {
     setTimeout(() => {
       (async () => {
         if (briefingLockedRef.current) return;
+        if (sessionCount <= 1) return;
+        const memories = isMem0Enabled() ? await fetchMemoriesForRecap() : [];
+        if (briefingLockedRef.current) return;
+        if (!memories || memories.length === 0) return;
         // Check that the only thing in the chat is the welcome system message
         const currentMsgs = (() => { try { return messagesAtCheck; } catch { return []; } })();
         // Use a setter to read fresh state without external scope leak
@@ -953,6 +961,7 @@ export default function App() {
             return prev;
           });
           if (!stillCanFire) return;
+          briefingLockedRef.current = true;
           setMessages((prev) => [...prev, {
             id:        `session-opening-${thisSessionId}-${opening.agent}`,
             type:      'agent',
