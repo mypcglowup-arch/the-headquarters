@@ -5,8 +5,12 @@
  * All calls are fire-and-forget with silent fallback.
  */
 
-const USER_ID = 'samuel';
-const APP_ID  = 'the-headquarters';
+import { getUserId } from '../utils/userId.js';
+
+// Per-device unique ID so each tester's memories are isolated. Resolved lazily
+// at first call site (not at module load) so the value reflects whatever is
+// currently in localStorage even if it changed between hot-reloads.
+const APP_ID = 'the-headquarters';
 
 // Routes through Vite's built-in dev proxy (vite.config.js) which injects the API key server-side.
 // /api/mem0/add    → https://api.mem0.ai/v1/memories/
@@ -58,7 +62,7 @@ export async function searchMemories(userInput) {
 
   const results = await callProxy('search', {
     query:   userInput.trim(),
-    user_id: USER_ID,
+    user_id: getUserId(),
     app_id:  APP_ID,
     limit:   5,
   });
@@ -82,7 +86,7 @@ export async function searchMemories(userInput) {
 export async function listAllMemories() {
   if (!isMem0Enabled()) return [];
   try {
-    const params = new URLSearchParams({ user_id: USER_ID, app_id: APP_ID, page: '1', page_size: '100' });
+    const params = new URLSearchParams({ user_id: getUserId(), app_id: APP_ID, page: '1', page_size: '100' });
     const res = await fetch(`${PROXY_PATHS.list}?${params}`, { method: 'GET' });
     if (!res.ok) {
       const text = await res.text();
@@ -127,7 +131,7 @@ export async function addManualMemory(text) {
   if (!isMem0Enabled() || !text?.trim()) return false;
   const result = await callProxy('add', {
     messages: [{ role: 'user', content: text.trim() }],
-    user_id:  USER_ID,
+    user_id:  getUserId(),
     app_id:   APP_ID,
     metadata: { type: 'manual', date: new Date().toISOString() },
   });
@@ -146,7 +150,7 @@ export async function fetchMemoriesForRecap() {
 
   const results = await callProxy('search', {
     query:   "{name}'s recent wins, blockers, decisions, and next moves for his business",
-    user_id: USER_ID,
+    user_id: getUserId(),
     app_id:  APP_ID,
     limit:   8,
   });
@@ -179,7 +183,7 @@ export async function addSessionMemory(messages, consensusLine, summary) {
 
   const result = await callProxy('add', {
     messages: conversation,
-    user_id:  USER_ID,
+    user_id:  getUserId(),
     app_id:   APP_ID,
     metadata: {
       consensus:        consensusLine || null,
@@ -212,7 +216,7 @@ export async function addArchivistMemory(summary) {
 
   const result = await callProxy('add', {
     messages: facts.map((f) => ({ role: 'assistant', content: f })),
-    user_id:  USER_ID,
+    user_id:  getUserId(),
     app_id:   APP_ID,
     metadata: { type: 'archivist_summary', date: new Date().toISOString() },
   });

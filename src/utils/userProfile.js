@@ -4,9 +4,9 @@
  * Source of truth : localStorage `qg_user_profile_v1` (synced to Supabase
  * fire-and-forget via syncUserProfile in lib/sync.js).
  *
- * Used everywhere prompts/PDF/UI need to address the user by name. Replaces
- * the hardcoded "Samuel" everywhere. Mem0 USER_ID stays 'samuel' on purpose
- * (technical partition key — changing it would orphan existing memories).
+ * Used everywhere prompts/PDF/UI need to address the user by name. The
+ * partition key (Supabase row id, Mem0 user_id) is a per-device UUID from
+ * utils/userId.js — each tester gets an isolated workspace.
  */
 
 import { getSector } from '../data/sectors.js';

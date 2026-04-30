@@ -3,6 +3,7 @@
  * localStorage remains the source of truth; Supabase is the cloud backup.
  */
 import { supabase, isSupabaseEnabled } from './supabase.js';
+import { getUserId } from '../utils/userId.js';
 
 // ─── Sessions ─────────────────────────────────────────────────────────────────
 
@@ -219,15 +220,16 @@ export async function fetchSituationFavorites() {
   }
 }
 
-// ─── User profile (single-row, upsert by id='samuel') ──────────────────────
-// `id='samuel'` is the technical partition key — see utils/userProfile.js.
-// The displayed name comes from the `name` column. The 'samuel' id is kept
-// stable across renames so existing rows don't get orphaned.
+// ─── User profile (single-row per device, upsert by id=getUserId()) ────────
+// The technical partition key is the per-device UUID from utils/userId.js,
+// so each tester has an isolated row. Display name comes from `name` column.
+// Renaming the user doesn't change the partition ID, so existing rows stay
+// linked even after a profile reset.
 export async function syncUserProfile(profile) {
   if (!isSupabaseEnabled()) return;
   try {
     await supabase.from('user_profile').upsert({
-      id:               'samuel',
+      id:               getUserId(),
       name:             profile?.name || null,
       role:             profile?.role || null,
       annual_goal:      Number(profile?.annualGoal) || null,
@@ -258,7 +260,7 @@ export async function fetchUserProfile() {
     const { data, error } = await supabase
       .from('user_profile')
       .select('id, name, role, annual_goal, sector, sector_custom, audience, language, stage, experience, strength, challenges, past_failures, coaching_style, primary_agent, sensitive_topics, availability, created_at')
-      .eq('id', 'samuel')
+      .eq('id', getUserId())
       .maybeSingle();
     if (error) throw error;
     if (!data) return null;
@@ -342,7 +344,10 @@ export async function syncCheckIn(data) {
 // the row is overwritten; this is the cross-device source of truth for
 // finances. Granular tables (retainers, one_time_revenues, expenses) remain
 // as append-only ledgers for analytics.
-const DASHBOARD_USER_ID = 'samuel';
+// Resolved at call time (not module load) so each call uses the current
+// localStorage value — handles the rare case where the device's userId is
+// reset mid-session.
+const getDashboardUserId = () => getUserId();
 
 export async function syncDashboardState(dashboard) {
   if (!isSupabaseEnabled() || !dashboard) return;
@@ -356,7 +361,7 @@ export async function syncDashboardState(dashboard) {
       pipeline:         dashboard.pipeline ?? {},
     };
     await supabase.from('dashboard_state').upsert({
-      user_id:    DASHBOARD_USER_ID,
+      user_id:    getDashboardUserId(),
       state,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' });
@@ -371,7 +376,7 @@ export async function fetchDashboardState() {
     const { data, error } = await supabase
       .from('dashboard_state')
       .select('state, updated_at')
-      .eq('user_id', DASHBOARD_USER_ID)
+      .eq('user_id', getDashboardUserId())
       .maybeSingle();
     if (error) {
       console.warn('[Sync] fetchDashboardState error:', error.message);
