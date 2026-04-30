@@ -43,8 +43,14 @@ setInterval(() => {
   }
 }, RATE_LIMIT_WINDOW_MS).unref?.();
 
-// ── Streaming requires the Node.js runtime (default), not Edge ──────────────
-export const config = { runtime: 'nodejs' };
+// Vercel needs an explicit max-duration for streaming LLM calls — the default
+// 10s is too short for full agent responses (especially Opus + thinking).
+// 60s is the Hobby-plan ceiling ; bump to 300s on Pro if you upgrade.
+export const config = {
+  maxDuration: 60,
+  // Increase body parser limit — system prompts + context can be ~200-500KB.
+  api: { bodyParser: { sizeLimit: '4mb' } },
+};
 
 export default async function handler(req, res) {
   // CORS — allow same-origin (the deployed app)
@@ -70,7 +76,11 @@ export default async function handler(req, res) {
   // Server-side API key — never reaches the client. Accept VITE_ prefix as
   // transitional fallback so existing .env files keep working.
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY;
-  if (!apiKey) { res.status(500).json({ error: 'ANTHROPIC_API_KEY not set on server' }); return; }
+  if (!apiKey) {
+    console.error('[api/anthropic] ANTHROPIC_API_KEY missing in server env');
+    res.status(500).json({ error: 'ANTHROPIC_API_KEY not set on server' });
+    return;
+  }
 
   // Forward only the headers Anthropic actually consumes. Strip everything
   // else (cookies, custom client headers) so nothing leaks upstream.
@@ -81,7 +91,18 @@ export default async function handler(req, res) {
   };
   if (req.headers['anthropic-beta']) upstreamHeaders['anthropic-beta'] = req.headers['anthropic-beta'];
 
-  const body     = req.body || {};
+  // Vercel auto-parses JSON bodies into req.body (object). Defensive : if it
+  // arrives as a string (some runtimes), parse it manually.
+  let body = req.body;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); }
+    catch (e) {
+      console.error('[api/anthropic] body parse failed:', e.message);
+      res.status(400).json({ error: 'invalid_json_body', message: e.message });
+      return;
+    }
+  }
+  body = body || {};
   const isStream = body.stream === true;
 
   let upstream;
@@ -92,8 +113,27 @@ export default async function handler(req, res) {
       body:    JSON.stringify(body),
     });
   } catch (e) {
+    console.error('[api/anthropic] upstream fetch failed:', {
+      name:    e?.name,
+      message: e?.message,
+      cause:   e?.cause?.message,
+      stack:   e?.stack,
+    });
     res.status(502).json({ error: 'upstream_unreachable', message: e.message });
     return;
+  }
+
+  // Log non-2xx upstream responses so 401/403/400 surfaces in Vercel logs.
+  if (!upstream.ok) {
+    const errText = await upstream.clone().text().catch(() => '');
+    console.error('[api/anthropic] upstream non-OK:', {
+      status:     upstream.status,
+      statusText: upstream.statusText,
+      bodyPreview: errText.slice(0, 500),
+      model:       body.model,
+      hasSystem:   !!body.system,
+      messageCount: Array.isArray(body.messages) ? body.messages.length : 0,
+    });
   }
 
   res.status(upstream.status);
@@ -105,6 +145,11 @@ export default async function handler(req, res) {
     res.setHeader('Connection',    'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // disables proxy buffering on some runtimes
 
+    // Flush headers immediately so the client opens the stream before chunks
+    // arrive. Without this, Vercel's reverse proxy may buffer the entire
+    // response before sending — defeating SSE.
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
     const reader  = upstream.body.getReader();
     const decoder = new TextDecoder();
     try {
@@ -112,9 +157,12 @@ export default async function handler(req, res) {
         const { done, value } = await reader.read();
         if (done) break;
         res.write(decoder.decode(value, { stream: true }));
+        // Flush after each chunk — needed on some Node runtimes to push bytes
+        // through immediately rather than buffering.
+        if (typeof res.flush === 'function') res.flush();
       }
     } catch (e) {
-      // Best effort — client likely closed the connection. Just end.
+      console.error('[api/anthropic] stream interrupted:', e?.message);
     } finally {
       res.end();
     }
@@ -127,6 +175,7 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
     res.send(text);
   } catch (e) {
+    console.error('[api/anthropic] response read failed:', e?.message);
     res.status(502).json({ error: 'upstream_read_failed', message: e.message });
   }
 }

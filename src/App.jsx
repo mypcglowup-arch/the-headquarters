@@ -2831,6 +2831,8 @@ export default function App() {
         improvementCount={todoCount}
         decisionsCount={decisions.length}
         onShowTour={() => setShowTour(true)}
+        userProfile={userProfile}
+        sessionStarted={sessionStarted}
       />
 
       <main className="flex-1 flex flex-col relative overflow-hidden">
