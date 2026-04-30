@@ -237,11 +237,14 @@ export default function ConversationalOnboarding({ darkMode, lang = 'fr', initia
 
   return (
     <div
-      className="min-h-screen w-full flex items-center justify-center p-2 sm:p-4 animate-modal-backdrop"
+      // Full-bleed on mobile (no padding, no rounded corners) ; centered card
+      // with breathing room on desktop. The inner container takes the whole
+      // viewport height on mobile so the keyboard doesn't push content off.
+      className="min-h-screen w-full flex items-stretch sm:items-center justify-center p-0 sm:p-4 animate-modal-backdrop"
       style={{ background: darkMode ? 'rgba(3,7,18,0.96)' : '#F5F4F0' }}
     >
       <div
-        className="relative w-full max-w-xl h-[96vh] sm:h-[88vh] rounded-2xl flex flex-col animate-modal-in overflow-hidden"
+        className="relative w-full sm:max-w-xl h-[100dvh] sm:h-[88vh] rounded-none sm:rounded-2xl flex flex-col animate-modal-in overflow-hidden"
         style={{
           background: darkMode ? 'rgba(20,20,30,0.97)' : '#ffffff',
           border: darkMode ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(15,23,42,0.08)',

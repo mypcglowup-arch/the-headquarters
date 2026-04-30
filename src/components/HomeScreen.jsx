@@ -266,7 +266,11 @@ export default function HomeScreen({
       {/* ── Session Mode ── */}
       <div className="w-full max-w-3xl" data-tour="session-modes">
         <SectionLabel darkMode={darkMode}>{t('home.sessionMode', lang)}</SectionLabel>
-        <div className="grid grid-cols-3 gap-3">
+        {/* Mobile  : horizontal scroll snap (modes don't fit as 3-col grid). */}
+        {/* Tablet  : 2-col grid (768-1024px) so each card breathes.          */}
+        {/* Desktop : 3-col grid (>1024px) — unchanged.                       */}
+        <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 overflow-x-auto md:overflow-visible snap-x snap-mandatory md:snap-none -mx-4 px-4 md:mx-0 md:px-0 hide-scrollbar"
+             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {SESSION_MODE_KEYS.map((key, idx) => {
             // Focus card stays highlighted when debate sub-mode is active
             const selected   = sessionMode === key || (key === 'focus' && sessionMode === 'debate');
@@ -277,7 +281,11 @@ export default function HomeScreen({
             return (
               <div
                 key={key}
-                className="group"
+                // shrink-0 + min-w-[160px] keeps cards their full size in the
+                // mobile horizontal scroll. snap-start aligns each card to the
+                // left edge as the user swipes. md: resets these so the desktop
+                // grid behaves unchanged.
+                className="group shrink-0 min-w-[160px] snap-start md:shrink md:min-w-0 md:snap-align-none"
                 style={{ position: 'relative' }}
               >
                 {/* ── Card button ── */}

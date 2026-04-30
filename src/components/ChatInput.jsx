@@ -236,7 +236,13 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
   const canSend = (text.trim() || attachment) && !isLoading && !disabled;
 
   return (
-    <div className={`border-t ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-[#F5F4F0] border-[#E8E6E0]'}`}>
+    // sticky bottom + safe-area padding on mobile so the input stays above the
+    // virtual keyboard and the iOS home indicator. Desktop : static (parent
+    // already pins it via flex layout).
+    <div
+      className={`border-t sticky bottom-0 md:static z-10 ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-[#F5F4F0] border-[#E8E6E0]'}`}
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
 
       {/* Quick actions bar */}
       {showActions && (

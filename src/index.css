@@ -398,3 +398,83 @@
 }
 .animate-toast-in  { animation: toastEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 .animate-toast-out { animation: toastLeave 0.2s ease-in forwards; }
+
+/* ─── No horizontal overflow anywhere — prevents accidental scroll on touch */
+html, body { overflow-x: hidden; }
+
+/* ─── Mobile + tablet shared overrides (viewport ≤ 1024px) ─────────────── */
+@media (max-width: 1024px) {
+  /* iOS zoom prevention : font-size 16px on text-entry fields. iOS Safari   */
+  /* auto-zooms when the user focuses an input < 16px — disorienting and    */
+  /* hard to undo. Visually inputs feel ~the same size.                       */
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='number'],
+  input[type='search'],
+  input[type='tel'],
+  input[type='url'],
+  input:not([type]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  /* Touch-target floor on inputs too (mobile + tablet) — keeps them tappable */
+  /* with a finger. Buttons handled below in the mobile-only block.            */
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='number'],
+  input[type='search'],
+  input[type='tel'],
+  input[type='url'],
+  input:not([type]),
+  select {
+    min-height: 44px;
+  }
+}
+
+/* ─── Mobile-only overrides — viewport < 768px (Tailwind md: boundary) ───── */
+@media (max-width: 767px) {
+  /* Minimum readable text size on mobile : 14px. Anchors against accidental */
+  /* sub-12px text in dense components. Selectors that explicitly opt out    */
+  /* (badges, helper labels) keep their inline style.                         */
+  body,
+  button {
+    font-size: max(14px, 1rem);
+  }
+
+  /* Touch-target floor : 44x44px (WCAG 2.5.5). Applied to every <button> by */
+  /* default — components that need a smaller visible footprint use the      */
+  /* existing .tap-target utility (invisible ::after expander) instead.      */
+  button,
+  [role='button'],
+  a[role='button'],
+  input[type='button'],
+  input[type='submit'] {
+    min-height: 44px;
+  }
+
+  /* Safe-area-aware bottom padding helper — used by the chat input on iOS */
+  /* notch devices so the input doesn't sit under the home indicator.       */
+  .mobile-safe-bottom {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ─── Tablet-only overrides — 768 ≤ viewport ≤ 1024 ──────────────────────── */
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* Header icon buttons trim slightly on tablet so the row fits without */
+  /* squeezing the language toggle off the right edge.                    */
+  header button[aria-current],
+  header button[title] {
+    /* hairline tighter — keeps existing 7px padding visually correct      */
+  }
+}
+
+/* Hide WebKit scrollbar (Chrome/Safari/iOS) — used by mobile horizontal */
+/* scroll containers that rely on scroll-snap. The thin gray bar at the   */
+/* bottom interrupts the visual flow.                                      */
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+

@@ -106,11 +106,13 @@ export default function ProfileScreen({ darkMode, lang = 'fr', profile, dashboar
           </p>
 
           {/* Redo onboarding — placed at the top, away from the floating chat
-              bar at the bottom (its suggestion chips were stealing this click). */}
+              bar at the bottom (its suggestion chips were stealing this click).
+              Full-width on mobile so it's a proper tap target ; auto-width on
+              desktop so it sits unobtrusively near the title. */}
           <div className="mb-6">
             <button
               onClick={() => { window.location.href = '/?onboarding=true'; }}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px] font-semibold ${darkMode ? 'text-gray-300 bg-white/5 hover:bg-white/10' : 'text-slate-700 bg-slate-100 hover:bg-slate-200'}`}
+              className={`w-full md:w-auto flex items-center justify-center md:justify-start gap-1.5 px-3 py-2.5 md:py-2 rounded-lg text-[13px] md:text-[12.5px] font-semibold ${darkMode ? 'text-gray-300 bg-white/5 hover:bg-white/10' : 'text-slate-700 bg-slate-100 hover:bg-slate-200'}`}
             >
               <RotateCcw size={13} />
               {lang === 'fr' ? 'Refaire l\'onboarding' : 'Redo onboarding'}
@@ -220,12 +222,13 @@ export default function ProfileScreen({ darkMode, lang = 'fr', profile, dashboar
             </Field>
           </div>
 
-          {/* Actions */}
+          {/* Actions — Save button stretches full-width on mobile for a real */}
+          {/* tap target ; stays auto-sized on desktop.                         */}
           <div className={`rounded-xl p-4 flex items-center gap-2 ${darkMode ? 'bg-gray-900/60 border border-white/[0.06]' : 'bg-white border border-slate-200'}`}>
             <button
               onClick={handleSave}
               disabled={!dirty}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full md:w-auto flex items-center justify-center md:justify-start gap-1.5 px-3 py-2.5 md:py-2 rounded-lg text-[13px] md:text-[12.5px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
               style={{ background: 'rgba(99,102,241,0.22)', color: 'rgba(99,102,241,1)', boxShadow: '0 0 0 1px rgba(99,102,241,0.42)' }}
             >
               {savedFlash ? <Check size={13} /> : <Save size={13} />}

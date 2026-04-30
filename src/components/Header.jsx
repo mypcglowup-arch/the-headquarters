@@ -1,5 +1,7 @@
-import { Sun, Moon, Zap, Brain, Home, Square, BookOpen, Compass, Map, BarChart2, Users, Check, AlertCircle, Bookmark, Mail, Volume2, VolumeX, Wrench, Library, Trophy, User } from 'lucide-react';
+import { Sun, Moon, Zap, Brain, Home, Square, BookOpen, Compass, Map, BarChart2, Users, Check, AlertCircle, Bookmark, Mail, Volume2, VolumeX, Wrench, Library, Trophy, User, Menu, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 import { t } from '../i18n.js';
+import { useIsMobile } from '../hooks/useIsMobile.js';
 
 export default function Header({
   darkMode, onToggleDark,
@@ -14,6 +16,25 @@ export default function Header({
   improvementCount, decisionsCount,
   onShowTour,
 }) {
+  const isMobile = useIsMobile();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  // Close mobile menu when clicking outside or when leaving mobile viewport
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClick = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    const onKey   = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    window.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onClick); window.removeEventListener('keydown', onKey); };
+  }, [menuOpen]);
+  useEffect(() => { if (!isMobile) setMenuOpen(false); }, [isMobile]);
+
+  // Wrap a navigation handler so the menu auto-closes after the click. Lets
+  // the user feel the action without a manual "close menu" step.
+  const wrapClose = (fn) => () => { setMenuOpen(false); fn?.(); };
+
   const iconBtn = (active) => ({
     padding: '7px',
     borderRadius: '10px',
@@ -26,7 +47,7 @@ export default function Header({
 
   return (
     <header
-      className="flex items-center justify-between px-5 py-2.5"
+      className="relative flex items-center justify-between px-5 py-2.5"
       style={{
         background: darkMode
           ? 'rgba(8, 12, 20, 0.85)'
@@ -99,12 +120,12 @@ export default function Header({
       {/* Controls */}
       <div className="flex items-center gap-1.5">
 
-        {/* Thinking Mode */}
+        {/* Thinking Mode — hidden on mobile (in hamburger drawer) */}
         <button
           data-tour="think-mode"
           onClick={onToggleThinking}
           title={t(thinkingMode ? 'header.think.on' : 'header.think.off', lang)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all"
           style={{
             background: thinkingMode ? 'rgba(6,182,212,0.15)' : 'rgba(148,163,184,0.07)',
             border: `1px solid ${thinkingMode ? 'rgba(6,182,212,0.4)' : 'rgba(148,163,184,0.1)'}`,
@@ -142,7 +163,7 @@ export default function Header({
               : (lang === 'fr' ? 'Mode vocal OFF' : 'Voice mode OFF')}
             aria-label="Toggle voice mode"
             aria-pressed={voiceMode}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all"
             style={{
               background: voiceMode ? 'rgba(99,102,241,0.15)' : 'rgba(148,163,184,0.07)',
               border: `1px solid ${voiceMode ? 'rgba(99,102,241,0.4)' : 'rgba(148,163,184,0.1)'}`,
@@ -172,6 +193,8 @@ export default function Header({
           </button>
         )}
 
+        {/* Desktop-only secondary controls — moved into hamburger drawer on mobile */}
+        <div className="hidden md:flex items-center gap-1.5">
         {/* Icon buttons */}
         {[
           ...(onGoEmail ? [{
@@ -262,7 +285,123 @@ export default function Header({
         >
           {darkMode ? <Sun size={15} /> : <Moon size={15} />}
         </button>
+        </div>
+        {/* ── Mobile hamburger — opens a drawer with everything above ── */}
+        <button
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={menuOpen}
+          className="md:hidden flex items-center justify-center"
+          style={{ ...iconBtn(menuOpen), padding: '8px' }}
+        >
+          {menuOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
       </div>
+
+      {/* ── Mobile drawer — slides down under the header on toggle ── */}
+      {isMobile && menuOpen && (
+        <div
+          ref={menuRef}
+          className="absolute left-0 right-0 top-full z-50 animate-screen-in"
+          style={{
+            background: darkMode ? 'rgba(8,12,20,0.98)' : '#F5F4F0',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            borderBottom: darkMode ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.08)',
+            boxShadow: '0 12px 32px -12px rgba(0,0,0,0.45)',
+          }}
+        >
+          <div className="px-4 py-3 flex flex-col gap-1.5 max-h-[80vh] overflow-y-auto">
+            {/* Toggles row */}
+            <div className="flex flex-wrap gap-1.5 mb-1">
+              <button
+                onClick={wrapClose(onToggleThinking)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium"
+                style={{
+                  background: thinkingMode ? 'rgba(6,182,212,0.15)' : 'rgba(148,163,184,0.07)',
+                  border: `1px solid ${thinkingMode ? 'rgba(6,182,212,0.4)' : 'rgba(148,163,184,0.1)'}`,
+                  color: thinkingMode ? '#22d3ee' : 'rgba(148,163,184,0.85)',
+                }}
+              >
+                <Brain size={12} /><span>{t('header.think', lang)}</span>
+              </button>
+              {onToggleVoice && (
+                <button
+                  onClick={wrapClose(onToggleVoice)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium"
+                  style={{
+                    background: voiceMode ? 'rgba(99,102,241,0.15)' : 'rgba(148,163,184,0.07)',
+                    border: `1px solid ${voiceMode ? 'rgba(99,102,241,0.4)' : 'rgba(148,163,184,0.1)'}`,
+                    color: voiceMode ? '#a5b4fc' : 'rgba(148,163,184,0.85)',
+                  }}
+                >
+                  {voiceMode ? <Volume2 size={12} /> : <VolumeX size={12} />}
+                  <span>{lang === 'fr' ? 'Voix' : 'Voice'}</span>
+                </button>
+              )}
+              <button
+                onClick={wrapClose(onToggleLang)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium"
+                style={{
+                  background: 'rgba(148,163,184,0.07)',
+                  border: '1px solid rgba(148,163,184,0.12)',
+                  color: 'rgba(148,163,184,0.85)',
+                }}
+              >
+                <span>{lang === 'fr' ? '🇫🇷 FR' : '🇺🇸 EN'}</span>
+              </button>
+              <button
+                onClick={wrapClose(onToggleDark)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium"
+                style={{
+                  background: 'rgba(148,163,184,0.07)',
+                  border: '1px solid rgba(148,163,184,0.12)',
+                  color: 'rgba(148,163,184,0.85)',
+                }}
+              >
+                {darkMode ? <Sun size={12} /> : <Moon size={12} />}
+                <span>{darkMode ? (lang === 'fr' ? 'Clair' : 'Light') : (lang === 'fr' ? 'Sombre' : 'Dark')}</span>
+              </button>
+            </div>
+
+            {/* Navigation rows — full-width tappable rows */}
+            {[
+              ...(onGoEmail ? [{ onClick: onGoEmail, label: lang === 'fr' ? 'Emails' : 'Email', icon: <Mail size={16} />, badge: urgentEmailCount > 0 ? (urgentEmailCount > 9 ? '9+' : urgentEmailCount) : null }] : []),
+              { onClick: onGoDashboard, label: t('header.dashboard', lang), icon: <BarChart2 size={16} />, active: screen === 'dashboard' },
+              { onClick: onGoProspects, label: 'Prospects',                  icon: <Users size={16} />,    active: screen === 'prospects' },
+              { onClick: onGoDecisions, label: t('header.decisions', lang), icon: <Compass size={16} />, active: screen === 'decisions', badge: decisionsCount > 0 ? (decisionsCount > 9 ? '9+' : decisionsCount) : null },
+              { onClick: onGoJournal,   label: t('header.journal', lang),   icon: <BookOpen size={16} />, active: screen === 'journal',   badge: improvementCount > 0 ? (improvementCount > 9 ? '9+' : improvementCount) : null },
+              { onClick: onGoLibrary,   label: lang === 'fr' ? 'Bibliothèque' : 'Library', icon: <Bookmark size={16} />, active: screen === 'library' },
+              ...(onGoSituations ? [{ onClick: onGoSituations, label: lang === 'fr' ? 'Situations' : 'Situations', icon: <Library size={16} />, active: screen === 'situations' }] : []),
+              ...(onGoVictories  ? [{ onClick: onGoVictories,  label: lang === 'fr' ? 'Victoires' : 'Victories',   icon: <Trophy size={16} />,  active: screen === 'victories'  }] : []),
+              ...(onGoProfile    ? [{ onClick: onGoProfile,    label: lang === 'fr' ? 'Profil'    : 'Profile',     icon: <User size={16} />,    active: screen === 'profile'    }] : []),
+              ...(onGoWorkflow   ? [{ onClick: onGoWorkflow,   label: lang === 'fr' ? 'Workflow Builder' : 'Workflow Builder', icon: <Wrench size={16} />, active: screen === 'workflow' }] : []),
+              ...(screen === 'chat' ? [{ onClick: onGoHome, label: t('header.home', lang), icon: <Home size={16} /> }] : []),
+              ...(onShowTour ? [{ onClick: onShowTour, label: lang === 'fr' ? 'Visite guidée' : 'Guided tour', icon: <Map size={16} /> }] : []),
+            ].map(({ onClick, label, icon, active, badge }) => (
+              <button
+                key={label}
+                onClick={wrapClose(onClick)}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[14px] font-medium text-left"
+                style={{
+                  background: active ? 'rgba(99,102,241,0.18)' : 'transparent',
+                  color:      active ? 'rgb(199,210,254)'      : (darkMode ? 'rgba(226,232,240,0.85)' : 'rgba(15,23,42,0.85)'),
+                  boxShadow:  active ? '0 0 0 1px rgba(99,102,241,0.32)' : 'none',
+                }}
+              >
+                <span style={{ color: active ? 'inherit' : 'rgba(148,163,184,0.75)' }}>{icon}</span>
+                <span className="flex-1">{label}</span>
+                {badge && (
+                  <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-white text-[10px] font-bold"
+                        style={{ background: 'rgba(99,102,241,0.85)' }}>
+                    {badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </header>
   );
 }
