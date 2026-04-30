@@ -43,6 +43,7 @@ import VictoriesScreen from './components/VictoriesScreen.jsx';
 import { loadVictories, saveVictoriesCache, computeROI, formatVictoriesContext } from './utils/victories.js';
 import OnboardingModal, { OnboardingNudge } from './components/OnboardingModal.jsx';
 import ConversationalOnboarding from './components/ConversationalOnboarding.jsx';
+import PasswordGate from './components/PasswordGate.jsx';
 import ProfileScreen from './components/ProfileScreen.jsx';
 import { loadUserProfile, saveUserProfile, hasOnboarded, formatUserContext } from './utils/userProfile.js';
 import { formatSectorContext, getPipelineStages } from './data/sectors.js';
@@ -275,6 +276,16 @@ export default function App() {
       throw new Error('Redirecting to / for onboarding redo');
     }
   }
+
+  // ── Password gate ─────────────────────────────────────────────────────────
+  // Friction layer to keep casual visitors out. NOT real security : password
+  // lives in the bundle. See PasswordGate.jsx for caveats. Synchronous read so
+  // the gate paints on first render before anything else can mount.
+  const [accessGranted, setAccessGranted] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    try { return localStorage.getItem('qg_access_granted') === '1'; }
+    catch { return true; } // privacy-mode / quota error → don't lock the user out
+  });
 
   const [screen, setScreen]         = useState('home');
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -2754,6 +2765,15 @@ export default function App() {
   }
 
   const todoCount = improvementJournal.filter((i) => i.status !== 'done').length;
+
+  // Password gate takes precedence over everything else. While locked, the
+  // entire app — including onboarding, chat, sessions, auto-fires — is
+  // unmounted, so no agent calls or Supabase sync can leak out without a
+  // password. Once unlocked, the localStorage flag persists and this branch
+  // is skipped on subsequent loads.
+  if (!accessGranted) {
+    return <PasswordGate onUnlock={() => setAccessGranted(true)} />;
+  }
 
   // Onboarding takes the whole screen — no overlay, no z-index. When showOnboarding
   // is true, ConversationalOnboarding is the ONLY thing rendered, exactly like the
