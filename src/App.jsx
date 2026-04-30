@@ -92,6 +92,40 @@ function BackToChatBar({ darkMode, onBack }) {
   );
 }
 
+// Detects natural-language requests to relaunch the conversational onboarding,
+// in FR or EN. Returns true for explicit slash forms AND verb+noun variants like
+// "refais l'onboarding", "recommence le onboarding", "redo onboarding stp",
+// "lance l'onboarding", etc. Used to intercept BEFORE any agent flow so the
+// model never sees these messages and answers them in the chat.
+function isRedoOnboardingCommand(text) {
+  if (!text || typeof text !== 'string') return false;
+  // Normalize: lowercase, smart-quotes → straight, collapse whitespace, strip trailing punctuation
+  const raw = text
+    .toLowerCase()
+    .replace(/[‘’ʼ]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[?!.…]+$/, '');
+  if (!raw) return false;
+
+  // Slash / explicit forms
+  if (raw === '/onboarding' || raw === '/refaire-onboarding' || raw === '/redo-onboarding') return true;
+
+  // Must mention "onboarding" as a near-standalone word
+  if (!/\bonboarding\b/.test(raw)) return false;
+  // Keep it short — commands are short, paragraphs that happen to contain "onboarding" aren't
+  if (raw.length > 80) return false;
+
+  // Bare phrasings: "onboarding", "l'onboarding", "le onboarding", "the onboarding"
+  if (/^(l'|le |la |the |mon |my )?onboarding$/.test(raw)) return true;
+
+  // Verb + (optional article) + "onboarding" as a tight phrase. Both FR and EN.
+  // The adjacency requirement prevents false-positives like "I have an open
+  // question about the onboarding" — the verb must directly target the noun.
+  const cmdRe = /\b(refaire|refais|refait|recommenc(?:er|e|ez|ons)|reinitialise[rz]?|réinitialise[rz]?|relance[rz]?|relancer|rouvr[ei]r?|réouvr[ei]r?|ouvre|ouvrir|lance[rz]?|lancer|fais|faire|reset|redo|restart|relaunch|rerun|reopen|run|start|begin|do)\s+(?:l'|le |la |the |my |mon )?onboarding\b/;
+  return cmdRe.test(raw);
+}
+
 function checkPatternAlert(history) {
   if (history.length < 3) return null;
   const recent = history.slice(0, 5);
@@ -1099,22 +1133,13 @@ export default function App() {
     if (!text.trim() && !attachment) return;
     if (isLoading) return;
 
-    // Slash-style commands — intercepted before any agent flow. Typing
-    // "refaire l'onboarding" / "reset onboarding" inside an active session
-    // relaunches the ConversationalOnboarding modal instead of being sent.
-    if (text && !attachment) {
-      const normalized = text.trim().toLowerCase().replace(/['']/g, "'");
-      if (
-        normalized === "refaire l'onboarding" ||
-        normalized === "refaire onboarding" ||
-        normalized === "reset onboarding" ||
-        normalized === "redo onboarding" ||
-        normalized === "/onboarding" ||
-        normalized === "/refaire-onboarding"
-      ) {
-        reopenOnboardingFresh();
-        return;
-      }
+    // Slash-style + natural-language commands — intercepted before any agent
+    // flow. Typing "refais l'onboarding", "recommence le onboarding",
+    // "/onboarding", etc. relaunches the ConversationalOnboarding modal from
+    // step 1 instead of being sent. The agent must never see these messages.
+    if (text && !attachment && isRedoOnboardingCommand(text)) {
+      reopenOnboardingFresh();
+      return;
     }
 
     setError(null);
@@ -2154,18 +2179,9 @@ export default function App() {
     const msg = text.trim();
     if (!msg) return;
 
-    // Slash-style commands — intercepted before any session/agent flow.
-    // Typing "refaire l'onboarding" / "reset onboarding" relaunches the
-    // ConversationalOnboarding modal from step 1 instead of starting a session.
-    const normalized = msg.toLowerCase().replace(/['']/g, "'");
-    if (
-      normalized === "refaire l'onboarding" ||
-      normalized === "refaire onboarding" ||
-      normalized === "reset onboarding" ||
-      normalized === "redo onboarding" ||
-      normalized === "/onboarding" ||
-      normalized === "/refaire-onboarding"
-    ) {
+    // Slash-style + natural-language onboarding commands — intercepted before
+    // any session is started so the agent never sees them.
+    if (isRedoOnboardingCommand(msg)) {
       reopenOnboardingFresh();
       return;
     }
@@ -2607,6 +2623,7 @@ export default function App() {
   }
 
   function reopenOnboardingFresh() {
+    console.log('[Onboarding] ONBOARDING TRIGGERED — reopenOnboardingFresh()');
     try {
       localStorage.removeItem('qg_conversational_onboarding_seen_v1');
       localStorage.removeItem('qg_onboarding_nudge_dismissed_v1');
@@ -2620,6 +2637,7 @@ export default function App() {
     setShowOnboarding(false);
     setOnboardingResetMode(false);
     setTimeout(() => {
+      console.log('[Onboarding] setting showOnboarding=true (resetMode=true)');
       setOnboardingResetMode(true);
       setShowOnboarding(true);
     }, 30);

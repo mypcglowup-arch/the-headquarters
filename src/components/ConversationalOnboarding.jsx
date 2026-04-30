@@ -119,11 +119,16 @@ export default function ConversationalOnboarding({ darkMode, lang = 'fr', initia
 
   // Lock body scroll, ESC closes
   useEffect(() => {
+    console.log('[Onboarding] ConversationalOnboarding MOUNTED — agent=', agent);
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+    return () => {
+      console.log('[Onboarding] ConversationalOnboarding UNMOUNTED');
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
   }, [onClose]);
 
   // Auto-scroll transcript on new bubble
@@ -224,7 +229,7 @@ export default function ConversationalOnboarding({ darkMode, lang = 'fr', initia
 
   return createPortal((
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-2 sm:p-4 animate-modal-backdrop"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 animate-modal-backdrop"
       style={{ background: 'rgba(3,7,18,0.86)', backdropFilter: 'blur(10px)' }}
     >
       <div
