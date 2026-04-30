@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { createPortal } from 'react-dom';
-import { X, Send, Check, ArrowRight } from 'lucide-react';
+import { X, Send, Check, ArrowRight, Mic, MicOff, Loader2 } from 'lucide-react';
 import {
   STAGE_OPTIONS, EXPERIENCE_OPTIONS, STRENGTH_OPTIONS,
   CHALLENGE_OPTIONS, AVAILABILITY_OPTIONS, COACHING_STYLE_LABELS,
 } from '../utils/userProfile.js';
 import { AGENT_CONFIG, COMMERCIAL_MODE } from '../prompts.js';
 import AgentAvatar from './AgentAvatar.jsx';
+import { createAudioRecorder, isMicSupported } from '../utils/voice.js';
 
 /**
  * Conversational onboarding — replaces the 3-question form for first-launch
@@ -117,10 +117,17 @@ export default function ConversationalOnboarding({ darkMode, lang = 'fr', initia
   // (we do NOT ask it as a step ; we infer it from primaryAgentDefault or default to HORMOZI).
   const agent = (initialProfile?.primaryAgent || primaryAgentDefault || FALLBACK_AGENT);
 
-  // Lock body scroll, ESC closes
+  // Stable ref to the latest onClose so the mount effect below can use it
+  // without listing onClose as a dep (parent passes a fresh inline function on
+  // every render, which would otherwise tear down + rebind the ESC handler
+  // and body-scroll lock on every keystroke).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  // Lock body scroll, ESC closes — runs once per real mount.
   useEffect(() => {
     console.log('[Onboarding] ConversationalOnboarding MOUNTED — agent=', agent);
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current?.(); };
     window.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -129,7 +136,8 @@ export default function ConversationalOnboarding({ darkMode, lang = 'fr', initia
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-scroll transcript on new bubble
   useEffect(() => {
@@ -227,13 +235,13 @@ export default function ConversationalOnboarding({ darkMode, lang = 'fr', initia
     commitAnswer(current.kind === 'multi-chip' ? [] : (current.kind === 'number' ? null : ''));
   }
 
-  return createPortal((
+  return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 animate-modal-backdrop"
-      style={{ background: 'rgba(3,7,18,0.86)', backdropFilter: 'blur(10px)' }}
+      className="min-h-screen w-full flex items-center justify-center p-2 sm:p-4 animate-modal-backdrop"
+      style={{ background: darkMode ? 'rgba(3,7,18,0.96)' : '#F5F4F0' }}
     >
       <div
-        className="relative w-full max-w-xl h-[88vh] sm:h-[82vh] rounded-2xl flex flex-col animate-modal-in overflow-hidden"
+        className="relative w-full max-w-xl h-[96vh] sm:h-[88vh] rounded-2xl flex flex-col animate-modal-in overflow-hidden"
         style={{
           background: darkMode ? 'rgba(20,20,30,0.97)' : '#ffffff',
           border: darkMode ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(15,23,42,0.08)',
@@ -279,7 +287,7 @@ export default function ConversationalOnboarding({ darkMode, lang = 'fr', initia
         </div>
 
         {/* Transcript */}
-        <div className="flex-1 overflow-y-auto scroll-fade px-4 py-3 space-y-3">
+        <div className="flex-1 overflow-y-auto scroll-fade px-4 pt-7 pb-3 space-y-3">
           {transcript.map((b, i) => (
             <Bubble key={i} from={b.from} text={b.text} darkMode={darkMode} agent={agent} />
           ))}
@@ -325,7 +333,7 @@ export default function ConversationalOnboarding({ darkMode, lang = 'fr', initia
         )}
       </div>
     </div>
-  ), document.body);
+  );
 }
 
 // ─── Bubbles, dots, per-step input ────────────────────────────────────────────
@@ -376,7 +384,14 @@ function InputForStep({ q, darkMode, lang, textValue, setTextValue, multiSelecti
           inputMode={q.kind === 'number' ? 'decimal' : 'text'}
           value={textValue}
           onChange={(e) => setTextValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && Tag === 'input') { e.preventDefault(); onCommit(textValue); } }}
+          onKeyDown={(e) => {
+            // Enter (without Shift) submits, on both <input> and <textarea>.
+            // Shift+Enter on textarea inserts a newline as usual.
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (q.skippable || String(textValue || '').trim()) onCommit(textValue);
+            }
+          }}
           placeholder={q.placeholder || ''}
           className={`flex-1 px-3 py-2.5 rounded-lg text-[14px] outline-none ${darkMode ? 'bg-gray-900 border border-white/10 text-white placeholder:text-gray-500 focus:border-indigo-500/50' : 'bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-300'} ${q.multiline ? 'resize-none min-h-[60px]' : ''}`}
         />
@@ -403,24 +418,43 @@ function InputForStep({ q, darkMode, lang, textValue, setTextValue, multiSelecti
 
   // Single-choice chip
   if (q.kind === 'single-chip') {
+    // Voice → fuzzy match transcription against the chip labels. If we find a
+    // hit, commit the matched key. Otherwise fall through to the raw text so
+    // the user's nuance isn't lost (CHECK constraints in Supabase will warn,
+    // but syncUserProfile is fire-and-forget — localStorage stays the source
+    // of truth).
+    const handleVoice = (transcript) => {
+      const t = String(transcript || '').toLowerCase().trim();
+      if (!t) return;
+      const hit = q.options.find((o) => {
+        const lbl = String(o.label || '').toLowerCase();
+        return lbl && (t.includes(lbl) || lbl.includes(t));
+      });
+      onCommit(hit ? hit.key : transcript);
+    };
     return (
-      <div className="flex flex-wrap gap-1.5">
-        {q.options.map((o) => (
-          <button
-            key={o.key}
-            onClick={() => onCommit(o.key)}
-            className="px-3.5 py-2 rounded-full text-[12.5px] font-semibold tap-target transition-all"
-            style={{
-              background: darkMode ? 'rgba(99,102,241,0.10)' : 'rgba(99,102,241,0.08)',
-              color: darkMode ? 'rgb(199,210,254)' : 'rgb(67,56,202)',
-              boxShadow: '0 0 0 1px rgba(99,102,241,0.30)',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(99,102,241,0.20)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = darkMode ? 'rgba(99,102,241,0.10)' : 'rgba(99,102,241,0.08)'; }}
-          >
-            {o.label}
-          </button>
-        ))}
+      <div>
+        <div className="flex flex-wrap gap-1.5">
+          {q.options.map((o) => (
+            <button
+              key={o.key}
+              onClick={() => onCommit(o.key)}
+              className="px-3.5 py-2 rounded-full text-[12.5px] font-semibold tap-target transition-all"
+              style={{
+                background: darkMode ? 'rgba(99,102,241,0.10)' : 'rgba(99,102,241,0.08)',
+                color: darkMode ? 'rgb(199,210,254)' : 'rgb(67,56,202)',
+                boxShadow: '0 0 0 1px rgba(99,102,241,0.30)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(99,102,241,0.20)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = darkMode ? 'rgba(99,102,241,0.10)' : 'rgba(99,102,241,0.08)'; }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 flex items-center justify-end">
+          <VoiceMicButton lang={lang} darkMode={darkMode} onTranscript={handleVoice} />
+        </div>
       </div>
     );
   }
@@ -461,6 +495,11 @@ function InputForStep({ q, darkMode, lang, textValue, setTextValue, multiSelecti
               {lang === 'fr' ? `${multiSelection.length}/${q.max}` : `${multiSelection.length}/${q.max}`}
             </span>
           )}
+          <VoiceMicButton
+            lang={lang}
+            darkMode={darkMode}
+            onTranscript={(t) => { const tt = String(t || '').trim(); if (tt) onCommit([tt]); }}
+          />
           <button
             onClick={() => onCommit(multiSelection)}
             disabled={!q.skippable && multiSelection.length === 0}
@@ -507,4 +546,74 @@ function InputForStep({ q, darkMode, lang, textValue, setTextValue, multiSelecti
   }
 
   return null;
+}
+
+// ─── Voice mic button (Whisper STT) ───────────────────────────────────────────
+// Drop-in mic for chip questions so users can answer with a more nuanced
+// spoken reply instead of clicking a chip. Calls onTranscript(text) once with
+// the final transcription. Shows three visual states: idle / recording / busy.
+function VoiceMicButton({ lang, darkMode, onTranscript }) {
+  const supported = isMicSupported();
+  const [state, setState] = useState('idle'); // 'idle' | 'recording' | 'transcribing'
+  const recRef = useRef(null);
+
+  function toggle() {
+    if (!supported) return;
+    if (state === 'recording') { recRef.current?.stop(); return; }
+    if (state === 'transcribing') return;
+
+    const rec = createAudioRecorder({
+      lang: lang === 'fr' ? 'fr-CA' : 'en-US',
+      onStart:        () => setState('recording'),
+      onTranscribing: () => setState('transcribing'),
+      onFinal: (transcript) => {
+        setState('idle');
+        const t = String(transcript || '').trim();
+        if (t) onTranscript?.(t);
+      },
+      onError: (err) => {
+        console.warn('[Onboarding voice] Whisper error:', err);
+        setState('idle');
+      },
+    });
+    if (!rec) return;
+    recRef.current = rec;
+    rec.start();
+  }
+
+  // Cancel any in-flight recording on unmount
+  useEffect(() => () => recRef.current?.cancel?.(), []);
+
+  if (!supported) return null;
+
+  const isRec  = state === 'recording';
+  const isBusy = state === 'transcribing';
+
+  const bg = isRec
+    ? 'rgba(239,68,68,0.22)'
+    : isBusy
+      ? (darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)')
+      : (darkMode ? 'rgba(99,102,241,0.10)' : 'rgba(99,102,241,0.08)');
+  const ring = isRec
+    ? '0 0 0 1px rgba(239,68,68,0.55), 0 0 0 4px rgba(239,68,68,0.15)'
+    : '0 0 0 1px rgba(99,102,241,0.30)';
+  const color = isRec
+    ? 'rgb(239,68,68)'
+    : (darkMode ? 'rgb(199,210,254)' : 'rgb(67,56,202)');
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={isBusy}
+      title={isRec
+        ? (lang === 'fr' ? 'Arrêter et envoyer' : 'Stop & send')
+        : (lang === 'fr' ? 'Réponse vocale' : 'Voice answer')}
+      aria-label={lang === 'fr' ? 'Réponse vocale' : 'Voice answer'}
+      className="p-2 rounded-full shrink-0 transition-all disabled:cursor-wait"
+      style={{ background: bg, boxShadow: ring, color, animation: isRec ? 'pulse-dot 1.6s ease-in-out infinite' : 'none' }}
+    >
+      {isBusy ? <Loader2 size={14} className="animate-spin" /> : isRec ? <MicOff size={14} /> : <Mic size={14} />}
+    </button>
+  );
 }

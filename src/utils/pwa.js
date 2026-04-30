@@ -63,9 +63,27 @@ export function isStandalone() {
 }
 
 // ─── Service worker registration ──────────────────────────────────────────
+// In dev (Vite), the SW interferes with HMR by serving cache-first stale JS
+// bundles. We aggressively unregister + purge caches in dev so edits always
+// reach the browser. In prod (build), the SW behaves normally.
 export async function registerServiceWorker() {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
   if (!('caches' in window)) return null;
+
+  // DEV MODE: nuke the SW + caches so stale bundles can never linger.
+  if (import.meta.env && import.meta.env.DEV) {
+    try {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const r of regs) await r.unregister();
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      console.log('[PWA] dev mode — service worker + caches purged');
+    } catch (err) {
+      console.warn('[PWA] dev cleanup failed:', err.message);
+    }
+    return null;
+  }
+
   try {
     const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
     console.log('[PWA] service worker registered, scope:', reg.scope);

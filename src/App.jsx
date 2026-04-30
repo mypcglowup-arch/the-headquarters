@@ -22,7 +22,7 @@ import {
 import { isGmailConnected, getGmailTokens, clearGmailTokens, connectGmail } from './utils/gmailAuth.js';
 import { gmailService } from './utils/gmailService.js';
 import { startGmailWatcher, clearSeenIds } from './utils/gmailWatcher.js';
-import { registerServiceWorker, showLocalNotification, requestNotificationPermission } from './utils/pwa.js';
+import { showLocalNotification, requestNotificationPermission } from './utils/pwa.js';
 import { speak as ttsSpeak, cancelSpeech, isTTSSupported } from './utils/voice.js';
 import { computePulseScore, formatPulseContext } from './utils/pulseScore.js';
 import { loadWins, saveWin, formatWinsContext } from './utils/wins.js';
@@ -56,7 +56,7 @@ import ContentGenerator from './components/ContentGenerator.jsx';
 import WeeklyReport from './components/WeeklyReport.jsx';
 import ProspectAnalyzer from './components/ProspectAnalyzer.jsx';
 import MilestoneCelebration, { checkMilestone } from './components/MilestoneCelebration.jsx';
-import GuidedTour, { TourLauncher, hasTourBeenCompleted, markTourDone } from './components/GuidedTour.jsx';
+import GuidedTour, { TourLauncher } from './components/GuidedTour.jsx';
 import GlobalFloatingInput from './components/GlobalFloatingInput.jsx';
 import ToastStack from './components/ToastStack.jsx';
 import InstallPrompt from './components/InstallPrompt.jsx';
@@ -260,6 +260,22 @@ function extractLastQuestion(text) {
 }
 
 export default function App() {
+  // Onboarding redo trigger via URL param. The "Refaire l'onboarding" button
+  // navigates to /?onboarding=true, which on this load clears the seen flag,
+  // then redirects to / (a second full reload). After that reload the
+  // first-launch auto-open useEffect sees no seen flag → opens the modal.
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('onboarding') === 'true') {
+      localStorage.removeItem('qg_conversational_onboarding_seen_v1');
+      window.location.href = '/';
+      // Throw to halt this render — window.location.href is async, the
+      // component would otherwise continue rendering before the navigation
+      // takes effect, briefly painting the old state.
+      throw new Error('Redirecting to / for onboarding redo');
+    }
+  }
+
   const [screen, setScreen]         = useState('home');
   const [sessionStarted, setSessionStarted] = useState(false);
   const [lang, setLang] = useState(() => detectDefaultLang());
@@ -294,7 +310,16 @@ export default function App() {
   const [situationFavorites, setSituationFavorites] = useState(() => loadLS(LS_SITUATION_FAVS, []));
   const [victories, setVictories] = useState(() => loadVictories());
   const [userProfile, setUserProfile] = useState(() => loadUserProfile());
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  // Synchronous init: if the seen flag is missing, the modal must be open
+  // BEFORE the first render — otherwise auto-fires (Monday session, smart
+  // notifications, pulse score, etc.) can race ahead and start a session.
+  // The early return on `if (showOnboarding) return <ConversationalOnboarding/>`
+  // wins immediately, no setTimeout, no race.
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try { return localStorage.getItem('qg_conversational_onboarding_seen_v1') !== '1'; }
+    catch { return false; }
+  });
   const [onboardingResetMode, setOnboardingResetMode] = useState(false);
   const [onboardingNudgeDismissed, setOnboardingNudgeDismissed] = useState(() => {
     try { return localStorage.getItem('qg_onboarding_nudge_dismissed_v1') === '1'; } catch { return false; }
@@ -396,14 +421,14 @@ export default function App() {
 
   // On mount: update streak, log open, fetch daily quote + mirror, refresh calendar
   useEffect(() => {
-    // Register the service worker (no-op if unsupported)
-    registerServiceWorker();
+    // PWA / service worker layer removed from the project — no registration.
+    // Existing browsers with the old SW pick up public/sw.js (now a kill-switch)
+    // on next /sw.js fetch and clean themselves up automatically.
     logAppOpen();
     trackFirstOpen();
-    // Auto-trigger tour on very first open
-    if (!hasTourBeenCompleted()) {
-      setTimeout(() => setShowTour(true), 800);
-    }
+    // Tour is opt-in only — no auto-trigger. The first-launch experience is
+    // ConversationalOnboarding (see useEffect on qg_conversational_onboarding_seen_v1).
+    // Users who want the visual walkthrough click the TourLauncher button (bottom-right).
     const currentStreak = updateStreak();
     setStreak(currentStreak);
     getDailyQuote(lang).then((q) => { if (q) setDailyQuote(q); });
@@ -2622,41 +2647,33 @@ export default function App() {
     try { localStorage.setItem('qg_onboarding_nudge_dismissed_v1', '1'); } catch {}
   }
 
+  // Used by the natural-language chat command path (e.g. "refais l'onboarding").
+  // The Profile button uses a hard reload via /?onboarding=true instead — see
+  // top of the App component.
   function reopenOnboardingFresh() {
-    console.log('[Onboarding] ONBOARDING TRIGGERED — reopenOnboardingFresh()');
     try {
       localStorage.removeItem('qg_conversational_onboarding_seen_v1');
       localStorage.removeItem('qg_onboarding_nudge_dismissed_v1');
     } catch {}
     setOnboardingNudgeDismissed(false);
-
-    // Force a clean unmount → remount cycle. If the modal was already open with
-    // stale state, or if showOnboarding was somehow already true, going through
-    // false first guarantees ConversationalOnboarding fully resets (step=0,
-    // answers={}, transcript=[]) and the entrance animation re-fires.
+    setScreen('home');
     setShowOnboarding(false);
     setOnboardingResetMode(false);
     setTimeout(() => {
-      console.log('[Onboarding] setting showOnboarding=true (resetMode=true)');
       setOnboardingResetMode(true);
       setShowOnboarding(true);
     }, 30);
   }
 
-  // First-launch auto-open : if there's no profile name AND we've never shown
-  // the conversational onboarding before, open it once. After this, the soft
-  // OnboardingNudge banner on Home handles re-entry.
+  // showOnboarding was already initialized synchronously from localStorage
+  // (see useState initializer above). If we landed with the modal open,
+  // mark the seen flag now so subsequent reloads do NOT reopen — only an
+  // explicit "Refaire l'onboarding" (which clears the flag via /?onboarding=true)
+  // brings it back.
   useEffect(() => {
-    try {
-      const seen = localStorage.getItem('qg_conversational_onboarding_seen_v1') === '1';
-      if (!seen && !hasOnboarded(userProfile)) {
-        const t = setTimeout(() => {
-          setShowOnboarding(true);
-          localStorage.setItem('qg_conversational_onboarding_seen_v1', '1');
-        }, 800); // small delay so the home renders first, less jarring
-        return () => clearTimeout(t);
-      }
-    } catch { /* ignore quota / privacy mode */ }
+    if (showOnboarding) {
+      try { localStorage.setItem('qg_conversational_onboarding_seen_v1', '1'); } catch {}
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2737,6 +2754,29 @@ export default function App() {
   }
 
   const todoCount = improvementJournal.filter((i) => i.status !== 'done').length;
+
+  // Onboarding takes the whole screen — no overlay, no z-index. When showOnboarding
+  // is true, ConversationalOnboarding is the ONLY thing rendered, exactly like the
+  // very first launch. The rest of the app (chat, profile, dashboard…) is unmounted
+  // until onboarding closes.
+  if (showOnboarding) {
+    return (
+      <ConversationalOnboarding
+        key={onboardingResetMode ? 'onboarding-fresh' : 'onboarding-normal'}
+        darkMode={darkMode}
+        lang={lang}
+        initialProfile={onboardingResetMode ? null : userProfile}
+        primaryAgentDefault={onboardingResetMode ? 'HORMOZI' : (userProfile?.primaryAgent || 'HORMOZI')}
+        onSave={(p, meta) => {
+          saveUserProfileAll({ ...userProfile, ...p });
+          if (!meta?.partial) {
+            toast(lang === 'fr' ? '✓ Profil enregistré' : '✓ Profile saved', { type: 'success', duration: 2400 });
+          }
+        }}
+        onClose={() => { setShowOnboarding(false); setOnboardingResetMode(false); }}
+      />
+    );
+  }
 
   return (
     <div
@@ -3072,24 +3112,8 @@ export default function App() {
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <InstallPrompt darkMode={darkMode} lang={lang} />
 
-      {/* Onboarding — conversational by default, runs on first launch + "redo" button.
-          Saves are incremental : each answer commits immediately so partial runs persist. */}
-      {showOnboarding && (
-        <ConversationalOnboarding
-          key={onboardingResetMode ? 'onboarding-fresh' : 'onboarding-normal'}
-          darkMode={darkMode}
-          lang={lang}
-          initialProfile={onboardingResetMode ? null : userProfile}
-          primaryAgentDefault={onboardingResetMode ? 'HORMOZI' : (userProfile?.primaryAgent || 'HORMOZI')}
-          onSave={(p, meta) => {
-            saveUserProfileAll({ ...userProfile, ...p });
-            if (!meta?.partial) {
-              toast(lang === 'fr' ? '✓ Profil enregistré' : '✓ Profile saved', { type: 'success', duration: 2400 });
-            }
-          }}
-          onClose={() => { setShowOnboarding(false); setOnboardingResetMode(false); }}
-        />
-      )}
+      {/* Onboarding handled via early return at top of render — when showOnboarding
+          is true, App returns ONLY <ConversationalOnboarding /> and nothing here mounts. */}
 
       {/* Tour Launcher — floating bottom-right button */}
       <TourLauncher onStart={() => setShowTour(true)} isActive={showTour} />

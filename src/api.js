@@ -22,11 +22,11 @@ import {
 import { getMomentumStats, getCachedMirror, setCachedMirror } from './utils/momentum.js';
 import { personalize, getLiveUserContext } from './utils/userProfile.js';
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
-
-function getApiKey() {
-  return import.meta.env.VITE_ANTHROPIC_API_KEY;
-}
+// All Anthropic calls go through our serverless proxy at /api/anthropic.
+// The proxy injects ANTHROPIC_API_KEY server-side so it never reaches the
+// client bundle. In dev, vite.config.js does the same via http-proxy. The
+// browser never sees the key.
+const API_URL = '/api/anthropic';
 
 function getModel(deepMode) {
   return deepMode ? 'claude-opus-4-5' : 'claude-sonnet-4-5';
@@ -83,10 +83,7 @@ function injectAttachment(messages, attachment) {
 }
 
 async function callClaude(systemPrompt, messages, maxTokens = 600, deepMode = false, attachment = null, enableWebSearch = false, thinkingMode = false, agentKey = null, modelOverride = null) {
-  const apiKey = getApiKey();
-  if (!apiKey || apiKey === 'sk-ant-your-key-here') {
-    throw new Error('API key missing. Copy .env.example to .env and add your VITE_ANTHROPIC_API_KEY.');
-  }
+  // API key handled server-side by /api/anthropic. No client-side check needed.
 
   // Personalize {name}/{role}/{annualGoal} tokens with the live user profile.
   // Replaces the legacy hardcoded "{name}" everywhere prompts are built.
@@ -97,9 +94,7 @@ async function callClaude(systemPrompt, messages, maxTokens = 600, deepMode = fa
 
   const headers = {
     'Content-Type': 'application/json',
-    'x-api-key': apiKey,
     'anthropic-version': '2023-06-01',
-    'anthropic-dangerous-direct-browser-access': 'true',
   };
   const betas = ['prompt-caching-2024-07-31'];
   if (enableWebSearch) betas.push('web-search-2025-03-05');
@@ -130,6 +125,7 @@ async function callClaude(systemPrompt, messages, maxTokens = 600, deepMode = fa
       headers,
       body: JSON.stringify(buildBody(msgs)),
     });
+    if (response.status === 429) throw new RateLimitError();
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error?.message || `API error ${response.status}`);
@@ -313,14 +309,11 @@ const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 // ─── Mode pre-detection — haiku classify before each response ─────────────────
 async function detectMode(userInput) {
   try {
-    const apiKey = getApiKey();
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
@@ -708,15 +701,10 @@ async function readGoogleBusiness(bizName, city, googleUrl = null, { onStatus, b
 
 // Single-responsibility fetch + agentic loop. Returns final text content.
 async function prospectFetch(body) {
-  const apiKey = getApiKey();
-  if (!apiKey || apiKey === 'sk-ant-your-key-here') {
-    throw new Error('API key missing. Copy .env.example to .env and add your VITE_ANTHROPIC_API_KEY.');
-  }
+  // API key handled server-side by /api/anthropic.
   const headers = {
     'Content-Type': 'application/json',
-    'x-api-key': apiKey,
     'anthropic-version': '2023-06-01',
-    'anthropic-dangerous-direct-browser-access': 'true',
   };
   if (body.tools?.length) headers['anthropic-beta'] = 'web-search-2025-03-05';
 
@@ -1175,10 +1163,7 @@ export async function fetchCompetitorContext(prospect) {
 // ─── Streaming agent call (SSE) ──────────────────────────────────────────────
 
 export async function callClaudeStream(systemPrompt, messages, maxTokens, deepMode, attachment, onToken, onSearchState, onThinkingState, thinkingMode = false, agentKey = null) {
-  const apiKey = getApiKey();
-  if (!apiKey || apiKey === 'sk-ant-your-key-here') {
-    throw new Error('API key missing. Copy .env.example to .env and add your VITE_ANTHROPIC_API_KEY.');
-  }
+  // API key handled server-side by /api/anthropic.
 
   // Personalize tokens with live user profile (same logic as callClaude)
   systemPrompt = personalize(systemPrompt, getLiveUserContext());
@@ -1207,13 +1192,13 @@ export async function callClaudeStream(systemPrompt, messages, maxTokens, deepMo
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
       'anthropic-beta': betas.join(','),
     },
     body: JSON.stringify(body),
   });
+
+  if (response.status === 429) throw new RateLimitError();
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));

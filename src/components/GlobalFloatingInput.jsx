@@ -2,10 +2,11 @@
 // Permanent bottom bar visible on all pages except chat.
 // On submit → starts a Quick Advice session with the message pre-sent.
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { AGENT_CONFIG } from '../prompts.js';
 import { createAudioRecorder, isMicSupported } from '../utils/voice.js';
+import { getAdaptiveChips, loadUserProfile } from '../utils/userProfile.js';
 
 // ── Step 3 — keyword-based agent prediction (instant, zero latency) ──────────
 const KEYWORD_MAP = [
@@ -65,21 +66,8 @@ const PLACEHOLDERS = {
   ],
 };
 
-// ── Step 4 — Quick action chips ───────────────────────────────────────────────
-const QUICK_ACTIONS = {
-  fr: [
-    { icon: '🔍', label: 'Vérifie mes emails',     text: 'Vérifie mes emails' },
-    { icon: '📊', label: 'État de mon pipeline',    text: "Quel est l'état de mon pipeline ?" },
-    { icon: '⚡', label: 'Prochain move',            text: 'Quel est mon prochain move ?' },
-    { icon: '📅', label: "Mon agenda aujourd'hui",  text: "Montre-moi mon agenda aujourd'hui" },
-  ],
-  en: [
-    { icon: '🔍', label: 'Check my emails',  text: 'Check my emails' },
-    { icon: '📊', label: 'Pipeline status',  text: "What's the status of my pipeline?" },
-    { icon: '⚡', label: 'Next move',         text: "What's my next move?" },
-    { icon: '📅', label: "Today's agenda",   text: 'Show me my agenda for today' },
-  ],
-};
+// Quick action chips are now derived from the user profile (stage + niche)
+// via getAdaptiveChips. See utils/userProfile.js for the chip packs.
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -150,14 +138,20 @@ export default function GlobalFloatingInput({
   // Smooth crossfade: update shownAgent when prediction changes
   useEffect(() => { setShownAgent(predictedAgent); }, [predictedAgent]);
 
-  // Quick chips: visible when focused + input empty
-  useEffect(() => { setShowChips(isFocused && text === ''); }, [isFocused, text]);
+  // Quick chips: visible when focused + input empty. Always hidden on Profile
+  // — the chips overlap the "Refaire l'onboarding" button and steal its clicks.
+  useEffect(() => {
+    setShowChips(isFocused && text === '' && screen !== 'profile');
+  }, [isFocused, text, screen]);
 
   // ── Hidden on chat / replay ────────────────────────────────────────────────
   if (screen === 'chat' || screen === 'replay') return null;
 
   const phs          = PLACEHOLDERS[lang]  || PLACEHOLDERS.fr;
-  const chips        = QUICK_ACTIONS[lang] || QUICK_ACTIONS.fr;
+  // Chips reflect the user's actual stage + niche. We re-read the profile on
+  // every render of this lightweight component so a fresh onboarding completion
+  // takes effect immediately without a reload — the lookup is local + cached.
+  const chips        = useMemo(() => getAdaptiveChips(loadUserProfile(), lang), [lang]);
   const displayAgent = shownAgent || activeAgent;
 
   // ── Avatar renderer ────────────────────────────────────────────────────────

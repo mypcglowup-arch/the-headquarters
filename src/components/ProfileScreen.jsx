@@ -99,11 +99,23 @@ export default function ProfileScreen({ darkMode, lang = 'fr', profile, dashboar
               {lang === 'fr' ? 'Profil' : 'Profile'}
             </h1>
           </div>
-          <p className={`text-[14px] mb-6 ${darkMode ? 'text-gray-400' : 'text-slate-600'}`}>
+          <p className={`text-[14px] mb-4 ${darkMode ? 'text-gray-400' : 'text-slate-600'}`}>
             {lang === 'fr'
               ? 'Comment QG t\'identifie. Tout ce que tu mets ici calibre ton équipe d\'agents — ton, profondeur, intensité, sujets à aborder ou éviter.'
               : 'How QG identifies you. Everything here calibrates your advisor team — tone, depth, intensity, topics to cover or avoid.'}
           </p>
+
+          {/* Redo onboarding — placed at the top, away from the floating chat
+              bar at the bottom (its suggestion chips were stealing this click). */}
+          <div className="mb-6">
+            <button
+              onClick={() => { window.location.href = '/?onboarding=true'; }}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px] font-semibold ${darkMode ? 'text-gray-300 bg-white/5 hover:bg-white/10' : 'text-slate-700 bg-slate-100 hover:bg-slate-200'}`}
+            >
+              <RotateCcw size={13} />
+              {lang === 'fr' ? 'Refaire l\'onboarding' : 'Redo onboarding'}
+            </button>
+          </div>
 
           {/* SECTION 1 — Identity */}
           <SectionTitle darkMode={darkMode} icon={<User size={14} />}>
@@ -119,14 +131,21 @@ export default function ProfileScreen({ darkMode, lang = 'fr', profile, dashboar
             <Field icon={<Target size={13} />} label={lang === 'fr' ? 'Objectif annuel ($)' : 'Annual revenue target ($)'} hint={lang === 'fr' ? 'Synchronisé avec le dashboard. Modifier ici met à jour partout.' : 'Synced with the dashboard. Editing here updates everywhere.'} darkMode={darkMode}>
               <input type="number" inputMode="decimal" min="0" step="1000" value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="50000" className={inputCls(darkMode)} />
             </Field>
-            <Field icon={<Building2 size={13} />} label={lang === 'fr' ? 'Secteur' : 'Sector'} hint={lang === 'fr' ? 'Pilote vocabulaire, exemples, pipeline et saisonnalité partout dans QG.' : 'Drives vocabulary, examples, pipeline and seasonality across QG.'} darkMode={darkMode}>
+            <Field icon={<Building2 size={13} />} label={lang === 'fr' ? 'Secteur' : 'Sector'} hint={lang === 'fr' ? 'Catégorie large — pilote pipeline + saisonnalité.' : 'Broad category — drives pipeline + seasonality.'} darkMode={darkMode}>
               <select value={sectorId} onChange={(e) => setSectorId(e.target.value)} className={selectCls(darkMode)}>
                 <option value="">{lang === 'fr' ? '— Aucun —' : '— None —'}</option>
                 {SECTORS.map((s) => (<option key={s.id} value={s.id}>{s.label[lang] || s.label.fr}</option>))}
               </select>
-              {sectorId === 'other' && (
-                <input value={sectorCustom} onChange={(e) => setSectorCustom(e.target.value)} placeholder={lang === 'fr' ? 'Précise ton secteur' : 'Describe your sector'} className={`${inputCls(darkMode)} mt-2`} />
-              )}
+            </Field>
+            <Field icon={<Building2 size={13} />} label={lang === 'fr' ? 'Mon secteur exact' : 'My exact niche'} hint={lang === 'fr' ? 'Override le dropdown — donne aux agents le contexte précis : exemples, vocabulaire, saisonnalité réelle.' : 'Overrides the dropdown — gives agents precise context: examples, vocabulary, real seasonality.'} darkMode={darkMode}>
+              <input
+                value={sectorCustom}
+                onChange={(e) => setSectorCustom(e.target.value)}
+                placeholder={lang === 'fr'
+                  ? 'Ex: Tonte de gazon résidentiel Québec · Courtier immobilier Montréal · Coach fitness en ligne'
+                  : 'Ex: Residential lawn care Quebec · Montreal real estate broker · Online fitness coach'}
+                className={inputCls(darkMode)}
+              />
             </Field>
             <Field icon={<UsersIcon size={13} />} label={lang === 'fr' ? 'Audience' : 'Audience'} hint={lang === 'fr' ? 'Filtre les scripts B2B/B2C dans la bibliothèque par défaut.' : 'Filters B2B/B2C scripts in the library by default.'} darkMode={darkMode}>
               <ChipGrid options={AUDIENCE_OPTIONS.map((a) => ({ key: a.id, label: a.label[lang] || a.label.fr, rgb: a.rgb }))} value={audience} onPick={setAudience} darkMode={darkMode} cols={3} />
@@ -211,13 +230,6 @@ export default function ProfileScreen({ darkMode, lang = 'fr', profile, dashboar
             >
               {savedFlash ? <Check size={13} /> : <Save size={13} />}
               {savedFlash ? (lang === 'fr' ? 'Enregistré' : 'Saved') : (lang === 'fr' ? 'Enregistrer' : 'Save')}
-            </button>
-            <button
-              onClick={onReopenOnboarding}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12.5px] font-semibold ml-auto ${darkMode ? 'text-gray-300 bg-white/5 hover:bg-white/10' : 'text-slate-700 bg-slate-100 hover:bg-slate-200'}`}
-            >
-              <RotateCcw size={13} />
-              {lang === 'fr' ? 'Refaire l\'onboarding' : 'Redo onboarding'}
             </button>
           </div>
 
