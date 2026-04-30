@@ -42,8 +42,9 @@ import SituationsScreen from './components/SituationsScreen.jsx';
 import VictoriesScreen from './components/VictoriesScreen.jsx';
 import { loadVictories, saveVictoriesCache, computeROI, formatVictoriesContext } from './utils/victories.js';
 import OnboardingModal, { OnboardingNudge } from './components/OnboardingModal.jsx';
+import ConversationalOnboarding from './components/ConversationalOnboarding.jsx';
 import ProfileScreen from './components/ProfileScreen.jsx';
-import { loadUserProfile, saveUserProfile, hasOnboarded } from './utils/userProfile.js';
+import { loadUserProfile, saveUserProfile, hasOnboarded, formatUserContext } from './utils/userProfile.js';
 import { formatSectorContext, getPipelineStages } from './data/sectors.js';
 import { arcVisibility, getCurrentPhase, arcPhaseSuffix } from './components/SessionArc.jsx';
 import WorkflowBuilder from './components/WorkflowBuilder.jsx';
@@ -538,12 +539,13 @@ export default function App() {
   useEffect(() => {
     if (sessionStarted) return;
     if (screen !== 'home') return;
+    if (sessionMode === 'silent') return; // silent mode : zero auto-session, even on Monday
     const { should, mondayIso } = shouldFireMondaySession(mondaySessionFiredIso);
     if (!should) return;
     console.log('[MondaySession] window active, firing for', mondayIso);
     startMondaySession(mondayIso);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, sessionStarted, mondaySessionFiredIso]);
+  }, [screen, sessionStarted, mondaySessionFiredIso, sessionMode]);
 
   // Flush the dashboard to Supabase synchronously before the page closes.
   // The 800ms debounce above can swallow the very last mutation on a fast
@@ -638,8 +640,15 @@ export default function App() {
     // so we bypass the normal pattern/churn/briefing/filRouge cascade.
     if (skipCascade) return;
 
+    // Silent mode : zero agent initiative. No pattern alert, no churn alert,
+    // no decision reminder, no anomaly, no Meeting Room opening, no briefing,
+    // no Fil Rouge. The user writes freely; agents only respond when @-mentioned
+    // (the @mention path goes through runSession's focusAgent branch directly).
+    if (effectiveMode === 'silent') return;
+
     // Pattern alert — check after render
     setTimeout(() => {
+      if (effectiveMode === 'silent') return;
       const history = loadHistory();
       const alert = checkPatternAlert(history);
       if (alert) {
@@ -655,6 +664,7 @@ export default function App() {
 
     // Churn risk alerts — retainers untouched > 45 days
     setTimeout(() => {
+      if (effectiveMode === 'silent') return;
       const atRisk = (dashboard.retainers || [])
         .map((r) => {
           const touched = getRetainerTouchedAt(r);
@@ -705,6 +715,7 @@ export default function App() {
       // for it before anything else. Cooldown 7d per reminder (stored in LS).
       (async () => {
         try {
+          if (effectiveMode === 'silent') return;
           if (briefingLockedRef.current) return;
           const LS_REMIND_COOLDOWNS = 'qg_decision_reminder_cooldowns_v1';
           const cooldowns = (() => {
@@ -749,6 +760,7 @@ export default function App() {
       // teaser) are skipped via briefingLockedRef.
       (async () => {
         try {
+          if (effectiveMode === 'silent') return;
           if (briefingLockedRef.current) return;
 
           // Need at least a session or two of activity before anomaly detection is meaningful
@@ -809,6 +821,7 @@ export default function App() {
 
       (async () => {
         try {
+          if (effectiveMode === 'silent') return;
           if (briefingLockedRef.current) return;
 
           // Need at least 2 sessions of history for patterns to exist
@@ -865,6 +878,7 @@ export default function App() {
       const FIL_ROUGE_UNLOCK_AT = 4;
       if (sessionCount < FIL_ROUGE_UNLOCK_AT) {
         setTimeout(() => {
+          if (effectiveMode === 'silent') return;
           if (briefingLockedRef.current) return;
           setMessages((prev) => [...prev, {
             id:           `briefing-locked-${thisSessionId}`,
@@ -880,6 +894,7 @@ export default function App() {
       else {
         (async () => {
           try {
+            if (effectiveMode === 'silent') return;
             if (briefingLockedRef.current) return;
 
             const history = loadHistory();
@@ -920,6 +935,7 @@ export default function App() {
     // any agent message already populated the chat.
     setTimeout(() => {
       (async () => {
+        if (effectiveMode === 'silent') return;
         if (briefingLockedRef.current) return;
         if (sessionCount <= 1) return;
         const memories = isMem0Enabled() ? await fetchMemoriesForRecap() : [];
@@ -987,6 +1003,7 @@ export default function App() {
     // Double-guard: never double-fire, never fire mid-session
     if (sessionStarted) return;
     if (mondaySessionFiredIso === mondayIso) return;
+    if (sessionMode === 'silent') return; // silent mode opt-out: no Monday auto-opening
 
     // Cross-device dedup: if Supabase already has a row for this Monday,
     // another device already fired — skip + sync localStorage to match.
@@ -1689,7 +1706,8 @@ export default function App() {
 
       const victoriesCtx = formatVictoriesContext(victories, lang);
       const sectorCtx    = formatSectorContext(userProfile, lang);
-      const combinedContext = [sectorCtx, gmailCtxBlock, dateCtx, pulseCtx, checkInCtx, emotionCtx, winsCtx, victoriesCtx, financialContext, historyContext, memContext, calendarContext].filter(Boolean).join('\n\n') || null;
+      const userCtx      = formatUserContext(userProfile, lang);
+      const combinedContext = [userCtx, sectorCtx, gmailCtxBlock, dateCtx, pulseCtx, checkInCtx, emotionCtx, winsCtx, victoriesCtx, financialContext, historyContext, memContext, calendarContext].filter(Boolean).join('\n\n') || null;
       // Meeting Room: maturity suffix tells agents how directive/reactive to be this session
       // Also inject the lead-agent's track record (past decisions + outcomes) so
       // their advice is calibrated on what's actually worked for {name}.
@@ -2551,6 +2569,23 @@ export default function App() {
     try { localStorage.setItem('qg_onboarding_nudge_dismissed_v1', '1'); } catch {}
   }
 
+  // First-launch auto-open : if there's no profile name AND we've never shown
+  // the conversational onboarding before, open it once. After this, the soft
+  // OnboardingNudge banner on Home handles re-entry.
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem('qg_conversational_onboarding_seen_v1') === '1';
+      if (!seen && !hasOnboarded(userProfile)) {
+        const t = setTimeout(() => {
+          setShowOnboarding(true);
+          localStorage.setItem('qg_conversational_onboarding_seen_v1', '1');
+        }, 800); // small delay so the home renders first, less jarring
+        return () => clearTimeout(t);
+      }
+    } catch { /* ignore quota / privacy mode */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Cloud reconciliation for user profile — once on mount
   useEffect(() => {
     (async () => {
@@ -2963,13 +2998,20 @@ export default function App() {
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <InstallPrompt darkMode={darkMode} lang={lang} />
 
-      {/* Onboarding modal — opens manually (never auto-blocks) */}
+      {/* Onboarding — conversational by default, runs on first launch + "redo" button.
+          Saves are incremental : each answer commits immediately so partial runs persist. */}
       {showOnboarding && (
-        <OnboardingModal
+        <ConversationalOnboarding
           darkMode={darkMode}
           lang={lang}
           initialProfile={userProfile}
-          onSave={(p) => { saveUserProfileAll(p); setShowOnboarding(false); toast(lang === 'fr' ? '✓ Profil enregistré' : '✓ Profile saved', { type: 'success', duration: 2400 }); }}
+          primaryAgentDefault={userProfile?.primaryAgent || 'HORMOZI'}
+          onSave={(p, meta) => {
+            saveUserProfileAll({ ...userProfile, ...p });
+            if (!meta?.partial) {
+              toast(lang === 'fr' ? '✓ Profil enregistré' : '✓ Profile saved', { type: 'success', duration: 2400 });
+            }
+          }}
           onClose={() => setShowOnboarding(false)}
         />
       )}

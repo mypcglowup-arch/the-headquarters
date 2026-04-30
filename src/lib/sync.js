@@ -227,15 +227,25 @@ export async function syncUserProfile(profile) {
   if (!isSupabaseEnabled()) return;
   try {
     await supabase.from('user_profile').upsert({
-      id:            'samuel',
-      name:          profile?.name || null,
-      role:          profile?.role || null,
-      annual_goal:   Number(profile?.annualGoal) || null,
-      sector:        profile?.sector || null,
-      sector_custom: profile?.sectorCustom || null,
-      audience:      profile?.audience || null,
-      language:      profile?.language || null,
-      updated_at:    new Date().toISOString(),
+      id:               'samuel',
+      name:             profile?.name || null,
+      role:             profile?.role || null,
+      annual_goal:      Number(profile?.annualGoal) || null,
+      sector:           profile?.sector || null,
+      sector_custom:    profile?.sectorCustom || null,
+      audience:         profile?.audience || null,
+      language:         profile?.language || null,
+      // ── v2 personalization fields (require migration 2026_04_30_user_profile_v2.sql)
+      stage:            profile?.stage || null,
+      experience:       profile?.experience || null,
+      strength:         profile?.strength || null,
+      challenges:       Array.isArray(profile?.challenges) ? profile.challenges : null,
+      past_failures:    profile?.pastFailures || null,
+      coaching_style:   Number(profile?.coachingStyle) || null,
+      primary_agent:    profile?.primaryAgent || null,
+      sensitive_topics: profile?.sensitiveTopics || null,
+      availability:     Array.isArray(profile?.availability) ? profile.availability : null,
+      updated_at:       new Date().toISOString(),
     }, { onConflict: 'id' });
   } catch (e) {
     console.warn('[Sync] syncUserProfile failed:', e.message);
@@ -247,20 +257,29 @@ export async function fetchUserProfile() {
   try {
     const { data, error } = await supabase
       .from('user_profile')
-      .select('id, name, role, annual_goal, sector, sector_custom, audience, language, created_at')
+      .select('id, name, role, annual_goal, sector, sector_custom, audience, language, stage, experience, strength, challenges, past_failures, coaching_style, primary_agent, sensitive_topics, availability, created_at')
       .eq('id', 'samuel')
       .maybeSingle();
     if (error) throw error;
     if (!data) return null;
     return {
-      name:         data.name || '',
-      role:         data.role || '',
-      annualGoal:   Number(data.annual_goal) || 50000,
-      sector:       data.sector || null,
-      sectorCustom: data.sector_custom || '',
-      audience:     data.audience || null,
-      language:     data.language || null,
-      createdAt:    data.created_at || null,
+      name:           data.name || '',
+      role:           data.role || '',
+      annualGoal:     Number(data.annual_goal) || 50000,
+      sector:         data.sector || null,
+      sectorCustom:   data.sector_custom || '',
+      audience:       data.audience || null,
+      language:       data.language || null,
+      stage:          data.stage || null,
+      experience:     data.experience || null,
+      strength:       data.strength || null,
+      challenges:     Array.isArray(data.challenges) ? data.challenges : [],
+      pastFailures:   data.past_failures || '',
+      coachingStyle:  Number(data.coaching_style) || 3,
+      primaryAgent:   data.primary_agent || null,
+      sensitiveTopics:data.sensitive_topics || '',
+      availability:   Array.isArray(data.availability) ? data.availability : [],
+      createdAt:      data.created_at || null,
     };
   } catch (e) {
     console.warn('[Sync] fetchUserProfile failed:', e.message);

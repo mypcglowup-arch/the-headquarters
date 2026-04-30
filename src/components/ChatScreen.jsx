@@ -584,7 +584,7 @@ export default function ChatScreen({
             feedback={feedbacks?.[msg.id]}
             onFeedback={msg.type === 'agent' ? onFeedback : undefined}
             onLogWin={msg.type === 'agent' && onLogWin ? onLogWin : undefined}
-            onReaction={msg.type === 'agent' && onReaction ? onReaction : undefined}
+            onReaction={msg.type === 'agent' && sessionMode !== 'silent' && onReaction ? onReaction : undefined}
             onPin={msg.type === 'agent' ? handlePin : undefined}
             isPinned={msg.type === 'agent' && pinnedMessages.some((p) => p.id === msg.id)}
             onQuote={msg.type === 'agent' ? (text, agent) => setQuoteContext({ text, agent }) : undefined}

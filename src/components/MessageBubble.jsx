@@ -78,15 +78,183 @@ const REACTIONS = [
   { label: '≠ Je ne suis pas d\'accord', text: 'Je ne suis pas d\'accord. Défends ta position avec des faits ou admets que t\'avais tort.' },
 ];
 
-// Adaptive chips — visibility depends on sessionCount maturity:
-//   1-20  : always shown
-//   21-50 : shown only when agent ends with a question (closed prompt)
-//   51+   : hidden, "..." toggle reveals on demand
-function AdaptiveReactions({ message, sessionCount, isLast, onReaction, darkMode }) {
+// Detect the *type* of question the agent just asked, so we can offer chips
+// that are real answers (not generic meta-actions). Returns either a list of
+// answer chips (always shown) OR { kind: 'open', chips } for open/strategic
+// questions where we surface only minimal meta-controls.
+// Returns null when the message has no question at all — caller falls back
+// to the full meta-action REACTIONS set with the original visibility logic.
+function detectQuestionContext(content, lang = 'fr') {
+  if (!content) return null;
+  const text = String(content).trim();
+  // Grab the last "?" sentence (questions can be embedded mid-paragraph)
+  const lastQ = text.match(/([^.!?\n]{2,200}\?)\s*$/);
+  if (!lastQ) return null;
+  const q = lastQ[1].toLowerCase();
+
+  // Numerical: "combien", "how many/much", "nombre de"
+  if (/\b(combien|how many|how much|how often|nombre de|number of)\b/.test(q)) {
+    return lang === 'fr'
+      ? [
+          { label: '0',   text: '0' },
+          { label: '1-5', text: 'Entre 1 et 5' },
+          { label: '5+',  text: 'Plus de 5' },
+        ]
+      : [
+          { label: '0',   text: '0' },
+          { label: '1-5', text: 'Between 1 and 5' },
+          { label: '5+',  text: 'More than 5' },
+        ];
+  }
+
+  // Choice question — "X ou Y ?" / "X or Y?". Captures the two options literally.
+  // Heuristic: "<option-a> ou <option-b> ?" in the last 80 chars before the ?
+  // We grab up to 4 short words on either side of " ou " / " or ".
+  const choiceMatch = q.match(/([a-zàâçéèêëîïôûùüÿñæœ0-9$%/+\- ]{1,40})\s+(?:ou|or)\s+([a-zàâçéèêëîïôûùüÿñæœ0-9$%/+\- ]{1,40})\s*\??\s*$/i);
+  if (choiceMatch) {
+    const a = choiceMatch[1].trim().replace(/^(c'est|est-ce que|tu fais|do you|is it|the)\s+/i, '').slice(0, 24);
+    const b = choiceMatch[2].trim().slice(0, 24);
+    if (a && b && a.length <= 24 && b.length <= 24) {
+      return [
+        { label: a, text: a },
+        { label: b, text: b },
+        { label: lang === 'fr' ? 'Ni l\'un ni l\'autre' : 'Neither', text: lang === 'fr' ? 'Ni l\'un ni l\'autre' : 'Neither' },
+      ];
+    }
+  }
+
+  // Yes/No (binary)
+  if (/\b(est-ce que|as-tu|fais-tu|veux-tu|peux-tu|t'as|tu as|do you|did you|have you|are you|is it|will you|can you|would you)\b/.test(q)) {
+    return lang === 'fr'
+      ? [
+          { label: 'Oui',          text: 'Oui' },
+          { label: 'Non',          text: 'Non' },
+          { label: 'Partiellement', text: 'Partiellement' },
+        ]
+      : [
+          { label: 'Yes',       text: 'Yes' },
+          { label: 'No',        text: 'No' },
+          { label: 'Partly',    text: 'Partly' },
+        ];
+  }
+
+  // When / time
+  if (/\b(quand|when)\b/.test(q)) {
+    return lang === 'fr'
+      ? [
+          { label: "Aujourd'hui",   text: "Aujourd'hui" },
+          { label: 'Cette semaine', text: 'Cette semaine' },
+          { label: 'Pas encore',    text: 'Pas encore décidé' },
+        ]
+      : [
+          { label: 'Today',     text: 'Today' },
+          { label: 'This week', text: 'This week' },
+          { label: 'Not yet',   text: 'Not yet decided' },
+        ];
+  }
+
+  // Open / strategic question (pourquoi / comment / quoi / qu'est-ce que / why / how / what)
+  // → minimal meta chips only, not full meta-action REACTIONS
+  if (/\b(pourquoi|comment|qu'est-ce|qu'est ce|qu'est|why|how come|what makes|in what way)\b/.test(q)) {
+    return {
+      kind: 'open',
+      chips: lang === 'fr'
+        ? [
+            { label: 'Développer',       text: 'Développe ta question — donne-moi un angle plus précis.' },
+            { label: 'Changer de sujet', text: 'On change de sujet. Qu\'est-ce qui mérite plus d\'attention ?' },
+          ]
+        : [
+            { label: 'Expand',        text: 'Expand on your question — give me a more specific angle.' },
+            { label: 'Change topic',  text: 'Let\'s switch topics. What deserves more attention right now?' },
+          ],
+    };
+  }
+
+  // Other questions → fall back to full meta-action REACTIONS
+  return null;
+}
+
+// Adaptive chips — two layers:
+//   1. If the message ends with a closed question (numeric / yes-no / when),
+//      surface direct-answer chips ALWAYS — they unblock the user immediately.
+//   2. Otherwise fall back to meta-action REACTIONS, with the original
+//      sessionCount visibility logic (1-20 always, 21-50 if question, 51+ collapsed).
+function AdaptiveReactions({ message, sessionCount, isLast, onReaction, darkMode, lang = 'fr' }) {
   const [expanded, setExpanded] = useState(false);
   if (!onReaction || message.streaming) return null;
 
   const endsWithQuestion = /\?\s*$/.test(String(message.content || '').trim());
+  const detected = endsWithQuestion ? detectQuestionContext(message.content, lang) : null;
+  // Normalize: detector returns either a chip array (closed answers) or
+  // { kind: 'open', chips } for open-question meta controls.
+  const isOpenChips = detected && !Array.isArray(detected) && detected.kind === 'open';
+  const contextualChips = Array.isArray(detected) ? detected : (isOpenChips ? detected.chips : null);
+
+  // Closed-question answer chips — always shown, indigo accent.
+  // Open-question meta chips — shown unless we're in 51+ collapsed mode (then "..." toggle).
+  if (contextualChips && !isOpenChips) {
+    return (
+      <div
+        className="flex flex-wrap items-center gap-1.5 mt-2 ml-1"
+        style={{ marginTop: '10px', display: 'flex', gap: '6px' }}
+      >
+        {contextualChips.map((c) => (
+          <button
+            key={c.label}
+            type="button"
+            onClick={() => onReaction(c.text, message.agent)}
+            className={`${darkMode ? 'text-gray-200 hover:text-white' : 'text-gray-700 hover:text-gray-900'}`}
+            style={{
+              background: darkMode ? 'rgba(99,102,241,0.10)' : 'rgba(99,102,241,0.08)',
+              border: '0.5px solid rgba(99,102,241,0.35)',
+              borderRadius: '20px',
+              padding: '4px 12px',
+              fontSize: '11px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(99,102,241,0.18)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = darkMode ? 'rgba(99,102,241,0.10)' : 'rgba(99,102,241,0.08)'; }}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // Open-question meta chips — minimal, neutral styling. Respect sessionCount collapse for mature users.
+  if (isOpenChips && sessionCount <= 50) {
+    return (
+      <div
+        className="flex flex-wrap items-center gap-1.5 mt-2 ml-1"
+        style={{ marginTop: '10px', display: 'flex', gap: '6px' }}
+      >
+        {contextualChips.map((c) => (
+          <button
+            key={c.label}
+            type="button"
+            onClick={() => onReaction(c.text, message.agent)}
+            className={`${darkMode ? 'text-gray-400 hover:text-gray-100' : 'text-gray-500 hover:text-gray-900'}`}
+            style={{
+              background: 'transparent',
+              border: '0.5px solid rgba(255,255,255,0.1)',
+              borderRadius: '20px',
+              padding: '4px 12px',
+              fontSize: '11px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   let mode;
   if (sessionCount <= 20)        mode = 'always';
   else if (sessionCount <= 50)   mode = endsWithQuestion ? 'always' : 'hidden';
@@ -534,6 +702,7 @@ function AgentMessage({ message, agentNames, agentPhotos, darkMode, feedback, on
         isLast={isLast}
         onReaction={onReaction}
         darkMode={darkMode}
+        lang={lang}
       />
 
       {/* E) Star rating — always shown below reactions when not streaming */}
