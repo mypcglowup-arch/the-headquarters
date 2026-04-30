@@ -7,7 +7,8 @@ const METRIC_ACCENTS = [
 ];
 
 export default function FinancialBar({ data, darkMode, lang = 'fr' }) {
-  const { monthlyRevenue, retainers, annualGoal = 50000 } = data;
+  const { monthlyRevenue, retainers, annualGoal: annualGoalRaw } = data;
+  const annualGoal = Number(annualGoalRaw) || 50000;
   const totalRevenue = monthlyRevenue.reduce((s, m) => s + (m.revenue || 0), 0);
   const totalMRR     = retainers.reduce((s, r) => s + (r.amount || 0), 0);
   const goalPct      = annualGoal > 0 ? Math.min(100, Math.round((totalRevenue / annualGoal) * 100)) : 0;

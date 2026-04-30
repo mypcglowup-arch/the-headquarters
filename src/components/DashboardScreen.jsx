@@ -797,7 +797,8 @@ function RetainerRow({ r, c, lang, onUpdate, onDelete, isNew }) {
 // ─── Main component ────────────────────────────────────────────────────────────
 export default function DashboardScreen({ data, onUpdate, darkMode, lang = 'fr', onStartSession, onGoProspects, sectorPipelineStages = null }) {
   const c = darkMode ? D : L;
-  const { monthlyRevenue, pipeline, retainers, oneTimeRevenues = [], annualGoal = 50000 } = data;
+  const { monthlyRevenue, pipeline, retainers, oneTimeRevenues = [], annualGoal: annualGoalRaw } = data;
+  const annualGoal = Number(annualGoalRaw) || 50000;
 
   // ── Derived metrics (Step 6: all recalculate instantly) ───────────────────
   const totalRevenue  = monthlyRevenue.reduce((s, m) => s + (m.revenue  || 0), 0);

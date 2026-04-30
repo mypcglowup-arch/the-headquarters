@@ -53,10 +53,9 @@ function buildScript(lang = 'fr') {
       options: opts(EXPERIENCE_OPTIONS),
     },
     {
-      key: 'annualGoal', kind: 'number', skippable: true,
+      key: 'annualGoal', kind: 'text', skippable: true,
       prompt: L ? "C'est quoi ton objectif annuel en revenus ? Le vrai chiffre — pas celui que tu mets sur LinkedIn." : "What's your annual revenue target? The real number — not the LinkedIn one.",
-      placeholder: '50000',
-      suffix: '$',
+      placeholder: L ? 'Ex: 50 000$ · 100k · 6 chiffres' : 'Ex: $50,000 · 100k · 6 figures',
     },
     {
       key: 'strength', kind: 'single-chip',

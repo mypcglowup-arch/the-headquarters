@@ -43,7 +43,8 @@ export function checkNotifications(dashboard, streak, agentNames, lang = 'fr') {
 
   // 2. MRR at zero for 30+ days (check if annualGoal set but no retainers)
   const totalMRR = (dashboard?.retainers || []).reduce((s, r) => s + (r.amount || 0), 0);
-  const hasGoal = (dashboard?.annualGoal || 0) > 0;
+  const annualGoalNum = Number(dashboard?.annualGoal) || 50000;
+  const hasGoal = annualGoalNum > 0;
   const firstOpenDate = (() => { try { return localStorage.getItem('qg_first_open_date'); } catch { return null; } })();
   if (!wasDismissedToday('mrr_zero') && hasGoal && totalMRR === 0 && firstOpenDate) {
     const daysSinceFirst = Math.floor((Date.now() - new Date(firstOpenDate).getTime()) / 86400000);
@@ -53,8 +54,8 @@ export function checkNotifications(dashboard, streak, agentNames, lang = 'fr') {
         key: 'mrr_zero',
         agent: 'CARDONE',
         message: t(
-          `${name} va être direct avec toi.\n\n**${daysSinceFirst} jours** à zéro MRR. Ton objectif est $${(dashboard.annualGoal || 0).toLocaleString()}/an — le clock tourne. Pas d'analyse. Pas de stratégie. **Combien de prospects as-tu contactés cette semaine ?**`,
-          `${name} is going to be direct with you.\n\n**${daysSinceFirst} days** at zero MRR. Your goal is $${(dashboard.annualGoal || 0).toLocaleString()}/year — the clock is ticking. No analysis. No strategy. **How many prospects did you contact this week?**`
+          `${name} va être direct avec toi.\n\n**${daysSinceFirst} jours** à zéro MRR. Ton objectif est $${annualGoalNum.toLocaleString()}/an — le clock tourne. Pas d'analyse. Pas de stratégie. **Combien de prospects as-tu contactés cette semaine ?**`,
+          `${name} is going to be direct with you.\n\n**${daysSinceFirst} days** at zero MRR. Your goal is $${annualGoalNum.toLocaleString()}/year — the clock is ticking. No analysis. No strategy. **How many prospects did you contact this week?**`
         ),
       };
     }

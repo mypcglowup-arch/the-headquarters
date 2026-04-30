@@ -122,7 +122,8 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 
 function formatDashboardContext(data) {
   if (!data) return null;
-  const { monthlyRevenue = [], retainers = [], oneTimeRevenues = [], pipeline = {}, annualGoal = 50000 } = data;
+  const { monthlyRevenue = [], retainers = [], oneTimeRevenues = [], pipeline = {}, annualGoal: annualGoalRaw = 50000 } = data;
+  const annualGoal = Number(annualGoalRaw) || 50000;
   const totalRevenue  = monthlyRevenue.reduce((s, m) => s + (m.revenue  || 0), 0);
   const totalExpenses = monthlyRevenue.reduce((s, m) => s + (m.expenses || 0), 0);
   const totalMRR      = retainers.reduce((s, r) => s + (r.amount || 0), 0);
@@ -260,6 +261,7 @@ export default function App() {
   const [victories, setVictories] = useState(() => loadVictories());
   const [userProfile, setUserProfile] = useState(() => loadUserProfile());
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingResetMode, setOnboardingResetMode] = useState(false);
   const [onboardingNudgeDismissed, setOnboardingNudgeDismissed] = useState(() => {
     try { return localStorage.getItem('qg_onboarding_nudge_dismissed_v1') === '1'; } catch { return false; }
   });
@@ -1096,6 +1098,25 @@ export default function App() {
   async function sendMessage(text, attachment = null, forcedAgent = null) {
     if (!text.trim() && !attachment) return;
     if (isLoading) return;
+
+    // Slash-style commands — intercepted before any agent flow. Typing
+    // "refaire l'onboarding" / "reset onboarding" inside an active session
+    // relaunches the ConversationalOnboarding modal instead of being sent.
+    if (text && !attachment) {
+      const normalized = text.trim().toLowerCase().replace(/['']/g, "'");
+      if (
+        normalized === "refaire l'onboarding" ||
+        normalized === "refaire onboarding" ||
+        normalized === "reset onboarding" ||
+        normalized === "redo onboarding" ||
+        normalized === "/onboarding" ||
+        normalized === "/refaire-onboarding"
+      ) {
+        reopenOnboardingFresh();
+        return;
+      }
+    }
+
     setError(null);
 
     // A user sending another message after an agent response is proof of engagement.
@@ -2133,6 +2154,22 @@ export default function App() {
     const msg = text.trim();
     if (!msg) return;
 
+    // Slash-style commands — intercepted before any session/agent flow.
+    // Typing "refaire l'onboarding" / "reset onboarding" relaunches the
+    // ConversationalOnboarding modal from step 1 instead of starting a session.
+    const normalized = msg.toLowerCase().replace(/['']/g, "'");
+    if (
+      normalized === "refaire l'onboarding" ||
+      normalized === "refaire onboarding" ||
+      normalized === "reset onboarding" ||
+      normalized === "redo onboarding" ||
+      normalized === "/onboarding" ||
+      normalized === "/refaire-onboarding"
+    ) {
+      reopenOnboardingFresh();
+      return;
+    }
+
     // Step 2 — Prospects page: pre-load prospect context if name matched
     let finalMsg = msg;
     if (screen === 'prospects') {
@@ -2511,7 +2548,7 @@ export default function App() {
   }
 
   function addVictory(victoryData) {
-    const annualGoal = dashboard?.annualGoal || 50000;
+    const annualGoal = Number(dashboard?.annualGoal) || 50000;
     const roi = computeROI(victoryData.value_monthly || 0, annualGoal);
     const newVictory = {
       id: `vic-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -2567,6 +2604,25 @@ export default function App() {
   function dismissOnboardingNudge() {
     setOnboardingNudgeDismissed(true);
     try { localStorage.setItem('qg_onboarding_nudge_dismissed_v1', '1'); } catch {}
+  }
+
+  function reopenOnboardingFresh() {
+    try {
+      localStorage.removeItem('qg_conversational_onboarding_seen_v1');
+      localStorage.removeItem('qg_onboarding_nudge_dismissed_v1');
+    } catch {}
+    setOnboardingNudgeDismissed(false);
+
+    // Force a clean unmount → remount cycle. If the modal was already open with
+    // stale state, or if showOnboarding was somehow already true, going through
+    // false first guarantees ConversationalOnboarding fully resets (step=0,
+    // answers={}, transcript=[]) and the entrance animation re-fires.
+    setShowOnboarding(false);
+    setOnboardingResetMode(false);
+    setTimeout(() => {
+      setOnboardingResetMode(true);
+      setShowOnboarding(true);
+    }, 30);
   }
 
   // First-launch auto-open : if there's no profile name AND we've never shown
@@ -2903,7 +2959,7 @@ export default function App() {
               dashboard={dashboard}
               onSaveProfile={saveUserProfileAll}
               onUpdateDashboardGoal={(goal) => updateDashboard({ annualGoal: goal })}
-              onReopenOnboarding={() => setShowOnboarding(true)}
+              onReopenOnboarding={reopenOnboardingFresh}
             />
           </div>
         )}
@@ -3002,17 +3058,18 @@ export default function App() {
           Saves are incremental : each answer commits immediately so partial runs persist. */}
       {showOnboarding && (
         <ConversationalOnboarding
+          key={onboardingResetMode ? 'onboarding-fresh' : 'onboarding-normal'}
           darkMode={darkMode}
           lang={lang}
-          initialProfile={userProfile}
-          primaryAgentDefault={userProfile?.primaryAgent || 'HORMOZI'}
+          initialProfile={onboardingResetMode ? null : userProfile}
+          primaryAgentDefault={onboardingResetMode ? 'HORMOZI' : (userProfile?.primaryAgent || 'HORMOZI')}
           onSave={(p, meta) => {
             saveUserProfileAll({ ...userProfile, ...p });
             if (!meta?.partial) {
               toast(lang === 'fr' ? '✓ Profil enregistré' : '✓ Profile saved', { type: 'success', duration: 2400 });
             }
           }}
-          onClose={() => setShowOnboarding(false)}
+          onClose={() => { setShowOnboarding(false); setOnboardingResetMode(false); }}
         />
       )}
 

@@ -22,10 +22,11 @@ export default function VictoriesScreen({
   darkMode,
   lang = 'fr',
   victories = [],
-  annualGoal = 50000,
+  annualGoal: annualGoalRaw = 50000,
   onAddVictory,
   onDeleteVictory,
 }) {
+  const annualGoal = Number(annualGoalRaw) || 50000;
   const [showModal, setShowModal] = useState(false);
   const [periodId, setPeriodId] = useState(null);
   const [categoryId, setCategoryId] = useState(null);

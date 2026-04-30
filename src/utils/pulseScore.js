@@ -32,7 +32,7 @@ export function computePulseScore(dashboard, streak, checkInData = null) {
 
   // ── Finances (MRR vs monthly target) ─────────────────────────────────────
   const totalMRR = (dashboard?.retainers || []).reduce((s, r) => s + (r.amount || 0), 0);
-  const monthlyTarget = (dashboard?.annualGoal || 50000) / 12;
+  const monthlyTarget = (Number(dashboard?.annualGoal) || 50000) / 12;
   const mrrRatio = monthlyTarget > 0 ? totalMRR / monthlyTarget : 0;
   let financesScore;
   if (mrrRatio === 0)         financesScore = 1;

@@ -45,7 +45,8 @@ export function saveVictoriesCache(victories) {
 export function computeROI(valueMonthly, annualGoal = 50000) {
   const v = Number(valueMonthly) || 0;
   const annual = v * 12;
-  const goalPercent = annualGoal > 0 ? (annual / annualGoal) * 100 : 0;
+  const goal = Number(annualGoal) || 50000;
+  const goalPercent = goal > 0 ? (annual / goal) * 100 : 0;
   return {
     annual,
     goalPercent: Math.round(goalPercent * 10) / 10,

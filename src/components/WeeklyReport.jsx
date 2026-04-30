@@ -37,7 +37,7 @@ export default function WeeklyReport({ reportText, dashboard, streak, sessionCou
   const weekSessions = getWeekSessions();
   const weekWins = getWeekWins();
   const totalMRR = (dashboard?.retainers || []).reduce((s, r) => s + (r.amount || 0), 0);
-  const annualGoal = dashboard?.annualGoal || 50000;
+  const annualGoal = Number(dashboard?.annualGoal) || 50000;
   const ytdRevenue = (dashboard?.monthlyRevenue || []).reduce((s, m) => s + (m.revenue || 0), 0);
   const goalPct = annualGoal > 0 ? Math.min(100, Math.round((ytdRevenue / annualGoal) * 100)) : 0;
 

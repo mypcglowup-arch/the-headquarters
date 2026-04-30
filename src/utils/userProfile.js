@@ -162,7 +162,7 @@ export function formatUserContext(profile, lang = 'fr') {
   if (ident.length) parts.push((L ? 'Identité: ' : 'Identity: ') + ident.join(' · '));
 
   if (profile.annualGoal) {
-    parts.push((L ? 'Objectif annuel: ' : 'Annual goal: ') + `${Number(profile.annualGoal).toLocaleString()}$`);
+    parts.push((L ? 'Objectif annuel: ' : 'Annual goal: ') + `${(Number(profile.annualGoal) || 50000).toLocaleString()}$`);
   }
   if (profile.stage && STAGE_OPTIONS[profile.stage]) {
     parts.push((L ? 'Stade business: ' : 'Stage: ') + STAGE_OPTIONS[profile.stage][L ? 'fr' : 'en']);
