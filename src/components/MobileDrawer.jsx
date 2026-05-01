@@ -59,7 +59,10 @@ export default function MobileDrawer({
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   // Wrap any nav handler so the drawer auto-closes after the click.
-  const wrapClose = (fn) => () => { onCloseRef.current?.(); fn?.(); };
+  // Order matters : navigate FIRST, close after. If for any reason onClose
+  // unmounts something or interferes mid-handler, the nav has already fired
+  // by then. React 18 auto-batches both setStates into one render anyway.
+  const wrapClose = (fn) => () => { fn?.(); onCloseRef.current?.(); };
 
   // ── ESC closes ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -145,12 +148,12 @@ export default function MobileDrawer({
     ? 'none'                                  // direct follow during drag
     : 'transform 300ms cubic-bezier(0.32, 0.72, 0, 1)';
 
-  // Backdrop opacity : 0.78 base (above the 0.7 floor the user requested) ;
-  // fades as the user drags the drawer right so the visual "letting go" is
-  // smooth. Always at least 0.7 — never lets the underlying UI bleed through.
+  // Backdrop opacity : 0.85 base. Subtle dip during swipe-close (down to 0.78
+  // so the user feels the drawer "letting go") but always opaque enough that
+  // the app underneath stays masked completely.
   const drawerW         = drawerRef.current?.offsetWidth || 280;
   const dragProgress    = Math.min(1, Math.max(0, dragX / drawerW));
-  const backdropOpacity = open ? Math.max(0.7, 0.78 - dragProgress * 0.08) : 0;
+  const backdropOpacity = open ? Math.max(0.78, 0.85 - dragProgress * 0.07) : 0;
 
   // Solid panel color — NO transparency, NO backdrop-filter (those leak the
   // app underneath). Tuned to the existing dark/light palette.
@@ -260,11 +263,16 @@ export default function MobileDrawer({
             // forgot to thread a prop through.
             if (!Icon || typeof onClick !== 'function') return null;
             const active = screen === key;
+            // No onMouseEnter/Leave hover styles — they trigger the iOS
+            // "first tap = hover, second tap = click" behaviour on Safari
+            // mobile, which made nav items require two taps to navigate.
+            // Active state already provides clear visual feedback.
             return (
               <button
                 key={key}
+                type="button"
                 onClick={wrapClose(onClick)}
-                className="w-full flex items-center gap-3 px-5 text-left transition-colors"
+                className="w-full flex items-center gap-3 px-5 text-left transition-colors active:bg-white/[0.06]"
                 style={{
                   height:     52,
                   background: active ? 'rgba(99,102,241,0.14)' : 'transparent',
@@ -273,9 +281,8 @@ export default function MobileDrawer({
                     : (darkMode ? 'rgba(226,232,240,0.92)' : 'rgba(15,23,42,0.85)'),
                   borderLeft: active ? '3px solid rgb(99,102,241)' : '3px solid transparent',
                   paddingLeft: active ? 17 : 20,
+                  WebkitTapHighlightColor: 'transparent',
                 }}
-                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)'; }}
-                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
               >
                 <Icon size={17} strokeWidth={active ? 2.4 : 2} style={{ color: active ? 'rgb(99,102,241)' : (darkMode ? 'rgba(148,163,184,0.85)' : 'rgba(71,85,105,0.85)') }} />
                 <span className="flex-1 text-[14.5px] font-medium truncate">{label}</span>
