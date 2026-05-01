@@ -483,14 +483,24 @@ function ActionHero({ dashData, lang, c, darkMode, onStartSession }) {
           </div>
           {loading && <div style={{ position: 'absolute', inset: -7, borderRadius: '50%', border: '1.5px solid rgba(99,102,241,0.35)', animation: 'ringExpand 1.6s ease-out infinite', pointerEvents: 'none' }} />}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* flexBasis: 200 ensures the text column has a usable starting width */}
+        {/* on narrow screens (flexWrap: wrap pushes buttons to a new line if  */}
+        {/* needed). overflowWrap + wordBreak guarantee the text NEVER gets    */}
+        {/* clipped by ancestor overflow:hidden — long content wraps cleanly.  */}
+        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
           <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: c.accent, marginBottom: 7 }}>
             {t('dash.actionPrioritaire', lang)}
           </p>
           {loading ? (
             <div style={{ height: 14, borderRadius: 6, width: '72%', background: darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)', animation: 'shimmer 1.4s ease-in-out infinite' }} />
           ) : text ? (
-            <p style={{ fontSize: 14, fontWeight: 500, color: c.text0, lineHeight: 1.55, margin: 0 }}>{text}</p>
+            <p style={{
+              fontSize: 14, fontWeight: 500, color: c.text0, lineHeight: 1.55, margin: 0,
+              overflowWrap: 'anywhere',  // breaks long unbroken strings (URLs, equals signs) cleanly
+              wordBreak:    'break-word', // legacy fallback for older browsers
+              whiteSpace:   'normal',
+              maxWidth:     '100%',
+            }}>{text}</p>
           ) : (
             <p style={{ fontSize: 13, color: c.text2, margin: 0 }}>{t('dash.noData', lang)}</p>
           )}

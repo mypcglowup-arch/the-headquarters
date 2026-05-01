@@ -3752,22 +3752,38 @@ export async function getDailyQuote(lang = 'fr') {
 export async function generateDashboardAction(dashboardData = {}, lang = 'fr') {
   const { totalRevenue = 0, annualGoal = 0, totalMRR = 0, goalPct = 0, closingRate = 0 } = dashboardData;
   const langNote = lang === 'fr'
-    ? 'Réponds en français, ton direct et percutant. 1 phrase max, commence par un verbe d\'action.'
-    : 'Reply in English. Direct and punchy. 1 sentence max, start with an action verb.';
+    ? 'Réponds en français québécois, ton direct et percutant. UNE phrase, commence par un verbe d\'action.'
+    : 'Reply in English. Direct and punchy. ONE sentence, start with an action verb.';
 
   const systemPrompt = `You are the Synthesizer — a cold-eyed business advisor for a Quebec entrepreneur running NT Solutions, an AI agency.
 Current numbers: Revenue YTD $${totalRevenue.toLocaleString()}, Annual Goal $${annualGoal.toLocaleString()} (${goalPct}% achieved), MRR $${totalMRR.toLocaleString()}/month, Pipeline closing rate ${closingRate}%.
 ${langNote}
-Identify the single most important action to take right now based on the numbers. No fluff, no preamble.`;
+
+HARD CONSTRAINT — UNBREAKABLE :
+- Output MUST be ≤ 120 characters total (including spaces and punctuation).
+- ONE sentence only. No preamble. No "Here's...". No quotes. No markdown.
+- Count carefully — if your draft exceeds 120 chars, rewrite tighter.
+
+Identify the single most important action to take right now based on the numbers.`;
 
   try {
     const action = await callClaude(
       systemPrompt,
-      [{ role: 'user', content: 'What is my #1 priority action right now?' }],
-      40, false, null, false, false, null,
+      [{ role: 'user', content: 'What is my #1 priority action right now? ≤120 chars.' }],
+      80, false, null, false, false, null,
       HAIKU_MODEL
     );
-    return action?.trim() || null;
+    let trimmed = (action || '').trim();
+    // Strip surrounding quotes if the model wraps the sentence
+    trimmed = trimmed.replace(/^["'`«»]+|["'`«»]+$/g, '').trim();
+    if (!trimmed) return null;
+    // Hard truncate to 120 chars at the last word boundary if the model overshoots
+    if (trimmed.length > 120) {
+      const cut = trimmed.slice(0, 120);
+      const lastSpace = cut.lastIndexOf(' ');
+      trimmed = (lastSpace > 80 ? cut.slice(0, lastSpace) : cut).trim().replace(/[,;:]+$/, '') + '…';
+    }
+    return trimmed;
   } catch {
     return null;
   }
