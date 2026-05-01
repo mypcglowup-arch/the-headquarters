@@ -3250,6 +3250,68 @@ HARD RULES:
 // Lighter than Monday opening — one observation + one question, ≤ 50 words.
 // Picks the agent whose domain matches the most relevant signal right now.
 // Returns { agent, content } or null if no usable signal (caller skips).
+// ─── Static fallback openings ────────────────────────────────────────────────
+// Hard-coded openers per agent. Used when generateSessionOpening fails (LLM
+// down, invalid JSON, network error, etc.) so the user NEVER sees a silent
+// chat after the system "Session démarrée". Lightly personalised with the
+// user's name + niche when available — keeps the agent voice intact even
+// when offline.
+//
+// Each opener stays under 50 words, second-person, no greeting, ends with an
+// uncomfortable question — same DNA as the LLM-generated openings.
+const STATIC_FIRST_OPENINGS = {
+  fr: {
+    HORMOZI: { agent: 'HORMOZI', content: "On commence par les chiffres. C'est quoi ton offre principale et combien tu charges pour ?", rationale: 'static-fallback-first' },
+    CARDONE: { agent: 'CARDONE', content: "Premier round. T'as combien de prospects actifs là, maintenant, avec qui t'es supposé parler cette semaine ?", rationale: 'static-fallback-first' },
+    ROBBINS: { agent: 'ROBBINS', content: "On démarre. C'est quoi le truc que t'évites depuis trop longtemps et que tu sais que tu dois faire ?", rationale: 'static-fallback-first' },
+    GARYV:   { agent: 'GARYV',   content: "Ton audience sait pas que t'existes. T'as posté quoi sur quelle plateforme dans les 7 derniers jours ?", rationale: 'static-fallback-first' },
+    NAVAL:   { agent: 'NAVAL',   content: "T'as ouvert l'app. La vraie question : c'est quoi le levier que tu pourrais activer une fois et qui te rapporterait pendant des années ?", rationale: 'static-fallback-first' },
+    VOSS:    { agent: 'VOSS',    content: "On commence. Y'a un deal, une négo ou une conversation difficile que t'as mise de côté — c'est laquelle ?", rationale: 'static-fallback-first' },
+  },
+  en: {
+    HORMOZI: { agent: 'HORMOZI', content: "Let's start with the numbers. What's your main offer and what are you charging for it?", rationale: 'static-fallback-first' },
+    CARDONE: { agent: 'CARDONE', content: "First round. How many active prospects do you have right now that you're supposed to be talking to this week?", rationale: 'static-fallback-first' },
+    ROBBINS: { agent: 'ROBBINS', content: "Let's begin. What's the thing you've been avoiding too long that you know you need to face?", rationale: 'static-fallback-first' },
+    GARYV:   { agent: 'GARYV',   content: "Your audience doesn't know you exist. What did you post and where in the last 7 days?", rationale: 'static-fallback-first' },
+    NAVAL:   { agent: 'NAVAL',   content: "You opened the app. The real question: what's the leverage you could pull once and earn from for years?", rationale: 'static-fallback-first' },
+    VOSS:    { agent: 'VOSS',    content: "Let's start. There's a deal, a negotiation, or a hard conversation you've been putting off — which one?", rationale: 'static-fallback-first' },
+  },
+};
+
+const STATIC_RECURRENT_OPENINGS = {
+  fr: {
+    HORMOZI: { agent: 'HORMOZI', content: "Reprends-moi : c'est quoi le chiffre qui a bougé depuis la dernière fois — dans le bon ou le mauvais sens ?", rationale: 'static-fallback' },
+    CARDONE: { agent: 'CARDONE', content: "Combien de conversations de vente t'as eues depuis la dernière session ? Réponds avec un chiffre, pas une excuse.", rationale: 'static-fallback' },
+    ROBBINS: { agent: 'ROBBINS', content: "T'es revenu. Qu'est-ce qui s'est passé dans ta tête depuis la dernière fois — tu progresses ou tu rumines ?", rationale: 'static-fallback' },
+    GARYV:   { agent: 'GARYV',   content: "T'as posté combien de fois depuis qu'on s'est parlé ? Et c'est quoi qui t'arrête de poster aujourd'hui ?", rationale: 'static-fallback' },
+    NAVAL:   { agent: 'NAVAL',   content: "Une semaine plus tard. Le travail que t'as fait — c'était du levier, ou c'était de l'occupation ?", rationale: 'static-fallback' },
+    VOSS:    { agent: 'VOSS',    content: "Y'a un appel ou une réponse à un prospect que tu repousses. Donne-moi le contexte et je te sors le script.", rationale: 'static-fallback' },
+  },
+  en: {
+    HORMOZI: { agent: 'HORMOZI', content: "Pick up where we left off: what number moved since last session — for better or worse?", rationale: 'static-fallback' },
+    CARDONE: { agent: 'CARDONE', content: "How many sales conversations did you have since last session? Answer with a number, not an excuse.", rationale: 'static-fallback' },
+    ROBBINS: { agent: 'ROBBINS', content: "You're back. What happened in your head since last session — making progress or stuck in your head?", rationale: 'static-fallback' },
+    GARYV:   { agent: 'GARYV',   content: "How many times have you posted since we last spoke? And what's stopping you from posting today?", rationale: 'static-fallback' },
+    NAVAL:   { agent: 'NAVAL',   content: "A week later. The work you did — was it leverage, or was it busy work?", rationale: 'static-fallback' },
+    VOSS:    { agent: 'VOSS',    content: "There's a call or a prospect reply you're putting off. Give me the context and I'll draft the script.", rationale: 'static-fallback' },
+  },
+};
+
+/**
+ * Hard fallback opening — never throws, never makes a network call. Returns a
+ * deterministic { agent, content, rationale } based on userProfile.primaryAgent
+ * (if set) or HORMOZI by default. Use when generateSessionOpening fails or
+ * returns null, so the chat never stays silent after "Session démarrée".
+ */
+export function buildStaticOpening({ userProfile = null, isFirstSession = false, lang = 'fr' } = {}) {
+  const L = lang === 'en' ? 'en' : 'fr';
+  const pool = isFirstSession ? STATIC_FIRST_OPENINGS[L] : STATIC_RECURRENT_OPENINGS[L];
+  const preferred = userProfile?.primaryAgent;
+  const validAgents = ['HORMOZI', 'CARDONE', 'ROBBINS', 'GARYV', 'NAVAL', 'VOSS'];
+  const agentKey = (preferred && validAgents.includes(preferred)) ? preferred : 'HORMOZI';
+  return pool[agentKey] || pool.HORMOZI;
+}
+
 export async function generateSessionOpening({
   hour          = new Date().getHours(),
   pipeline      = [],
@@ -3258,6 +3320,8 @@ export async function generateSessionOpening({
   lastSession   = null,
   victoriesCount = 0,
   totalMRR      = 0,
+  isFirstSession = false,
+  userProfile   = null,
   lang          = 'fr',
 } = {}) {
   // Build compact source block — NO Mem0 (too slow for opening). Local data only.
@@ -3304,6 +3368,24 @@ AGENTS & SIGNATURE OPENING SHAPES :
 - GARYV   — content, brand, audience. Voice : raw energy, market-anchored.    Pattern : "[silence de contenu = X jours]. [verdict marché]. [question d'exécution]."
 - NAVAL   — leverage, scalability.   Voice : aphorisme minimaliste.            Pattern : "[observation système]. [reframe levier]. (question optionnelle)"
 - VOSS    — negotiation, deal at risk. Voice : calme, miroir, étiquetage.     Pattern : "[deal/appel à venir]. [étiquetage émotionnel]. [question calibrée]."
+
+${isFirstSession ? `FIRST-SESSION CONTEXT (UNBREAKABLE) :
+This is the user's VERY FIRST session. Pipeline is empty, no retainers, no historical signals — that's normal, NOT a problem to comment on. Do NOT pretend to know things you don't. Instead :
+- Open with ONE direct, identity-shaping question that reveals who they are : their offer, their main constraint, their biggest gap, their stage. Pick the angle most aligned with the chosen agent's domain.
+- Use the USER PROFILE (sector, stage, role) IF available to make the question concrete. If not available, ask broadly but sharply.
+- Examples (study the SHAPE, do not copy) :
+  - HORMOZI : "On commence par les chiffres. C'est quoi ton offre principale, et combien tu charges pour ?"
+  - CARDONE : "Premier round. T'as combien de prospects actifs en ce moment, ou t'es à zéro ?"
+  - NAVAL :  "T'as ouvert l'app. C'est quoi le levier le plus fort que tu pourrais activer cette année et que tu n'as pas activé ?"
+- Pick the agent based on the user profile if signaled (primaryAgent if set, otherwise the agent whose domain matches the declared challenge).
+- Skip the SIGNAL→AGENT MAPPING and LIVE SIGNALS sections below — they don't apply on first session.
+` : ''}USER PROFILE (use to personalize the opening — do NOT regurgitate verbatim) :
+${userProfile?.name        ? `  name: ${userProfile.name}` : '  name: not set'}
+${userProfile?.role        ? `  role: ${userProfile.role}` : ''}
+${userProfile?.sectorCustom || userProfile?.sector ? `  niche: ${userProfile.sectorCustom || userProfile.sector}` : ''}
+${userProfile?.stage       ? `  stage: ${userProfile.stage}` : ''}
+${userProfile?.primaryAgent ? `  preferred agent: ${userProfile.primaryAgent}` : ''}
+${userProfile?.challenges?.length ? `  declared challenges: ${userProfile.challenges.join(', ')}` : ''}
 
 LIVE SIGNALS :
   time: ${timeOfDay} (${hour}h)
@@ -3373,12 +3455,10 @@ HARD RULES — instant disqualifier :
     if (content.length < 20 || content.length > 400) return null;
     return { agent: parsed.agent, content, rationale: String(parsed.rationale || '').slice(0, 120) };
   } catch (err) {
-    // TEMPORARY DIAGNOSTIC — re-throw so the caller's alert() catch surfaces
-    // the real reason (Vercel function 500, missing env var, timeout, etc.).
-    // Once the Vercel proxy is verified working, restore the silent-warn
-    // behaviour by replacing this with `console.warn(...) ; return null ;`.
-    console.error('[generateSessionOpening] network/parse error:', err);
-    throw err;
+    // Return null on any error — caller falls back to buildStaticOpening so
+    // the chat never stays silent after "Session démarrée".
+    console.warn('[generateSessionOpening] failed, falling back to static:', err?.message);
+    return null;
   }
 }
 

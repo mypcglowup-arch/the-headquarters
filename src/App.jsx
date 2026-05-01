@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { runSession, archiveSession, callConsensus, getDailyQuote, getMomentumMirror, generateMondayReport, callClaudeStream, draftEmailReply, analyzeEmail, extractCalendarEvent, extractPipelineAction, extractDashboardUpdate, generateMemoryRecap, generateMorningBriefing, extractBatchFollowupIntent, generateFollowupMessage, detectMeetingPatterns, generateAgentOpening, generateFilRouge, analyzeInterjection, generateAnomalyAlert, extractActionableDecision, formatTrackRecord, generateMondayOpening, generateSessionOpening, detectSessionDrift, generateClosure } from './api.js';
+import { runSession, archiveSession, callConsensus, getDailyQuote, getMomentumMirror, generateMondayReport, callClaudeStream, draftEmailReply, analyzeEmail, extractCalendarEvent, extractPipelineAction, extractDashboardUpdate, generateMemoryRecap, generateMorningBriefing, extractBatchFollowupIntent, generateFollowupMessage, detectMeetingPatterns, generateAgentOpening, generateFilRouge, analyzeInterjection, generateAnomalyAlert, extractActionableDecision, formatTrackRecord, generateMondayOpening, generateSessionOpening, buildStaticOpening, detectSessionDrift, generateClosure } from './api.js';
 import { getMaturityPhase, pickBestPattern, markPatternFired, pruneCooldowns } from './utils/meetingRoom.js';
 import { shouldFireMondaySession } from './utils/mondayWindow.js';
 import { updateTopicTracker, getStaleTopics } from './utils/topicTracker.js';
@@ -1017,21 +1017,16 @@ export default function App() {
       }
     }
 
-    // ── Universal session opening (last resort, skipping if any prior path fired) ─
+    // ── Universal session opening — UNBREAKABLE safety net ─────────────────
     // Fires ~1500ms after start to let pattern/recap/briefing race finish first.
-    // Skipped if user already typed something, or briefingLockedRef tripped, or
-    // any agent message already populated the chat.
+    // ALWAYS fires (including session 1) unless mode=silent or another layer
+    // already populated the chat. If the LLM call fails, falls back to a
+    // static hardcoded opener — the chat never stays silent.
     setTimeout(() => {
       (async () => {
         if (effectiveMode === 'silent') return;
         if (briefingLockedRef.current) return;
-        if (sessionCount <= 1) return;
-        const memories = isMem0Enabled() ? await fetchMemoriesForRecap() : [];
-        if (briefingLockedRef.current) return;
-        if (!memories || memories.length === 0) return;
         // Check that the only thing in the chat is the welcome system message
-        const currentMsgs = (() => { try { return messagesAtCheck; } catch { return []; } })();
-        // Use a setter to read fresh state without external scope leak
         let canFire = false;
         setMessages((prev) => {
           const hasAgent = prev.some((m) => m.type === 'agent');
@@ -1040,12 +1035,17 @@ export default function App() {
           return prev;
         });
         if (!canFire) return;
+
+        const isFirstSession = (sessionCount || 0) <= 1;
+        const recentWins = (() => {
+          try { return JSON.parse(localStorage.getItem('qg_wins_v1') || '[]').slice(0, 3); } catch { return []; }
+        })();
+        const totalMRR = (dashboard?.retainers || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+
+        // Try the LLM-driven opening first. On failure → static fallback.
+        let opening = null;
         try {
-          const recentWins = (() => {
-            try { return JSON.parse(localStorage.getItem('qg_wins_v1') || '[]').slice(0, 3); } catch { return []; }
-          })();
-          const totalMRR = (dashboard?.retainers || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
-          const opening = await generateSessionOpening({
+          opening = await generateSessionOpening({
             hour:           new Date().getHours(),
             pipeline:       (dashboard?.pipeline && Array.isArray(dashboard.pipeline) ? dashboard.pipeline : []),
             retainers:      dashboard?.retainers || [],
@@ -1053,45 +1053,44 @@ export default function App() {
             lastSession:    loadHistory()[0] || null,
             victoriesCount: victories?.length || 0,
             totalMRR,
+            isFirstSession,
+            userProfile,
             lang,
           });
-          if (briefingLockedRef.current || !opening) return;
-          // Re-check state — user may have typed during the await
-          let stillCanFire = false;
-          setMessages((prev) => {
-            const hasAgent = prev.some((m) => m.type === 'agent');
-            const hasUser  = prev.some((m) => m.type === 'user');
-            stillCanFire = !hasAgent && !hasUser;
-            return prev;
-          });
-          if (!stillCanFire) return;
-          briefingLockedRef.current = true;
-          setMessages((prev) => [...prev, {
-            id:        `session-opening-${thisSessionId}-${opening.agent}`,
-            type:      'agent',
-            agent:     opening.agent,
-            content:   opening.content,
-            streaming: false,
-            timestamp: new Date(),
-            meta:      { source: 'sessionOpening', rationale: opening.rationale },
-          }]);
-          pendingInteractionRef.current = true;
-          console.log('[SessionOpening] fired:', opening.agent, '·', opening.rationale);
         } catch (err) {
-          // TEMPORARY DIAGNOSTIC — surface the error on mobile where console
-          // is invisible. Toast first (less intrusive), alert as fallback so
-          // the user always sees it. Remove both once the Vercel proxy is
-          // confirmed working.
-          const msg = err?.message || String(err);
-          console.error('[SessionOpening] failed:', err);
-          try {
-            toast(`⚠️ Opening failed: ${msg.slice(0, 140)}`, { type: 'error', duration: 6000 });
-          } catch {}
-          if (typeof window !== 'undefined' && window.alert) {
-            // Show the FULL error including network/HTTP details
-            window.alert('[SessionOpening] failed:\n\n' + msg + '\n\nFull error in console.');
-          }
+          // generateSessionOpening returns null on error now ; still wrap defensively.
+          console.warn('[SessionOpening] LLM call threw, using static fallback:', err?.message);
         }
+
+        // Hard fallback : if the LLM returned null/invalid, use the static opener.
+        if (!opening) {
+          opening = buildStaticOpening({ userProfile, isFirstSession, lang });
+          console.log('[SessionOpening] using static fallback:', opening.agent);
+        }
+
+        if (briefingLockedRef.current) return;
+
+        // Re-check state — user may have typed during the await
+        let stillCanFire = false;
+        setMessages((prev) => {
+          const hasAgent = prev.some((m) => m.type === 'agent');
+          const hasUser  = prev.some((m) => m.type === 'user');
+          stillCanFire = !hasAgent && !hasUser;
+          return prev;
+        });
+        if (!stillCanFire) return;
+        briefingLockedRef.current = true;
+        setMessages((prev) => [...prev, {
+          id:        `session-opening-${thisSessionId}-${opening.agent}`,
+          type:      'agent',
+          agent:     opening.agent,
+          content:   opening.content,
+          streaming: false,
+          timestamp: new Date(),
+          meta:      { source: 'sessionOpening', rationale: opening.rationale },
+        }]);
+        pendingInteractionRef.current = true;
+        console.log('[SessionOpening] fired:', opening.agent, '·', opening.rationale);
       })();
     }, 1500);
 
