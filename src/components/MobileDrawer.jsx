@@ -58,11 +58,40 @@ export default function MobileDrawer({
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
-  // Wrap any nav handler so the drawer auto-closes after the click.
-  // Order matters : navigate FIRST, close after. If for any reason onClose
-  // unmounts something or interferes mid-handler, the nav has already fired
-  // by then. React 18 auto-batches both setStates into one render anyway.
-  const wrapClose = (fn) => () => { fn?.(); onCloseRef.current?.(); };
+  // ── Bulletproof tap handler ─────────────────────────────────────────────
+  // Each nav button binds THREE event handlers : onPointerUp, onTouchEnd,
+  // onClick. Whichever the browser fires first wins ; the others are
+  // de-duplicated by a per-key timestamp ref so the action fires exactly
+  // once per tap regardless of device or browser.
+  //
+  // Why all three :
+  //   - onPointerUp : modern unified event, fires reliably on touch/mouse/pen.
+  //   - onTouchEnd  : older touch fallback for browsers where pointer events
+  //                   are flaky (some Android webviews, in-app browsers).
+  //   - onClick     : universal final fallback ; always fires on desktop.
+  //
+  // Dedup window 300ms covers the natural touchend → pointerup → click
+  // sequence (~50ms apart) without blocking legitimate rapid taps on
+  // DIFFERENT buttons (each key has its own slot in the Map).
+  const lastFireRef = useRef(new Map());
+  const DEDUP_WINDOW_MS = 300;
+
+  function fireOnce(key, fn) {
+    return () => {
+      const now  = Date.now();
+      const last = lastFireRef.current.get(key) || 0;
+      if (now - last < DEDUP_WINDOW_MS) return;
+      lastFireRef.current.set(key, now);
+      // Navigate FIRST, close after. If onClose causes anything to unmount
+      // mid-handler, nav has already fired. React 18 batches the two
+      // setStates into a single render anyway.
+      fn?.();
+      onCloseRef.current?.();
+    };
+  }
+
+  // Backwards-compat alias kept so we don't have to rewrite every caller.
+  const wrapClose = (fn) => fireOnce('__legacy__', fn);
 
   // ── ESC closes ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -221,7 +250,9 @@ export default function MobileDrawer({
           </div>
           <button
             type="button"
-            onPointerUp={onClose}
+            onPointerUp={fireOnce('close', () => onCloseRef.current?.())}
+            onTouchEnd={fireOnce('close', () => onCloseRef.current?.())}
+            onClick={fireOnce('close', () => onCloseRef.current?.())}
             aria-label={lang === 'fr' ? 'Fermer le menu' : 'Close menu'}
             className="shrink-0 flex items-center justify-center"
             style={{
@@ -252,18 +283,16 @@ export default function MobileDrawer({
             // "first tap = hover, second tap = click" behaviour on Safari
             // mobile, which made nav items require two taps to navigate.
             // Active state already provides clear visual feedback.
+            // Per-button bulletproof handler : same fireOnce closure shared
+            // across all three event props so dedup works across them all.
+            const handleTap = fireOnce(`nav:${key}`, onClick);
             return (
               <button
                 key={key}
                 type="button"
-                // onPointerUp instead of onClick : on mobile, click events
-                // can be swallowed by ancestor touch handling or input-focus
-                // contention. PointerUp fires reliably on touch+mouse+pen
-                // across all modern browsers, single-fires per tap, and
-                // doesn't propagate as a click event so no double-fire on
-                // desktop. touchAction: 'manipulation' kills the 300ms iOS
-                // click delay and disables double-tap zoom on this button.
-                onPointerUp={wrapClose(onClick)}
+                onPointerUp={handleTap}
+                onTouchEnd={handleTap}
+                onClick={handleTap}
                 className="w-full flex items-center gap-3 px-5 text-left transition-colors active:bg-white/[0.06]"
                 style={{
                   height:     52,
@@ -306,11 +335,15 @@ export default function MobileDrawer({
             // restoring the spread when ready :
             //   ...(onShowTour ? [{ onClick: onShowTour, ..., label: 'Tour', ... }] : []),
             ...([]),
-          ].filter((x) => !x.skip && typeof x.onClick === 'function').map(({ onClick, active, Icon, label, color }) => (
+          ].filter((x) => !x.skip && typeof x.onClick === 'function').map(({ onClick, active, Icon, label, color }) => {
+            const handleTap = fireOnce(`toggle:${label}`, onClick);
+            return (
             <button
               key={label}
               type="button"
-              onPointerUp={wrapClose(onClick)}
+              onPointerUp={handleTap}
+              onTouchEnd={handleTap}
+              onClick={handleTap}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11.5px] font-medium"
               style={{
                 background: active ? `rgba(${color === '#22d3ee' ? '6,182,212' : '99,102,241'},0.15)` : (darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.05)'),
@@ -324,7 +357,8 @@ export default function MobileDrawer({
               {Icon ? <Icon size={11} /> : null}
               <span>{label}</span>
             </button>
-          ))}
+            );
+          })}
         </div>
 
         {/* ── Bottom : redo onboarding + version ─────────────────────────── */}
@@ -332,7 +366,9 @@ export default function MobileDrawer({
              style={{ borderTop: darkMode ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
           <button
             type="button"
-            onPointerUp={() => { onClose(); window.location.href = '/?onboarding=true'; }}
+            onPointerUp={fireOnce('redo', () => { onCloseRef.current?.(); window.location.href = '/?onboarding=true'; })}
+            onTouchEnd={fireOnce('redo', () => { onCloseRef.current?.(); window.location.href = '/?onboarding=true'; })}
+            onClick={fireOnce('redo', () => { onCloseRef.current?.(); window.location.href = '/?onboarding=true'; })}
             className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[13px] font-semibold"
             style={{
               background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.05)',
