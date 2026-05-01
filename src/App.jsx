@@ -3164,8 +3164,11 @@ export default function App() {
       {/* Onboarding handled via early return at top of render — when showOnboarding
           is true, App returns ONLY <ConversationalOnboarding /> and nothing here mounts. */}
 
-      {/* Tour Launcher — floating bottom-right button */}
-      <TourLauncher onStart={() => setShowTour(true)} isActive={showTour} />
+      {/* Tour Launcher — floating bottom-right button.
+          HIDDEN until the tour is polished. Logic + state preserved : the
+          GuidedTour modal still mounts when showTour=true, so re-enabling is
+          a one-line uncomment. */}
+      {false && <TourLauncher onStart={() => setShowTour(true)} isActive={showTour} />}
 
       {/* Session Streak Milestone celebration */}
       {activeMilestone && (

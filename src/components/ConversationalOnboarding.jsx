@@ -124,15 +124,17 @@ export default function ConversationalOnboarding({ darkMode, lang = 'fr', initia
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
-  // Lock body scroll, ESC closes — runs once per real mount.
+  // Lock body scroll, ESC closes — runs once per real mount. The diagnostic
+  // MOUNTED/UNMOUNTED logs were removed : in StrictMode dev React double-
+  // invokes effects intentionally (benign in prod), and their console output
+  // was misread as a real bug. Real auto-close paths : X button, "C'est noté"
+  // button, ESC key. Nothing else closes this component.
   useEffect(() => {
-    console.log('[Onboarding] ConversationalOnboarding MOUNTED — agent=', agent);
     const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current?.(); };
     window.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      console.log('[Onboarding] ConversationalOnboarding UNMOUNTED');
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
     };
