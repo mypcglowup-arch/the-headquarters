@@ -680,8 +680,13 @@ export default function App() {
     const checkIn = checkInData || (() => { try { const d = localStorage.getItem('qg_checkin_today'); return d ? JSON.parse(d) : null; } catch { return null; } })();
     const pulse = computePulseScore(dashboard, streak, checkIn);
     setPulseScore(pulse);
-    setShowPulse(true);
-    syncMomentum(streak, 0, sessionCount + 1, interactionCount);
+    // Silent mode = strictly no UI overlay + no background API call. Pulse
+    // score panel and momentum Supabase write are both skipped so the user
+    // gets a truly silent session start.
+    if (effectiveMode !== 'silent') {
+      setShowPulse(true);
+      syncMomentum(streak, 0, sessionCount + 1, interactionCount);
+    }
     const isFocus = effectiveMode === 'focus' && focusAgent;
     const modeLabel = isFocus
       ? t('modeLabel.focusPrefix', lang) + (agentNames[focusAgent] || focusAgent)
