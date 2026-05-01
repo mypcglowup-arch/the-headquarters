@@ -7,6 +7,7 @@ import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { AGENT_CONFIG } from '../prompts.js';
 import { createAudioRecorder, isMicSupported } from '../utils/voice.js';
 import { getAdaptiveChips, loadUserProfile } from '../utils/userProfile.js';
+import { useIsMobile } from '../hooks/useIsMobile.js';
 
 // ── Step 3 — keyword-based agent prediction (instant, zero latency) ──────────
 const KEYWORD_MAP = [
@@ -73,6 +74,7 @@ const PLACEHOLDERS = {
 
 export default function GlobalFloatingInput({
   screen,
+  sessionStarted = false,
   lang = 'fr',
   darkMode,
   agentNames  = {},
@@ -88,6 +90,7 @@ export default function GlobalFloatingInput({
   const [showChips,     setShowChips]     = useState(false);
   const inputRef    = useRef(null);
   const classifyRef = useRef(null);
+  const isMobile    = useIsMobile();
 
   // ── Voice (STT via Whisper) ────────────────────────────────────────────
   const micSupported = isMicSupported();
@@ -155,8 +158,17 @@ export default function GlobalFloatingInput({
   const chips        = useMemo(() => getAdaptiveChips(loadUserProfile(), lang), [lang]);
   const displayAgent = shownAgent || activeAgent;
 
-  // ── Hidden on chat / replay (early return AFTER all hooks) ──────────────
-  if (screen === 'chat' || screen === 'replay') return null;
+  // ── Visibility rules (early return AFTER all hooks) ────────────────────
+  // Mobile  : show ONLY when in an active chat session — the MobileTabBar
+  //           handles navigation everywhere else. Anywhere else it would
+  //           compete with the tab bar at the bottom of the viewport.
+  // Desktop : original behavior — hidden on chat/replay, visible elsewhere
+  //           as a quick-ask shortcut from any screen.
+  if (isMobile) {
+    if (!(screen === 'chat' && sessionStarted)) return null;
+  } else {
+    if (screen === 'chat' || screen === 'replay') return null;
+  }
 
   // ── Avatar renderer ────────────────────────────────────────────────────────
   function AvatarContent() {

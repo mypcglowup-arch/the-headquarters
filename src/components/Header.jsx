@@ -1,5 +1,4 @@
 import { Sun, Moon, Zap, Brain, Home, Square, BookOpen, Compass, Map, BarChart2, Users, Check, AlertCircle, Bookmark, Mail, Volume2, VolumeX, Wrench, Library, Trophy, User, Menu } from 'lucide-react';
-import { useState } from 'react';
 import { t } from '../i18n.js';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import MobileDrawer from './MobileDrawer.jsx';
@@ -17,9 +16,10 @@ export default function Header({
   improvementCount, decisionsCount,
   onShowTour,
   userProfile, sessionStarted,
+  // Drawer state lifted to App.jsx so MobileTabBar can also open it.
+  menuOpen, setMenuOpen,
 }) {
   const isMobile = useIsMobile();
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const iconBtn = (active) => ({
     padding: '7px',
@@ -33,7 +33,7 @@ export default function Header({
 
   return (
     <header
-      className="relative flex items-center justify-between px-5 py-2.5"
+      className="relative flex items-center justify-between px-4 md:px-5 h-12 md:h-16 py-0 md:py-2.5"
       style={{
         background: darkMode
           ? 'rgba(8, 12, 20, 0.85)'
@@ -137,12 +137,12 @@ export default function Header({
           <span>{t('header.think', lang)}</span>
         </button>
 
-        {/* Deep Mode */}
+        {/* Deep Mode — desktop only on mobile we keep just logo + hamburger */}
         <button
           data-tour="deep-mode"
           onClick={onToggleDeep}
           title={t(deepMode ? 'header.deepMode.on' : 'header.deepMode.off', lang)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+          className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all"
           style={{
             background: deepMode ? 'rgba(139,92,246,0.15)' : 'rgba(148,163,184,0.07)',
             border: `1px solid ${deepMode ? 'rgba(139,92,246,0.4)' : 'rgba(148,163,184,0.1)'}`,
@@ -176,12 +176,13 @@ export default function Header({
           </button>
         )}
 
-        {/* End session */}
+        {/* End session — desktop only ; mobile users access "Fermer la session" */}
+        {/* via the More tab → drawer (or via the X close on the chat header).   */}
         {screen === 'chat' && !sessionEnded && (
           <button
             onClick={onEndSession}
             disabled={isLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-40"
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-40"
             style={{
               background: 'rgba(148,163,184,0.07)',
               border: '1px solid rgba(148,163,184,0.1)',

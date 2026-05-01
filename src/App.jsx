@@ -44,6 +44,7 @@ import { loadVictories, saveVictoriesCache, computeROI, formatVictoriesContext }
 import OnboardingModal, { OnboardingNudge } from './components/OnboardingModal.jsx';
 import ConversationalOnboarding from './components/ConversationalOnboarding.jsx';
 import PasswordGate from './components/PasswordGate.jsx';
+import MobileTabBar from './components/MobileTabBar.jsx';
 import ProfileScreen from './components/ProfileScreen.jsx';
 import { loadUserProfile, saveUserProfile, hasOnboarded, formatUserContext } from './utils/userProfile.js';
 import { formatSectorContext, getPipelineStages } from './data/sectors.js';
@@ -388,6 +389,9 @@ export default function App() {
   const [showProspectAnalyzer, setShowProspectAnalyzer] = useState(false);
   const [activeMilestone, setActiveMilestone] = useState(null);
   const [showTour, setShowTour] = useState(false);
+  // Mobile drawer state lifted from Header so MobileTabBar's "Plus" tab can
+  // open the same drawer instance.
+  const [menuOpen, setMenuOpen] = useState(false);
   const roleplayExchangeRef = useRef(0);
   const mem0PrefetchRef    = useRef(null);  // Step 4 & 7: pre-fetched Mem0 context
   const typingDebounceRef  = useRef(null);  // Step 7: debounce timer for typing pre-fetch
@@ -2865,9 +2869,15 @@ export default function App() {
         onShowTour={() => setShowTour(true)}
         userProfile={userProfile}
         sessionStarted={sessionStarted}
+        menuOpen={menuOpen}
+        setMenuOpen={setMenuOpen}
       />
 
-      <main className="flex-1 flex flex-col relative overflow-hidden">
+      {/* pb-[60px] reserves space for the fixed mobile tab bar so content      */}
+      {/* (last messages, dashboard cards, etc.) isn't hidden underneath it.    */}
+      {/* md:pb-0 removes the padding on tablet/desktop where the tab bar       */}
+      {/* doesn't render.                                                       */}
+      <main className="flex-1 flex flex-col relative overflow-hidden pb-[60px] md:pb-0">
         {/* Home — shown before any session starts */}
         {screen === 'home' && (
           <div key="home" className="animate-screen-in flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -3154,6 +3164,7 @@ export default function App() {
       {/* Global Floating Input — permanent quick-access bar on all non-chat pages */}
       <GlobalFloatingInput
         screen={screen}
+        sessionStarted={sessionStarted}
         lang={lang}
         darkMode={darkMode}
         agentNames={agentNames}
@@ -3165,6 +3176,25 @@ export default function App() {
       {/* Toast notifications */}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <InstallPrompt darkMode={darkMode} lang={lang} />
+
+      {/* Mobile bottom tab bar — replaces the floating-input bar on phones. */}
+      {/* Hidden on home (let the user see the welcome layout uncluttered)   */}
+      {/* unless a session is active. md:hidden inside the component so      */}
+      {/* tablet/desktop never see it.                                       */}
+      {(sessionStarted || screen !== 'home') && (
+        <MobileTabBar
+          activeScreen={screen}
+          sessionStarted={sessionStarted}
+          onGoHome={goHome}
+          onStartChat={() => {
+            // If a session is active, just jump back to chat. Otherwise start one.
+            if (sessionStarted) setScreen('chat');
+            else startSession();
+          }}
+          onGoDashboard={() => setScreen(screen === 'dashboard' ? (sessionStarted ? 'chat' : 'home') : 'dashboard')}
+          onOpenDrawer={() => setMenuOpen(true)}
+        />
+      )}
 
       {/* Onboarding handled via early return at top of render — when showOnboarding
           is true, App returns ONLY <ConversationalOnboarding /> and nothing here mounts. */}
