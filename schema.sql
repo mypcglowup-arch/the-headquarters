@@ -138,7 +138,24 @@ CREATE INDEX IF NOT EXISTS followup_log_prospect_id_idx
   ON public.followup_log (prospect_id);
 
 
--- ─── 7. dashboard_state ───────────────────────────────────────────────────
+-- ─── 7. momentum ──────────────────────────────────────────────────────────
+-- Append-only ledger of momentum snapshots (streak, weekly sessions, total
+-- sessions, interaction count). Used for analytics + weekly mirror prompts.
+-- Insert-only ; no read needed for app to function.
+CREATE TABLE IF NOT EXISTS public.momentum (
+  id                bigserial PRIMARY KEY,
+  streak            smallint,
+  sessions_week     smallint,
+  total_sessions    integer,
+  interaction_count integer,
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS momentum_created_at_idx
+  ON public.momentum (created_at DESC);
+
+
+-- ─── 8. dashboard_state ───────────────────────────────────────────────────
 -- Single-row snapshot of the user's financial state — cross-device source of
 -- truth for finances. Granular tables above (retainers, one_time_revenues)
 -- remain as append-only ledgers; this is the rolled-up snapshot.
@@ -164,6 +181,7 @@ ALTER TABLE public.situation_favorites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.retainers           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.one_time_revenues   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.followup_log        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.momentum            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dashboard_state     ENABLE ROW LEVEL SECURITY;
 
 DO $$
@@ -177,6 +195,7 @@ BEGIN
     'retainers',
     'one_time_revenues',
     'followup_log',
+    'momentum',
     'dashboard_state'
   ]
   LOOP

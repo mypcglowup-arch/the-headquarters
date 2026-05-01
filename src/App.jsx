@@ -1062,7 +1062,19 @@ export default function App() {
           pendingInteractionRef.current = true;
           console.log('[SessionOpening] fired:', opening.agent, '·', opening.rationale);
         } catch (err) {
-          console.warn('[SessionOpening] failed:', err.message);
+          // TEMPORARY DIAGNOSTIC — surface the error on mobile where console
+          // is invisible. Toast first (less intrusive), alert as fallback so
+          // the user always sees it. Remove both once the Vercel proxy is
+          // confirmed working.
+          const msg = err?.message || String(err);
+          console.error('[SessionOpening] failed:', err);
+          try {
+            toast(`⚠️ Opening failed: ${msg.slice(0, 140)}`, { type: 'error', duration: 6000 });
+          } catch {}
+          if (typeof window !== 'undefined' && window.alert) {
+            // Show the FULL error including network/HTTP details
+            window.alert('[SessionOpening] failed:\n\n' + msg + '\n\nFull error in console.');
+          }
         }
       })();
     }, 1500);

@@ -225,6 +225,10 @@ export default function MobileDrawer({
         {/* ── Nav rows ───────────────────────────────────────────────────── */}
         <nav className="flex-1 overflow-y-auto py-2">
           {navRows.map(({ key, onClick, label, icon: Icon, badge }) => {
+            // Defensive : skip rows whose handler or icon never resolved.
+            // Prevents "Element type is invalid: got undefined" if a parent
+            // forgot to thread a prop through.
+            if (!Icon || typeof onClick !== 'function') return null;
             const active = screen === key;
             return (
               <button
@@ -268,7 +272,7 @@ export default function MobileDrawer({
             { onClick: onToggleDark,     active: false,        Icon: darkMode ? Sun : Moon,        label: darkMode ? (lang === 'fr' ? 'Clair' : 'Light') : (lang === 'fr' ? 'Sombre' : 'Dark'), color: '#fbbf24' },
             { onClick: onToggleLang,     active: false,        Icon: null,                          label: lang === 'fr' ? '🇫🇷 FR' : '🇺🇸 EN',                              color: null },
             ...(onShowTour ? [{ onClick: onShowTour, active: false, Icon: Map, label: lang === 'fr' ? 'Tour' : 'Tour', color: '#d4af37' }] : []),
-          ].filter((x) => !x.skip).map(({ onClick, active, Icon, label, color }) => (
+          ].filter((x) => !x.skip && typeof x.onClick === 'function').map(({ onClick, active, Icon, label, color }) => (
             <button
               key={label}
               onClick={wrapClose(onClick)}
@@ -279,7 +283,7 @@ export default function MobileDrawer({
                 color:      active && color ? color : (darkMode ? 'rgba(226,232,240,0.85)' : 'rgba(15,23,42,0.75)'),
               }}
             >
-              {Icon && <Icon size={11} />}
+              {Icon ? <Icon size={11} /> : null}
               <span>{label}</span>
             </button>
           ))}

@@ -3373,8 +3373,12 @@ HARD RULES — instant disqualifier :
     if (content.length < 20 || content.length > 400) return null;
     return { agent: parsed.agent, content, rationale: String(parsed.rationale || '').slice(0, 120) };
   } catch (err) {
-    console.warn('[generateSessionOpening] failed:', err.message);
-    return null;
+    // TEMPORARY DIAGNOSTIC — re-throw so the caller's alert() catch surfaces
+    // the real reason (Vercel function 500, missing env var, timeout, etc.).
+    // Once the Vercel proxy is verified working, restore the silent-warn
+    // behaviour by replacing this with `console.warn(...) ; return null ;`.
+    console.error('[generateSessionOpening] network/parse error:', err);
+    throw err;
   }
 }
 
