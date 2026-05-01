@@ -220,13 +220,17 @@ export default function MobileDrawer({
             </div>
           </div>
           <button
-            onClick={onClose}
+            type="button"
+            onPointerUp={onClose}
             aria-label={lang === 'fr' ? 'Fermer le menu' : 'Close menu'}
             className="shrink-0 flex items-center justify-center"
             style={{
               width: 38, height: 38, borderRadius: 12,
               background: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)',
               color:      darkMode ? 'rgba(226,232,240,0.85)' : 'rgba(15,23,42,0.7)',
+              touchAction: 'manipulation',
+              cursor: 'pointer',
+              WebkitTapHighlightColor: 'transparent',
             }}
           >
             <X size={18} />
@@ -252,7 +256,14 @@ export default function MobileDrawer({
               <button
                 key={key}
                 type="button"
-                onClick={wrapClose(onClick)}
+                // onPointerUp instead of onClick : on mobile, click events
+                // can be swallowed by ancestor touch handling or input-focus
+                // contention. PointerUp fires reliably on touch+mouse+pen
+                // across all modern browsers, single-fires per tap, and
+                // doesn't propagate as a click event so no double-fire on
+                // desktop. touchAction: 'manipulation' kills the 300ms iOS
+                // click delay and disables double-tap zoom on this button.
+                onPointerUp={wrapClose(onClick)}
                 className="w-full flex items-center gap-3 px-5 text-left transition-colors active:bg-white/[0.06]"
                 style={{
                   height:     52,
@@ -263,6 +274,8 @@ export default function MobileDrawer({
                   borderLeft: active ? '3px solid rgb(99,102,241)' : '3px solid transparent',
                   paddingLeft: active ? 17 : 20,
                   WebkitTapHighlightColor: 'transparent',
+                  touchAction: 'manipulation',
+                  cursor: 'pointer',
                 }}
               >
                 <Icon size={17} strokeWidth={active ? 2.4 : 2} style={{ color: active ? 'rgb(99,102,241)' : (darkMode ? 'rgba(148,163,184,0.85)' : 'rgba(71,85,105,0.85)') }} />
@@ -296,12 +309,16 @@ export default function MobileDrawer({
           ].filter((x) => !x.skip && typeof x.onClick === 'function').map(({ onClick, active, Icon, label, color }) => (
             <button
               key={label}
-              onClick={wrapClose(onClick)}
+              type="button"
+              onPointerUp={wrapClose(onClick)}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11.5px] font-medium"
               style={{
                 background: active ? `rgba(${color === '#22d3ee' ? '6,182,212' : '99,102,241'},0.15)` : (darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.05)'),
                 border:     `1px solid ${active && color ? color + '66' : (darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)')}`,
                 color:      active && color ? color : (darkMode ? 'rgba(226,232,240,0.85)' : 'rgba(15,23,42,0.75)'),
+                touchAction: 'manipulation',
+                cursor: 'pointer',
+                WebkitTapHighlightColor: 'transparent',
               }}
             >
               {Icon ? <Icon size={11} /> : null}
@@ -314,12 +331,16 @@ export default function MobileDrawer({
         <div className="px-5 py-4"
              style={{ borderTop: darkMode ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.06)' }}>
           <button
-            onClick={() => { onClose(); window.location.href = '/?onboarding=true'; }}
+            type="button"
+            onPointerUp={() => { onClose(); window.location.href = '/?onboarding=true'; }}
             className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-[13px] font-semibold"
             style={{
               background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.05)',
               color:      darkMode ? 'rgba(226,232,240,0.92)' : 'rgba(15,23,42,0.85)',
               border:     darkMode ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.08)',
+              touchAction: 'manipulation',
+              cursor: 'pointer',
+              WebkitTapHighlightColor: 'transparent',
             }}
           >
             <RotateCcw size={13} />
