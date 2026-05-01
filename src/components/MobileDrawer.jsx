@@ -115,10 +115,16 @@ export default function MobileDrawer({
     ? 'none'                                  // direct follow during drag
     : 'transform 300ms cubic-bezier(0.32, 0.72, 0, 1)';
 
-  // Backdrop opacity follows drag : full when closed-rest, fades as user drags right
+  // Backdrop opacity : 0.78 base (above the 0.7 floor the user requested) ;
+  // fades as the user drags the drawer right so the visual "letting go" is
+  // smooth. Always at least 0.7 — never lets the underlying UI bleed through.
   const drawerW         = drawerRef.current?.offsetWidth || 280;
   const dragProgress    = Math.min(1, Math.max(0, dragX / drawerW));
-  const backdropOpacity = open ? (1 - dragProgress) * 0.55 : 0;
+  const backdropOpacity = open ? Math.max(0.7, 0.78 - dragProgress * 0.08) : 0;
+
+  // Solid panel color — NO transparency, NO backdrop-filter (those leak the
+  // app underneath). Tuned to the existing dark/light palette.
+  const PANEL_BG = darkMode ? '#0a0f1c' : '#FBFAF7';
 
   return (
     <>
@@ -129,12 +135,11 @@ export default function MobileDrawer({
         style={{
           position:        'fixed',
           inset:           0,
-          background:      `rgba(3, 7, 18, ${backdropOpacity})`,
-          backdropFilter:  open ? 'blur(2px)' : 'none',
+          background:      `rgba(0, 0, 0, ${backdropOpacity})`,
           opacity:         open ? 1 : 0,
           pointerEvents:   open ? 'auto' : 'none',
           transition:      dragging ? 'none' : 'opacity 300ms ease, background 300ms ease',
-          zIndex:          90,
+          zIndex:          9998,
         }}
       />
 
@@ -154,15 +159,14 @@ export default function MobileDrawer({
           height:          '100dvh',
           width:           '80vw',
           maxWidth:        360,
-          background:      darkMode ? 'rgba(8, 12, 20, 0.985)' : '#FBFAF7',
-          backdropFilter:  'blur(18px)',
-          WebkitBackdropFilter: 'blur(18px)',
+          background:      PANEL_BG,
+          backgroundColor: PANEL_BG, // belt + braces — some browsers respect bg-color over background shorthand
           borderLeft:      darkMode ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.08)',
-          boxShadow:       open ? '-24px 0 60px -12px rgba(0,0,0,0.55)' : 'none',
+          boxShadow:       open ? '-24px 0 60px -12px rgba(0,0,0,0.7)' : 'none',
           transform:       panelTransform,
           transition:      transitionStyle,
           willChange:      'transform',
-          zIndex:          100,
+          zIndex:          9999,
           display:         'flex',
           flexDirection:   'column',
           paddingTop:      'env(safe-area-inset-top, 0px)',
