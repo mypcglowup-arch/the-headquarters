@@ -326,10 +326,26 @@ export default function App() {
   // notifications, pulse score, etc.) can race ahead and start a session.
   // The early return on `if (showOnboarding) return <ConversationalOnboarding/>`
   // wins immediately, no setTimeout, no race.
+  //
+  // ── FORCE-RESET MECHANISM ────────────────────────────────────────────────
+  // Bump ONBOARDING_FORCE_VERSION in a deploy to make every device that
+  // visits the next time see the onboarding again, regardless of whether
+  // they've already completed it. Each device caches the version it has
+  // already cleared for, so the reset only fires once per bump per device.
+  // Existing user_profile data (name, role, stage, …) is NOT touched —
+  // only the "I've seen the modal" flag is wiped.
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false;
-    try { return localStorage.getItem('qg_conversational_onboarding_seen_v1') !== '1'; }
-    catch { return false; }
+    try {
+      const ONBOARDING_FORCE_VERSION = '2';  // ← bump this to force-reset all users
+      const seenVersion = localStorage.getItem('qg_onboarding_force_version');
+      if (seenVersion !== ONBOARDING_FORCE_VERSION) {
+        localStorage.removeItem('qg_conversational_onboarding_seen_v1');
+        localStorage.removeItem('qg_onboarding_nudge_dismissed_v1');
+        localStorage.setItem('qg_onboarding_force_version', ONBOARDING_FORCE_VERSION);
+      }
+      return localStorage.getItem('qg_conversational_onboarding_seen_v1') !== '1';
+    } catch { return false; }
   });
   const [onboardingResetMode, setOnboardingResetMode] = useState(false);
   const [onboardingNudgeDismissed, setOnboardingNudgeDismissed] = useState(() => {
