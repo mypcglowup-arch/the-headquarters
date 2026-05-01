@@ -1,3 +1,10 @@
+# Schema SQL — Note
+
+Contenu complet de `schema.sql` (8 tables + RLS, idempotent, single-shot).
+
+---
+
+```sql
 -- ═══════════════════════════════════════════════════════════════════════════
 -- THE HEADQUARTERS — Supabase schema (full create, idempotent, single-shot)
 -- All schemas mirror src/lib/sync.js exactly. Safe to re-run.
@@ -155,28 +162,7 @@ CREATE INDEX IF NOT EXISTS momentum_created_at_idx
   ON public.momentum (created_at DESC);
 
 
--- ─── 8. daily_checkins ───────────────────────────────────────────────────
--- One row per checkin_date — partition key is the date itself, so an upsert
--- the same day overwrites (user can adjust their morning answers). Mirrors
--- syncCheckIn() in src/lib/sync.js.
-CREATE TABLE IF NOT EXISTS public.daily_checkins (
-  checkin_date  date PRIMARY KEY,
-  energie_score smallint,
-  emoji         text,
-  priority      text,
-  blocker       text,
-  created_at    timestamptz NOT NULL DEFAULT now()
-);
-
-ALTER TABLE public.daily_checkins DROP CONSTRAINT IF EXISTS daily_checkins_energie_score_check;
-ALTER TABLE public.daily_checkins ADD  CONSTRAINT daily_checkins_energie_score_check
-  CHECK (energie_score IS NULL OR energie_score BETWEEN 1 AND 10);
-
-CREATE INDEX IF NOT EXISTS daily_checkins_created_at_idx
-  ON public.daily_checkins (created_at DESC);
-
-
--- ─── 9. dashboard_state ───────────────────────────────────────────────────
+-- ─── 8. dashboard_state ───────────────────────────────────────────────────
 -- Single-row snapshot of the user's financial state — cross-device source of
 -- truth for finances. Granular tables above (retainers, one_time_revenues)
 -- remain as append-only ledgers; this is the rolled-up snapshot.
@@ -203,7 +189,6 @@ ALTER TABLE public.retainers           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.one_time_revenues   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.followup_log        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.momentum            ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.daily_checkins      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dashboard_state     ENABLE ROW LEVEL SECURITY;
 
 DO $$
@@ -218,7 +203,6 @@ BEGIN
     'one_time_revenues',
     'followup_log',
     'momentum',
-    'daily_checkins',
     'dashboard_state'
   ]
   LOOP
@@ -229,3 +213,27 @@ BEGIN
     );
   END LOOP;
 END$$;
+```
+
+---
+
+## Récap des 8 tables
+
+| # | Table | Type | Usage |
+|---|---|---|---|
+| 1 | `user_profile` | Single-row (PK `id`) | Profil utilisateur — 17 colonnes + 5 CHECK constraints |
+| 2 | `victories` | Append-only (PK `id`) | Journal des wins — index sur `created_at` |
+| 3 | `situation_favorites` | Set (PK `situation_id`) | Pins de la library Situations |
+| 4 | `retainers` | Mutable (PK `id`) | Contrats récurrents — index sur `updated_at` |
+| 5 | `one_time_revenues` | Append-only (PK `id`) | Revenus ponctuels — CHECK `month_idx 0-11` |
+| 6 | `followup_log` | Append-only (PK `id`) | Emails de relance — CHECK status, indexes sur sent_at + prospect_id |
+| 7 | `momentum` | Append-only (PK `bigserial id`) | Snapshots momentum analytics |
+| 8 | `dashboard_state` | Single-row (PK `user_id`) | Snapshot JSONB complet du dashboard |
+
+---
+
+## Marche à suivre
+
+1. Supabase → SQL Editor → New query
+2. Colle tout le SQL ci-dessus → **Run**
+3. Idempotent — peut être ré-exécuté n'importe quand sans casser une base déjà initialisée (`CREATE TABLE IF NOT EXISTS`, `DROP CONSTRAINT/POLICY IF EXISTS`)

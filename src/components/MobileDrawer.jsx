@@ -44,16 +44,25 @@ export default function MobileDrawer({
   const touchStartXRef      = useRef(0);
   const touchStartTimeRef   = useRef(0);
 
+  // Stable ref to onClose : the parent passes a fresh inline arrow
+  // (`() => setMenuOpen(false)`) on every render of Header, so onClose has a
+  // new identity each time. Without the ref, every Header re-render would
+  // tear down and rebind the keydown listener — wasteful at best, render
+  // thrash at worst.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
   // Wrap any nav handler so the drawer auto-closes after the click.
-  const wrapClose = (fn) => () => { onClose(); fn?.(); };
+  const wrapClose = (fn) => () => { onCloseRef.current?.(); fn?.(); };
 
   // ── ESC closes ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!open) return;
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current?.(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // ── Body scroll lock while open ───────────────────────────────────────────
   useEffect(() => {

@@ -144,15 +144,19 @@ export default function GlobalFloatingInput({
     setShowChips(isFocused && text === '' && screen !== 'profile');
   }, [isFocused, text, screen]);
 
-  // ── Hidden on chat / replay ────────────────────────────────────────────────
-  if (screen === 'chat' || screen === 'replay') return null;
-
+  // ⚠ All hooks above this line. Adding a hook AFTER the early return below
+  // breaks React's hooks-order invariant ("Rendered fewer hooks than
+  // expected") because on chat/replay screens the function returns before
+  // the hook is called. If you need a new hook, put it here, not after.
   const phs          = PLACEHOLDERS[lang]  || PLACEHOLDERS.fr;
   // Chips reflect the user's actual stage + niche. We re-read the profile on
   // every render of this lightweight component so a fresh onboarding completion
   // takes effect immediately without a reload — the lookup is local + cached.
   const chips        = useMemo(() => getAdaptiveChips(loadUserProfile(), lang), [lang]);
   const displayAgent = shownAgent || activeAgent;
+
+  // ── Hidden on chat / replay (early return AFTER all hooks) ──────────────
+  if (screen === 'chat' || screen === 'replay') return null;
 
   // ── Avatar renderer ────────────────────────────────────────────────────────
   function AvatarContent() {
