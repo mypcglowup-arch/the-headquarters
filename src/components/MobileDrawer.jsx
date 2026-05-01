@@ -84,40 +84,12 @@ export default function MobileDrawer({
   // ── Reset drag state when the drawer reopens ──────────────────────────────
   useEffect(() => { if (open) { setDragX(0); draggingRef.current = false; } }, [open]);
 
-  // ── Touch handlers : swipe-right to close ────────────────────────────────
-  // Movement-threshold pattern : a simple tap (< 10px movement) NEVER enters
-  // drag mode → no re-renders mid-touch → click event on nav buttons fires
-  // cleanly. Drag mode kicks in only when the user actually swipes.
-  const TAP_THRESHOLD = 10; // px — movement below this is treated as a tap
-
-  function onTouchStart(e) {
-    touchStartXRef.current    = e.touches[0].clientX;
-    touchStartYRef.current    = e.touches[0].clientY;
-    touchStartTimeRef.current = Date.now();
-    draggingRef.current       = false;
-  }
-  function onTouchMove(e) {
-    const dx = e.touches[0].clientX - touchStartXRef.current;
-    const dy = e.touches[0].clientY - touchStartYRef.current;
-    // Enter drag mode only on horizontal movement past the threshold AND
-    // when horizontal exceeds vertical (so vertical scroll inside the drawer
-    // works normally without triggering swipe-close).
-    if (!draggingRef.current && Math.abs(dx) > TAP_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
-      draggingRef.current = true;
-    }
-    if (draggingRef.current && dx > 0) setDragX(dx);
-  }
-  function onTouchEnd() {
-    if (!draggingRef.current) return; // tap → let click event fire normally
-    draggingRef.current = false;
-    const elapsed = Date.now() - touchStartTimeRef.current;
-    const drawerW = drawerRef.current?.offsetWidth || 280;
-    // Close if : dragged > 30% of drawer width, OR fast flick > 0.5 px/ms over > 60px
-    const farEnough  = dragX > drawerW * 0.30;
-    const fastEnough = elapsed > 0 && dragX > 60 && (dragX / elapsed) > 0.5;
-    if (farEnough || fastEnough) onCloseRef.current?.();
-    setDragX(0);
-  }
+  // Swipe-to-close removed : on certain Android browsers the touch handlers
+  // on <aside> were swallowing nav button clicks. Closure paths still work :
+  //   - X button (top-right of drawer)
+  //   - Backdrop click
+  //   - ESC key
+  // Re-add later as a dedicated edge-handle if needed.
 
   // ── Resolved labels / nav rows ────────────────────────────────────────────
   const userName  = userProfile?.name?.trim() || (lang === 'fr' ? 'Bienvenue' : 'Welcome');
@@ -148,12 +120,10 @@ export default function MobileDrawer({
     ? 'none'                                  // direct follow during drag
     : 'transform 300ms cubic-bezier(0.32, 0.72, 0, 1)';
 
-  // Backdrop opacity : 0.85 base. Subtle dip during swipe-close (down to 0.78
-  // so the user feels the drawer "letting go") but always opaque enough that
-  // the app underneath stays masked completely.
-  const drawerW         = drawerRef.current?.offsetWidth || 280;
-  const dragProgress    = Math.min(1, Math.max(0, dragX / drawerW));
-  const backdropOpacity = open ? Math.max(0.78, 0.85 - dragProgress * 0.07) : 0;
+  // Backdrop opacity : 0.92 fixed when open — masks the app behind so there
+  // is zero visual ambiguity between the drawer and the page underneath.
+  // Swipe-to-close removed so no drag-progress fade needed.
+  const backdropOpacity = open ? 0.92 : 0;
 
   // Solid panel color — NO transparency, NO backdrop-filter (those leak the
   // app underneath). Tuned to the existing dark/light palette.
@@ -161,30 +131,27 @@ export default function MobileDrawer({
 
   return (
     <>
-      {/* ── Backdrop ─────────────────────────────────────────────────────── */}
+      {/* ── Backdrop — opaque enough that the app underneath disappears ──── */}
       <div
         onClick={onClose}
         aria-hidden={!open}
         style={{
           position:        'fixed',
           inset:           0,
-          background:      `rgba(0, 0, 0, ${backdropOpacity})`,
+          backgroundColor: `rgba(0, 0, 0, ${backdropOpacity})`,
           opacity:         open ? 1 : 0,
           pointerEvents:   open ? 'auto' : 'none',
-          transition:      dragX > 0 ? 'none' : 'opacity 300ms ease, background 300ms ease',
+          transition:      dragX > 0 ? 'none' : 'opacity 300ms ease, background-color 300ms ease',
           zIndex:          9998,
         }}
       />
 
-      {/* ── Panel ────────────────────────────────────────────────────────── */}
+      {/* ── Panel — solid opaque, isolated stacking context, no touch handlers */}
       <aside
         ref={drawerRef}
         role="dialog"
         aria-modal="true"
         aria-label={lang === 'fr' ? 'Menu de navigation' : 'Navigation menu'}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
         style={{
           position:        'fixed',
           top:             0,
@@ -192,8 +159,12 @@ export default function MobileDrawer({
           height:          '100dvh',
           width:           '80vw',
           maxWidth:        360,
-          background:      PANEL_BG,
-          backgroundColor: PANEL_BG, // belt + braces — some browsers respect bg-color over background shorthand
+          backgroundColor: PANEL_BG,
+          // isolation: 'isolate' creates a new stacking context — the panel
+          // becomes fully opaque against anything underneath regardless of
+          // ancestor blend modes, filters, or backdrop effects.
+          isolation:       'isolate',
+          opacity:         1,
           borderLeft:      darkMode ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(15,23,42,0.08)',
           boxShadow:       open ? '-24px 0 60px -12px rgba(0,0,0,0.7)' : 'none',
           transform:       panelTransform,
@@ -206,6 +177,16 @@ export default function MobileDrawer({
           paddingBottom:   'env(safe-area-inset-bottom, 0px)',
         }}
       >
+        {/* Solid base layer — bulletproof against any content layer that */}
+        {/* might accidentally inherit a transparent background.            */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute', inset: 0,
+            backgroundColor: PANEL_BG,
+            zIndex: -1,
+          }}
+        />
         {/* ── Top : logo + user identity + close ─────────────────────────── */}
         <div className="flex items-start gap-3 px-5 pt-5 pb-4">
           <div className="flex-1 min-w-0">
