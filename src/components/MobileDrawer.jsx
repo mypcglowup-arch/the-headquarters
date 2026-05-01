@@ -40,8 +40,14 @@ export default function MobileDrawer({
 }) {
   const drawerRef           = useRef(null);
   const [dragX, setDragX]   = useState(0);     // current swipe offset in px (0 = closed-position rest)
-  const [dragging, setDrag] = useState(false);
+  // Drag state lives in a ref, NOT useState — touchstart firing setState
+  // mid-tap caused re-renders that interfered with the synthetic click event
+  // on iOS/Android, swallowing nav-button clicks. The ref version doesn't
+  // re-render and only setDragX is touched, exclusively when an actual swipe
+  // is detected.
+  const draggingRef         = useRef(false);
   const touchStartXRef      = useRef(0);
+  const touchStartYRef      = useRef(0);
   const touchStartTimeRef   = useRef(0);
 
   // Stable ref to onClose : the parent passes a fresh inline arrow
@@ -73,29 +79,41 @@ export default function MobileDrawer({
   }, [open]);
 
   // ── Reset drag state when the drawer reopens ──────────────────────────────
-  useEffect(() => { if (open) { setDragX(0); setDrag(false); } }, [open]);
+  useEffect(() => { if (open) { setDragX(0); draggingRef.current = false; } }, [open]);
 
   // ── Touch handlers : swipe-right to close ────────────────────────────────
+  // Movement-threshold pattern : a simple tap (< 10px movement) NEVER enters
+  // drag mode → no re-renders mid-touch → click event on nav buttons fires
+  // cleanly. Drag mode kicks in only when the user actually swipes.
+  const TAP_THRESHOLD = 10; // px — movement below this is treated as a tap
+
   function onTouchStart(e) {
     touchStartXRef.current    = e.touches[0].clientX;
+    touchStartYRef.current    = e.touches[0].clientY;
     touchStartTimeRef.current = Date.now();
-    setDrag(true);
+    draggingRef.current       = false;
   }
   function onTouchMove(e) {
-    if (!dragging) return;
     const dx = e.touches[0].clientX - touchStartXRef.current;
-    if (dx > 0) setDragX(dx); // only allow drag right (closing direction)
+    const dy = e.touches[0].clientY - touchStartYRef.current;
+    // Enter drag mode only on horizontal movement past the threshold AND
+    // when horizontal exceeds vertical (so vertical scroll inside the drawer
+    // works normally without triggering swipe-close).
+    if (!draggingRef.current && Math.abs(dx) > TAP_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+      draggingRef.current = true;
+    }
+    if (draggingRef.current && dx > 0) setDragX(dx);
   }
   function onTouchEnd() {
-    if (!dragging) return;
-    setDrag(false);
+    if (!draggingRef.current) return; // tap → let click event fire normally
+    draggingRef.current = false;
     const elapsed = Date.now() - touchStartTimeRef.current;
     const drawerW = drawerRef.current?.offsetWidth || 280;
     // Close if : dragged > 30% of drawer width, OR fast flick > 0.5 px/ms over > 60px
     const farEnough  = dragX > drawerW * 0.30;
     const fastEnough = elapsed > 0 && dragX > 60 && (dragX / elapsed) > 0.5;
-    if (farEnough || fastEnough) onClose();
-    setDragX(0); // snap back if not closing
+    if (farEnough || fastEnough) onCloseRef.current?.();
+    setDragX(0);
   }
 
   // ── Resolved labels / nav rows ────────────────────────────────────────────
@@ -120,7 +138,10 @@ export default function MobileDrawer({
   const panelTransform = open
     ? `translateX(${dragX}px)`
     : 'translateX(100%)';
-  const transitionStyle = dragging
+  // Use dragX > 0 as the "active drag" proxy — setDragX during onTouchMove
+  // already triggers a re-render with the new dragX, so this stays in sync
+  // without needing a separate dragging state.
+  const transitionStyle = dragX > 0
     ? 'none'                                  // direct follow during drag
     : 'transform 300ms cubic-bezier(0.32, 0.72, 0, 1)';
 
@@ -147,7 +168,7 @@ export default function MobileDrawer({
           background:      `rgba(0, 0, 0, ${backdropOpacity})`,
           opacity:         open ? 1 : 0,
           pointerEvents:   open ? 'auto' : 'none',
-          transition:      dragging ? 'none' : 'opacity 300ms ease, background 300ms ease',
+          transition:      dragX > 0 ? 'none' : 'opacity 300ms ease, background 300ms ease',
           zIndex:          9998,
         }}
       />
