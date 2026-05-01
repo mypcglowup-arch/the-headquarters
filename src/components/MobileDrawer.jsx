@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   X, ChevronRight, BarChart2, Users, Compass, BookOpen, Bookmark, Library,
-  Trophy, User, Wrench, Mail, Home, Map, Brain, Volume2, VolumeX, Sun, Moon,
+  Trophy, User, Wrench, Mail, Home, Brain, Volume2, VolumeX, Sun, Moon,
   RotateCcw,
 } from 'lucide-react';
+// NOTE — DO NOT re-import lucide-react's `Map` icon here without aliasing it
+// (e.g. `Map as MapIcon`). Importing it as `Map` shadows the global ES Map
+// class and breaks `new Map()` below ; symptom is a black-screen runtime
+// crash because every render tries to instantiate the icon as a Map.
 import { t } from '../i18n.js';
 
 /**
