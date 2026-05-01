@@ -245,8 +245,9 @@ export default function Header({
           </button>
         )}
 
-        {/* Tour button */}
-        {onShowTour && (
+        {/* Tour button — HIDDEN until the tour is polished. Wrapped in
+            `false &&` so the JSX stays in the file for easy re-enabling. */}
+        {false && onShowTour && (
           <button
             onClick={onShowTour}
             title={lang === 'fr' ? 'Visite guidée' : 'Guided tour'}

@@ -308,7 +308,10 @@ export default function MobileDrawer({
             { onClick: onToggleVoice,    active: voiceMode,    Icon: voiceMode ? Volume2 : VolumeX, label: lang === 'fr' ? 'Voix' : 'Voice', color: '#a5b4fc', skip: !onToggleVoice },
             { onClick: onToggleDark,     active: false,        Icon: darkMode ? Sun : Moon,        label: darkMode ? (lang === 'fr' ? 'Clair' : 'Light') : (lang === 'fr' ? 'Sombre' : 'Dark'), color: '#fbbf24' },
             { onClick: onToggleLang,     active: false,        Icon: null,                          label: lang === 'fr' ? '🇫🇷 FR' : '🇺🇸 EN',                              color: null },
-            ...(onShowTour ? [{ onClick: onShowTour, active: false, Icon: Map, label: lang === 'fr' ? 'Tour' : 'Tour', color: '#d4af37' }] : []),
+            // Tour pill — HIDDEN until the tour is polished. Re-enable by
+            // restoring the spread when ready :
+            //   ...(onShowTour ? [{ onClick: onShowTour, ..., label: 'Tour', ... }] : []),
+            ...([]),
           ].filter((x) => !x.skip && typeof x.onClick === 'function').map(({ onClick, active, Icon, label, color }) => (
             <button
               key={label}
