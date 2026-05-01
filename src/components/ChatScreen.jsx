@@ -395,11 +395,14 @@ export default function ChatScreen({
       )}
 
       {/* ── Messages ── */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4 min-h-0 scroll-fade" role="log" aria-live="polite" aria-label={lang === 'fr' ? 'Conversation' : 'Conversation'}>
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4 min-h-0 scroll-fade" role="log" aria-live="polite" aria-label={lang === 'fr' ? 'Conversation' : 'Conversation'}>
 
-        {/* Premium empty state — visible until first user or agent message */}
+        {/* Premium empty state — visible until first user or agent message.   */}
+        {/* Mobile : tight 24vh so the agent avatars sit just under the header */}
+        {/* and the input/action bar isn't pushed off the visible area.        */}
+        {/* Desktop : 55vh keeps the centered "premium" feel.                  */}
         {!messages.some((m) => m.type === 'user' || m.type === 'agent') && !isLoading && (
-          <div style={{ minHeight: '55vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="flex items-center justify-center min-h-[24vh] md:min-h-[55vh]">
             <ChatEmptyState
               agentNames={agentNames}
               agentPhotos={agentPhotos}
@@ -610,13 +613,19 @@ export default function ChatScreen({
       </div>
 
       {/* ── Bottom action bar — compact pill row ── */}
+      {/*    On mobile : horizontal scroll, no spacer, all pills in one row. */}
+      {/*    On desktop : flex with spacer pushing Verdict + End to the right. */}
       {!sessionEnded && (
         <div
-          className="flex-shrink-0"
+          className="flex-shrink-0 hide-scrollbar"
           style={{
             borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)'}`,
             padding: '7px 16px 5px',
             display: 'flex', alignItems: 'center', gap: 7,
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch',
           }}
         >
           {/* Prospect pill */}
@@ -633,7 +642,7 @@ export default function ChatScreen({
                 borderRadius: 20,
                 color: 'rgba(20,184,166,0.75)',
                 padding: '0 11px', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 5,
+                display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
                 opacity: isLoading ? 0.4 : 1, transition: 'background 150ms',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(20,184,166,0.08)'; }}
@@ -658,7 +667,7 @@ export default function ChatScreen({
                 borderRadius: 20,
                 color: 'rgba(249,115,22,0.75)',
                 padding: '0 11px', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 5,
+                display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
                 opacity: isLoading ? 0.4 : 1, transition: 'background 150ms',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(249,115,22,0.08)'; }}
@@ -669,8 +678,11 @@ export default function ChatScreen({
             </button>
           )}
 
-          {/* Spacer */}
-          <div style={{ flex: 1 }} />
+          {/* Spacer — only on desktop. On mobile the row scrolls horizontally */}
+          {/* so a flex-1 spacer would push Verdict + End off the visible area */}
+          {/* invisibly. We keep all pills tightly packed and let the user      */}
+          {/* swipe horizontally instead.                                       */}
+          <div className="hidden md:block" style={{ flex: 1 }} />
 
           {/* ⚡ Verdict — subtle accent text link */}
           {onGetVerdict && (
@@ -685,7 +697,7 @@ export default function ChatScreen({
                 fontSize: 12, fontFamily: 'inherit',
                 cursor: isLoading ? 'default' : 'pointer',
                 display: 'flex', alignItems: 'center', gap: 4,
-                padding: '0 6px',
+                padding: '0 6px', flexShrink: 0,
                 opacity: isLoading ? 0.3 : 1,
                 transition: 'color 150ms',
               }}
@@ -710,7 +722,7 @@ export default function ChatScreen({
                 borderRadius: 20,
                 color: 'rgba(148,163,184,0.45)',
                 padding: '0 11px', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 5,
+                display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
                 opacity: isLoading ? 0.4 : 1, transition: 'all 150ms',
               }}
               onMouseEnter={(e) => {

@@ -398,7 +398,11 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
       )}
 
       {/* Input row */}
-      <form onSubmit={handleSubmit} className="flex items-end gap-2 px-4 py-3">
+      <form onSubmit={handleSubmit} className="flex items-end gap-2 px-3 md:px-4 py-2.5 md:py-3">
+
+        {/* ── Desktop-only icon row (hidden on mobile to give the textarea  */}
+        {/*    full width). Mobile users access the same actions via the @  */}
+        {/*    typing trigger (mention popup) and the dedicated mic button. */}
 
         {/* Quick actions toggle */}
         <button
@@ -406,7 +410,7 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
           onClick={() => setShowActions((s) => !s)}
           disabled={disabled}
           title="Quick actions"
-          className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all disabled:opacity-30 ${
+          className={`hidden md:flex flex-shrink-0 w-9 h-9 rounded-xl items-center justify-center transition-all disabled:opacity-30 ${
             showActions
               ? darkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-200 text-gray-700'
               : darkMode ? 'bg-gray-800 text-gray-500 hover:text-gray-300' : 'bg-gray-100 text-gray-400 hover:text-gray-600'
@@ -421,7 +425,7 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled || attachLoading}
           title="Attach PDF, CSV, or Excel"
-          className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all disabled:opacity-30 ${
+          className={`hidden md:flex flex-shrink-0 w-9 h-9 rounded-xl items-center justify-center transition-all disabled:opacity-30 ${
             attachment && attachment.type !== 'image'
               ? darkMode ? 'bg-blue-800 text-blue-200' : 'bg-blue-100 text-blue-700'
               : darkMode ? 'bg-gray-800 text-gray-500 hover:text-gray-300' : 'bg-gray-100 text-gray-400 hover:text-gray-600'
@@ -444,7 +448,7 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
           }}
           disabled={disabled}
           title="Mentionner un agent (@)"
-          className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm transition-all disabled:opacity-30 ${
+          className={`hidden md:flex flex-shrink-0 w-9 h-9 rounded-xl items-center justify-center font-bold text-sm transition-all disabled:opacity-30 ${
             showMention || forcedAgent
               ? darkMode ? 'bg-indigo-800 text-indigo-200' : 'bg-indigo-100 text-indigo-700'
               : darkMode ? 'bg-gray-800 text-gray-500 hover:text-gray-300' : 'bg-gray-100 text-gray-400 hover:text-gray-600'
@@ -459,7 +463,7 @@ export default function ChatInput({ onSend, isLoading, disabled, darkMode, onInp
           onClick={() => imageInputRef.current?.click()}
           disabled={disabled || attachLoading}
           title="Attach image (screenshot, chart, profile…)"
-          className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all disabled:opacity-30 ${
+          className={`hidden md:flex flex-shrink-0 w-9 h-9 rounded-xl items-center justify-center transition-all disabled:opacity-30 ${
             attachment?.type === 'image'
               ? darkMode ? 'bg-violet-800 text-violet-200' : 'bg-violet-100 text-violet-700'
               : darkMode ? 'bg-gray-800 text-gray-500 hover:text-gray-300' : 'bg-gray-100 text-gray-400 hover:text-gray-600'
